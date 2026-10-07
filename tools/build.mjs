@@ -26,4 +26,15 @@ const manifest = {
   webapp: { executeAs: 'USER_DEPLOYING', access: 'ANYONE_ANONYMOUS' }
 };
 fs.writeFileSync(path.join(root, 'apps-script', 'appsscript.json'), JSON.stringify(manifest, null, 2) + '\n');
-console.log(`Code.gs: ${files.length} tệp, ${out.length} ký tự`);
+// Phiên bản phải khớp ở 4 nơi (máy chủ, config.js, Service Worker, package.json)
+const ver = pkg.version;
+const checks = {
+  'server/src/00_config.js': /SERVER_VERSION = '([^']+)'/,
+  'config.js': /BUILD_VERSION: '([^']+)'/,
+  'sw.js': /const VERSION = '([^']+)'/
+};
+for (const [f, re] of Object.entries(checks)) {
+  const m = re.exec(fs.readFileSync(path.join(root, f), 'utf8'));
+  if (!m || m[1] !== ver) { console.error(`Phiên bản lệch: ${f} = ${m && m[1]}, package.json = ${ver}`); process.exit(1); }
+}
+console.log(`Code.gs: ${files.length} tệp, ${out.length} ký tự · phiên bản ${ver}`);
