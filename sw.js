@@ -1,5 +1,5 @@
 // Service Worker của M&E — phạm vi /ME/; chỉ quản lý cache tên me-shell-* (phụ lục 1.5 mục 2.1)
-const VERSION = '1.0.0-poc.1';
+const VERSION = '1.0.0-poc.2';
 const SHELL = 'me-shell-' + VERSION;
 const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
