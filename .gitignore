@@ -1,0 +1,21 @@
+# Không commit tài liệu nội bộ, bí mật, dữ liệu (phụ lục 1.5 mục 2.4)
+/private/
+/design-reference/
+/docs-private/
+*.pdf
+*.xlsx
+!templates/*.xlsx
+factory-original.*
+.clasp.json
+.clasprc.json
+*.env
+.env*
+
+# Công cụ
+node_modules/
+/test-results/
+/playwright-report/
+/.tmp/
+/screenshots/
+*.log
+.DS_Store
