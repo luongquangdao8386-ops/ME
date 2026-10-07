@@ -321,3 +321,31 @@ function pocSeedSampleData() {
   log_('Tài khoản MẪU (chỉ ở môi trường THỬ, ghi lại để thử P-07/P-02): ' +
     Object.keys(pins).map(function (k) { return k + ' / ' + pins[k]; }).join(' · '));
 }
+
+/**
+ * Chỉ THỬ: cấp lại PIN tạm cho một người dùng khi quên PIN lúc chạy PoC.
+ * Đặt POC_RESET_CODE (mã nhân viên) và POC_RESET_TEMP_PIN (6 số) trong Thuộc tính tập lệnh rồi chạy hàm này.
+ * Hai khóa tự xóa sau khi dùng. Ở Đợt 1, quản trị dùng user.resetPin trong app.
+ */
+function pocResetPin() {
+  assertPocEnv_();
+  var code = normEmpCode_(prop_('POC_RESET_CODE'));
+  var pin = trimStr_(prop_('POC_RESET_TEMP_PIN'));
+  ['POC_RESET_CODE', 'POC_RESET_TEMP_PIN'].forEach(delProp_);
+  if (!code || !pin) throw new Error('Thiếu POC_RESET_CODE hoặc POC_RESET_TEMP_PIN.');
+  var weak = pinWeakReason_(pin, code, null);
+  if (weak) throw new Error('PIN tạm không hợp lệ hoặc quá dễ đoán (' + weak + ').');
+  dbReset_();
+  var rec = newPinRecord_(pin);
+  withWriteLock_(function () {
+    var u = findOne_('Users', 'employee_code', code);
+    if (!u) throw new Error('Không có mã nhân viên ' + code);
+    bumpAuthVersion_(u, {
+      pin_hash: rec.pin_hash, salt: rec.salt, pin_hash_version: rec.pin_hash_version, must_change_pin: true,
+      temp_pin_expires_at: isoVN_(new Date(now_().getTime() + setting_('temp_pin_hours') * 3600000)),
+      failed_attempts: 0, failed_window_started_at: '', locked_until: '', active: true
+    });
+    writeAudit_({ user_id: SYSTEM_USER, action: 'user.resetPin', entity_type: 'USER', entity_id: u.user_id, before_json: null, after_json: { temp_pin_issued: true }, auth_basis: 'OWNER' });
+  });
+  log_('Đã cấp PIN tạm cho ' + code + ' (hạn 72 giờ), mọi phiên cũ của người này đã bị thu hồi.');
+}

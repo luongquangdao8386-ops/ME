@@ -153,7 +153,7 @@ function writeCells_(name, rowNum, partial) {
   });
 }
 
-/** Định dạng ô Văn bản cho cột ID/CODE/DATE/DATETIME/JSON/STRING/ENUM (3.1) */
+/** Định dạng ô Văn bản cho cột ID/CODE/DATE/DATETIME/JSON/STRING/ENUM (3.1) ở các dòng mới thêm */
 function applyColumnFormats_(sheet, name, fromRow, numRows) {
   var types = sheetSchema_(name).types;
   var n = sheet.getLastColumn();

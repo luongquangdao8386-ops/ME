@@ -101,3 +101,16 @@ test('pocSeedSampleData từ chối chạy ở THẬT', () => {
   env.props.setProperty('ENV', 'THAT');
   assert.throws(() => env.g.pocSeedSampleData(), /THỬ/);
 });
+
+test('pocResetPin cấp PIN tạm mới, thu hồi phiên cũ, mở khóa', async () => {
+  const { ownerClient, makeClient, OWNER_CODE, OWNER_PIN } = await import('../helpers.mjs');
+  const env = freshServer();
+  const c = ownerClient(env);
+  env.props.setProperty('POC_RESET_CODE', OWNER_CODE);
+  env.props.setProperty('POC_RESET_TEMP_PIN', '739154');
+  env.g.pocResetPin();
+  assert.equal(env.props.getProperty('POC_RESET_TEMP_PIN'), null);
+  assert.equal(c.call('sync.bootstrap').data.reason, 'AUTH_VERSION');
+  assert.equal(makeClient(env).login(OWNER_CODE, OWNER_PIN).code, 'AUTH_FAILED');
+  assert.equal(makeClient(env).login(OWNER_CODE, '739154').code, 'MUST_CHANGE_PIN');
+});

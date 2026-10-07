@@ -18,17 +18,18 @@ function createSheet_(book, name) {
   return sheet;
 }
 
-/** Đặt định dạng cho các cột từ vị trí fromIdx (0-based) trở đi */
+/** Đặt định dạng Văn bản (@) cho các cột ID/CODE/DATE/DATETIME/JSON/STRING/ENUM từ vị trí fromIdx; gom cột liền nhau */
 function formatColumns_(sheet, name, headerCols, fromIdx) {
   var types = sheetSchema_(name).types;
   var rows = Math.max(1, sheet.getMaxRows() - 1);
-  var n = headerCols.length - fromIdx;
-  if (n <= 0) return;
-  var rowFmt = [];
-  for (var i = fromIdx; i < headerCols.length; i++) rowFmt.push(TEXT_FORMAT_TYPES_[types[headerCols[i]] || 'STRING'] ? '@' : 'General');
-  var fmts = [];
-  for (var r = 0; r < rows; r++) fmts.push(rowFmt);
-  sheet.getRange(2, fromIdx + 1, rows, n).setNumberFormats(fmts);
+  var i = fromIdx;
+  while (i < headerCols.length) {
+    if (!TEXT_FORMAT_TYPES_[types[headerCols[i]] || 'STRING']) { i++; continue; }
+    var j = i;
+    while (j + 1 < headerCols.length && TEXT_FORMAT_TYPES_[types[headerCols[j + 1]] || 'STRING']) j++;
+    sheet.getRange(2, i + 1, rows, j - i + 1).setNumberFormat('@');
+    i = j + 1;
+  }
 }
 
 function settingRow_(d) {
