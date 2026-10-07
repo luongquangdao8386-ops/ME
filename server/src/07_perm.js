@@ -310,6 +310,8 @@ function evalCells_(ctx, def, module) {
   var lvl = Number(ctx.user.role_level);
   var cellsToCheck = [];
   if (lvl === 2) {
+    // Cấp 2 = quyền cấp 1 cộng quyền theo subrole (4.1)
+    cellsToCheck.push({ cell: def.cells[0], sub: null });
     ctxSubroles_(ctx).forEach(function (s) { cellsToCheck.push({ cell: def.cells[CELL_INDEX_[s]], sub: s }); });
   } else if (CELL_INDEX_[lvl] !== undefined) {
     cellsToCheck.push({ cell: def.cells[CELL_INDEX_[lvl]], sub: null });
@@ -320,7 +322,7 @@ function evalCells_(ctx, def, module) {
     if (c === 'Y') uncond = true;
     else if (c === 'NS') { uncond = true; ns = true; }
     else if (c === 'MC' || c === 'IFON') {
-      if (lvl !== 2 || (module && SUBROLES[x.sub].indexOf(module) >= 0)) uncond = true;
+      if (lvl !== 2 || !x.sub || (module && SUBROLES[x.sub].indexOf(module) >= 0)) uncond = true;
     } else if (c === 'OWNER') {
       if (ctx.user.is_system_owner && hasFlag_(4, 'system', 'R')) uncond = true;
     } else if (c === 'OWN' || c === 'ASG' || c === 'REC' || c === 'SPEC') {
