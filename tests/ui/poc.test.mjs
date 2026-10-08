@@ -139,6 +139,26 @@ test('mở app khi máy chủ chậm hơn offline_probe_seconds mà vẫn có m�
   } finally { await app.close(); }
 });
 
+test('P-10: một máy gửi lần lượt 20 lệnh, SERVER_BUSY thì gửi lại cùng operation_id; chưa đủ 3 máy thì chưa Đạt', async () => {
+  const env = freshServer();
+  let busy = 0;
+  // 2 lệnh đầu bị báo bận (không chạy doPost) → app phải gửi lại
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false, fault: (req, n) => (req.action === 'equipment.create' && n <= 2 ? (busy++, 'AS_GET') : null) });
+  try {
+    const { page } = app;
+    await loginOwnerFirstTime(page);
+    await page.click('[data-poc="P-10"] summary');
+    await page.fill('#p10-tag', 'D');
+    await page.click('#p10');
+    await page.waitForFunction(() => document.querySelector('[data-poc="P-10"] .poc-out').textContent.includes('Tổng P10'), null, { timeout: 90000 });
+    const out = await page.textContent('[data-poc="P-10"] .poc-out');
+    assert.ok(out.includes('thành công 20/20'), out);
+    assert.equal(env.rows('Equipment').filter((e) => /^P10-D-/.test(e.name_vi)).length, 20, 'không thiếu, không trùng');
+    assert.ok((await page.textContent('[data-poc="P-10"] .poc-summary')).includes('máy đủ 20 lệnh: D (cần 3)'));
+    assert.equal(busy, 2);
+  } finally { await app.close(); }
+});
+
 test('P-04: nháp kiểm định tạo khi offline được gửi đúng một lần khi có mạng lại', async () => {
   const env = freshServer();
   env.g.pocSeedSampleData();

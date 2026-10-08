@@ -262,6 +262,11 @@ async function slot() {
 }
 function release() { running--; const w = waiters.shift(); if (w) w(); }
 
+/** Dạng URL cuối sau chuyển hướng (máy chủ + đường dẫn, ẩn mã triển khai) để chẩn đoán */
+function urlShape(u) {
+  try { const x = new URL(u); return x.hostname + x.pathname.replace(/\/s\/[^/]+\//, '/s/…/'); } catch (e) { return ''; }
+}
+
 /** Gửi request thô (đã có phong bì). Trả JSON máy chủ hoặc {ok:false, code: NETWORK_ERROR|UNKNOWN_RESULT}. */
 export async function rawPost(req, { timeoutMs, write = false, bypassLimit = false } = {}) {
   const url = execUrl();
@@ -277,11 +282,11 @@ export async function rawPost(req, { timeoutMs, write = false, bypassLimit = fal
     try { json = JSON.parse(text); } catch (e) { /* không phải JSON */ }
     const ms = Math.round(performance.now() - t0);
     if (!res.ok || !json || typeof json !== 'object') {
-      return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'NON_JSON', http: res.status, client_ms: ms, operation_id: req.operation_id || null };
+      return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'NON_JSON', http: res.status, final_url: urlShape(res.url), client_ms: ms, operation_id: req.operation_id || null };
     }
     // POST bị chuyển thành GET trên đường đi: máy chủ chạy doGet (via:'GET') thay vì doPost → coi như mất phản hồi
     if (json.via === 'GET' || (json.code === 'NOT_FOUND' && json.message_vi === undefined)) {
-      return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'REDIRECTED_AS_GET', client_ms: ms, operation_id: req.operation_id || null };
+      return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'REDIRECTED_AS_GET', final_url: urlShape(res.url), client_ms: ms, operation_id: req.operation_id || null };
     }
     json.client_ms = ms;
     return json;

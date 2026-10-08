@@ -515,7 +515,8 @@ async function p10run() {
       if (r.ok) { counts.ok++; times.push(r.client_ms); } else if (r.code === 'SERVER_BUSY') counts.busy++; else counts.other++;
     }
   };
-  await Promise.all([worker(), worker(), worker(), worker()]);
+  // Mỗi máy gửi lần lượt như hàng chờ thật; 3 máy chạy cùng lúc thì máy chủ nhận 3 lệnh xen kẽ (P-10)
+  await worker();
   out('P-10', `Máy ${esc(tag)}: thành công ${counts.ok}/20 · gửi lại ${counts.retries} · vẫn SERVER_BUSY ${counts.busy} · lỗi khác ${counts.other} · trung vị ${ms(median(times) || 0)} (máy chủ ${ms(median(serverMs) || 0)})`);
   await p10check(counts);
 }
@@ -525,8 +526,9 @@ async function p10check(counts) {
   out('P-10', `Tổng P10: ${s.data.tagged} · theo máy ${esc(JSON.stringify(s.data.by_device))} · trùng mã ${s.data.duplicate_codes.length} · trùng ID ${s.data.duplicate_ids.length}`);
   const prev = results['P-10'] ? results['P-10'].metrics : {};
   const m = { ...prev, ...(counts ? { last_device: counts } : {}), tagged: s.data.tagged, by_device: s.data.by_device, dup_codes: s.data.duplicate_codes.length };
-  const ok = s.data.tagged >= 60 && Object.keys(s.data.by_device).length >= 3 && !s.data.duplicate_codes.length && !s.data.duplicate_ids.length;
-  await rec('P-10', ok ? 'pass' : (s.data.duplicate_codes.length ? 'fail' : 'info'), `${s.data.tagged} dòng P10, ${Object.keys(s.data.by_device).length} máy, trùng mã ${s.data.duplicate_codes.length}`, m);
+  const full = Object.entries(s.data.by_device).filter(([, n]) => n >= 20).map(([k]) => k);
+  const ok = full.length >= 3 && !s.data.duplicate_codes.length && !s.data.duplicate_ids.length;
+  await rec('P-10', ok ? 'pass' : (s.data.duplicate_codes.length || s.data.duplicate_ids.length ? 'fail' : 'info'), `${s.data.tagged} dòng P10, máy đủ 20 lệnh: ${esc(full.join(', ') || '—')} (cần 3), trùng mã ${s.data.duplicate_codes.length}`, m);
 }
 
 async function p12() {
@@ -536,7 +538,19 @@ async function p12() {
   const names = t.ok ? t.data.triggers.map((x) => x.handler).sort() : [];
   out('P-12', `Trigger: ${esc(names.join(', ') || '—')}`);
   const okTrig = ['backupData', 'runBackgroundJobs', 'sendExpiryDigest'].every((n) => names.includes(n));
-  await rec('P-12', m1.ok && okTrig ? 'manual' : 'fail', `thư thử ${m1.ok ? '✓ (xem hộp thư M&E)' : '✗'}, quota ${m1.ok ? m1.data.quota_after : '—'}, 3 trigger ${okTrig ? '✓' : '✗ — chạy installTriggers'}`, { mail: m1.ok, quota: m1.ok ? m1.data.quota_after : null, triggers: names });
+  const m = { mail: m1.ok, quota: m1.ok ? m1.data.quota_after : null, triggers: names, trig_ok: okTrig };
+  await rec('P-12', p12status(m), p12summary(m), m);
+}
+function p12status(m) { return !m.mail || !m.trig_ok || m.mail_received === false ? 'fail' : (m.mail_received ? 'pass' : 'manual'); }
+function p12summary(m) {
+  return `thư thử ${m.mail ? '✓' : '✗'}, nhận được ${m.mail_received ? '✓' : m.mail_received === false ? '✗' : '— (xem hộp thư M&E rồi bấm Đã nhận thư)'}, quota ${m.quota === null || m.quota === undefined ? '—' : m.quota}, 3 trigger ${m.trig_ok ? '✓' : '✗ — chạy installTriggers'}`;
+}
+async function p12received(yes) {
+  const prev = results['P-12'] ? results['P-12'].metrics : null;
+  if (!prev) { toast('Gửi thư thử trước · 请先发送测试邮件', 'err'); return; }
+  if (prev.trig_ok === undefined) prev.trig_ok = ['backupData', 'runBackgroundJobs', 'sendExpiryDigest'].every((n) => (prev.triggers || []).includes(n));
+  const m = { ...prev, mail_received: yes };
+  await rec('P-12', p12status(m), p12summary(m), m);
 }
 
 async function p13() {
@@ -611,14 +625,23 @@ async function p15check() {
   await rec('P-15', ok && !prev.csp_violations ? 'pass' : (ok ? 'info' : 'fail'), `mốc sau khi đăng xuất Cơ Điện ${ok ? '✓' : '✗'}`, m);
 }
 
-async function p16upload() {
+async function p16upload(mb = 1.5) {
   const eq = (await getRecords('EQUIPMENT'))[0];
   if (!eq) return;
-  const blob = makeTestPdf(['M&E PoC P-16 upload 1.5 MB'], Math.round(1.5 * 1048576));
-  const up = await uploadDoc({ entity_type: 'EQUIPMENT', entity_id: eq.equipment_id, kind: 'OTHER', blob, mime: 'application/pdf', title_vi: 'Tệp thử 1,5 MB', title_zh: '1.5 MB测试文件' });
-  out('P-16', `Tải lên 1,5 MB: ${code(up)} ${ms(up.upload_ms)}`);
+  const blob = makeTestPdf([`M&E PoC P-16 upload ${mb} MB`], Math.round(mb * 1048576));
+  const up = await uploadDoc({ entity_type: 'EQUIPMENT', entity_id: eq.equipment_id, kind: 'OTHER', blob, mime: 'application/pdf', title_vi: `Tệp thử ${mb} MB`, title_zh: `${mb} MB测试文件` });
+  out('P-16', `Tải lên ${mb} MB: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''} ${up.upload_ms ? ms(up.upload_ms) : ''}`);
+  if (!up.ok) await p16diag(up);
   const prev = results['P-16'] ? results['P-16'].metrics : {};
-  await p16rec({ ...prev, upload_15_ms: up.ok ? up.upload_ms : null });
+  const upload_ms = { ...(prev.upload_ms || {}), [mb + 'MB']: up.ok ? up.upload_ms : up.code + '/' + (up.transport || '') };
+  await p16rec({ ...prev, upload_ms, ...(mb === 1.5 ? { upload_15_ms: up.ok ? up.upload_ms : null } : {}) });
+}
+/** Lỗi đường truyền ở P-16: URL cuối sau chuyển hướng và các lần doGet không action gần đây (máy chủ ghi) */
+async function p16diag(r) {
+  if (r.final_url) out('P-16', `&nbsp;&nbsp;URL cuối: <code>${esc(r.final_url)}</code>`);
+  const d = await rawPost(envelope('system.getPublicState', { probe_run: 'p16diag', probe_read: true }, { token: null, epoch: null }), { timeoutMs: 30000 });
+  const gets = d.ok && d.data && d.data.probe ? d.data.probe.gets_without_action || [] : [];
+  if (gets.length) out('P-16', `&nbsp;&nbsp;doGet không action gần nhất: ${esc(gets.slice(-3).join(', '))}`);
 }
 async function p16make() {
   const r = await api('poc.makeTestFiles', {}, { timeoutMs: 55000 });
@@ -634,7 +657,8 @@ async function p16download() {
     const d = await downloadDoc(f.document_id);
     m.download_ms[f.size_mb + 'MB'] = d.ok ? d.ms : d.res.code + '/' + (d.res.transport || '');
     if (d.retried) m.download_retried = { ...(m.download_retried || {}), [f.size_mb + 'MB']: d.retried };
-    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) : code(d.res)}${d.retried ? ' (gửi lại sau lỗi ' + esc(d.retried) + ')' : ''}`);
+    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) : code(d.res) + (d.res.transport ? ' · ' + esc(d.res.transport) : '')}${d.retried ? ' (gửi lại sau lỗi ' + esc(d.retried) + ')' : ''}`);
+    if (!d.ok) await p16diag(d.res);
     if (d.ok) URL.revokeObjectURL(d.url);
   }
   const dc = await api('poc.driveChecks');
@@ -645,7 +669,8 @@ async function p16rec(m) {
   const dl = m.download_ms || {};
   const allOk = ['2MB', '5MB', '10MB'].every((k) => typeof dl[k] === 'number' && dl[k] < 55000);
   const status = allOk && m.upload_15_ms && m.copy_kept_sharing === false ? 'pass' : (Object.values(dl).some((v) => typeof v !== 'number') ? 'fail' : 'info');
-  await rec('P-16', status, `lên 1,5 MB ${m.upload_15_ms ? ms(m.upload_15_ms) : '—'}; xuống ${Object.entries(dl).map(([k, v]) => k + ' ' + (typeof v === 'number' ? ms(v) : v)).join(', ') || '—'}; makeCopy giữ chia sẻ: ${m.copy_kept_sharing === undefined ? '—' : m.copy_kept_sharing ? 'có' : 'không'}`, m);
+  const ups = Object.entries(m.upload_ms || {}).filter(([k]) => k !== '1.5MB').map(([k, v]) => k + ' ' + (typeof v === 'number' ? ms(v) : v)).join(', ');
+  await rec('P-16', status, `lên 1,5 MB ${m.upload_15_ms ? ms(m.upload_15_ms) : '—'}${ups ? ' (thêm: ' + ups + ')' : ''}; xuống ${Object.entries(dl).map(([k, v]) => k + ' ' + (typeof v === 'number' ? ms(v) : v)).join(', ') || '—'}; makeCopy giữ chia sẻ: ${m.copy_kept_sharing === undefined ? '—' : m.copy_kept_sharing ? 'có' : 'không'}`, m);
 }
 
 async function p17burst(n) {
@@ -768,15 +793,15 @@ export async function renderPoc(main, { isOwner, offline }) {
   ${card('P-08', bi(['Cài lên Màn hình chính', '添加到主屏幕']), 'Safari → Chia sẻ → Thêm vào MH chính; mở standalone, không có màn chào mang logo; bộ nhớ và phiên tách riêng với Safari.', btn('p08', bi(['Kiểm tra', '检查']), 'primary'))}
   ${card('P-09', bi(['Dùng chung web ↔ iPhone', '电脑与iPhone共用']), 'Sửa trên máy này, máy kia bấm Đồng bộ ngay thì thấy; hai máy cùng sửa một hồ sơ → VERSION_CONFLICT.',
     btn('p09s', bi('sync_now'), 'primary') + `<p class="muted" id="p09-last"></p><ul class="list" id="p09-list"></ul>`)}
-  ${card('P-10', bi(['Ghi đồng thời', '并发写入']), '3 máy × 20 lệnh tạo → đủ 60 dòng, không trùng mã. Mỗi máy đặt một nhãn riêng (A, B, C).',
+  ${card('P-10', bi(['Ghi đồng thời', '并发写入']), '3 máy × 20 lệnh tạo gửi cùng lúc → đủ 60 dòng, không trùng mã. Mỗi máy đặt một nhãn riêng (vd. D, E, F) rồi bấm gần như cùng lúc.',
     `<input id="p10-tag" class="tiny-input" maxlength="6" value="${esc(ls.get('p10_tag') || '')}" placeholder="A">` + btn('p10', bi(['Gửi 20 lệnh tạo', '发送20个创建']), 'primary') + btn('p10c', bi(['Kiểm tra tổng', '检查总数'])))}
-  ${card('P-12', bi(['Gmail và trigger', '邮件与触发器']), 'Gửi 1 thư thử tới địa chỉ M&E; đọc quota; đủ 3 trigger (chạy installTriggers trong trình soạn).', ownerOnly(btn('p12', bi(['Gửi thư thử + xem trigger', '发送测试邮件并查看触发器']), 'primary')))}
+  ${card('P-12', bi(['Gmail và trigger', '邮件与触发器']), 'Gửi 1 thư thử tới địa chỉ M&E; đọc quota; đủ 3 trigger (chạy installTriggers trong trình soạn).', ownerOnly(btn('p12', bi(['Gửi thư thử + xem trigger', '发送测试邮件并查看触发器']), 'primary') + btn('p12y', bi(['Đã nhận thư', '已收到邮件'])) + btn('p12n', bi(['Không thấy thư', '未收到邮件']))))}
   ${card('P-13', 'PBKDF2', '200 000 vòng ≤ 1 giây trên iPhone cũ nhất; chậm hơn thì giảm, không dưới 150 000.', btn('p13', bi(['Đo', '测量']), 'primary'))}
   ${card('P-14', bi(['Dịch máy', '机器翻译']), 'Mã zh-CN/zh, contentType text, token giữ chỗ, gộp nhiều dòng, thời gian mỗi lần gọi.', ownerOnly(btn('p14', bi(['Chạy thử dịch', '运行翻译测试']), 'primary')))}
   ${card('P-15', bi(['CSP, origin chung với Cơ Điện', 'CSP与机电应用同源']), 'Không vi phạm CSP; đăng xuất app Cơ Điện trên cùng máy không xóa dữ liệu M&E.',
     btn('p15i', bi(['Kiểm kê bộ nhớ', '检查存储']), 'primary') + btn('p15m', bi(['Ghi mốc', '写入标记'])) + btn('p15c', bi(['Kiểm tra mốc', '检查标记'])))}
   ${card('P-16', bi(['Drive, cỡ tệp', 'Drive与文件大小']), 'Tải lên 1,5 MB; tải xuống 2, 5, 10 MB trên iPhone trong 55 giây; makeCopy không mang theo chia sẻ.',
-    btn('p16u', bi(['Tải lên 1,5 MB', '上传1.5MB'])) + ownerOnly(btn('p16m', bi(['Tạo tệp 2/5/10 MB', '创建2/5/10MB文件']))) + btn('p16d', bi(['Tải xuống 2/5/10 MB', '下载2/5/10MB']), 'primary'))}
+    btn('p16u', bi(['Tải lên 1,5 MB', '上传1.5MB'])) + btn('p16u5', bi(['Tải lên 5 MB', '上传5MB'])) + btn('p16u9', bi(['Tải lên 9,5 MB', '上传9.5MB'])) + ownerOnly(btn('p16m', bi(['Tạo tệp 2/5/10 MB', '创建2/5/10MB文件']))) + btn('p16d', bi(['Tải xuống 2/5/10 MB', '下载2/5/10MB']), 'primary'))}
   ${card('P-17', bi(['Tải đồng thời, thời gian chờ', '并发与超时']), '10–40 request đồng thời; thời gian mở app lần đầu; request 70 giây bị cắt ở 55 giây → UNKNOWN_RESULT.',
     btn('p17a', '10') + btn('p17b', '20') + btn('p17c', '40') + btn('p17l', bi(['Request 70 giây', '70秒请求']), 'primary'))}
   ${card('P-18', bi(['Ký tự, định dạng', '字符与格式']), 'U+202F, U+00A0, ×, ², ³ hiện đúng; ô ngày dùng được.',
@@ -793,8 +818,8 @@ export async function renderPoc(main, { isOwner, offline }) {
   on('p07t', async () => { p07doc = await p07upload(null); }); on('p07d', () => p07download()); on('p07f', p07forbidden);
   on('p07big', async () => { const f = JSON.parse(ls.get('p16_files') || '[]').find((x) => x.size_mb === 5); if (!f) { toast('Tạo tệp ở P-16 trước', 'err'); return; } await p07download(f.document_id); });
   $('#p07-open', main).addEventListener('click', p07open);
-  on('p08', p08); on('p09s', p09sync); on('p10', p10run); on('p10c', () => p10check()); on('p12', p12); on('p13', p13); on('p14', p14);
-  on('p15i', p15inventory); on('p15m', p15mark); on('p15c', p15check); on('p16u', p16upload); on('p16m', p16make); on('p16d', p16download);
+  on('p08', p08); on('p09s', p09sync); on('p10', p10run); on('p10c', () => p10check()); on('p12', p12); on('p12y', () => p12received(true)); on('p12n', () => p12received(false)); on('p13', p13); on('p14', p14);
+  on('p15i', p15inventory); on('p15m', p15mark); on('p15c', p15check); on('p16u', () => p16upload(1.5)); on('p16u5', () => p16upload(5)); on('p16u9', () => p16upload(9.5)); on('p16m', p16make); on('p16d', p16download);
   on('p17a', () => p17burst(10)); on('p17b', () => p17burst(20)); on('p17c', () => p17burst(40)); on('p17l', p17long);
   on('p18y', () => p18ok(true)); on('p18n', () => p18ok(false)); on('p19', p19);
   $('#p06cap', main).addEventListener('change', (e) => p06file(e.target.files[0]));
