@@ -1,6 +1,7 @@
 // Kho vật tư: MAT-01 danh mục, MAT-02 hồ sơ, WEB-MAT-01; tab Linh kiện của thiết bị (EQ-03). Không chốt tồn (C3, 1.4 §5.4)
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { excelLink } from '../excel-link.js';
 import { isWide, comingSoon } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -40,6 +41,7 @@ export async function renderMaterialList(view, ctx) {
   const selId = params.id || '';
   const canCreate = await can('material.create');
   const canPrint = await can('qr.print');
+  const excelBtn = await excelLink('materials');
   shell.setScreen({
     title: 'module.warehouse', back: '/',
     actions: canCreate && !wide ? [{ icon: 'plus', label: biText('btn.add'), onClick: () => navigate('/materials/new'), disabled: !navigator.onLine }] : []
@@ -68,6 +70,7 @@ export async function renderMaterialList(view, ctx) {
       ${canCreate && wide ? `<a class="btn small primary" href="#/materials/new">${ICON.plus}<span>${bi('btn.add')}</span></a>` : ''}
       <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
       ${canPrint && wide ? `<button type="button" class="btn small" id="mt-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
+      ${excelBtn}
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}</p></div>`;
   const comp = (m) => badge('equipment_component.' + (m.is_equipment_component ? 'TRUE' : 'FALSE'));

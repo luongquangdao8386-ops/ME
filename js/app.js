@@ -149,6 +149,7 @@ function registerRoutes() {
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
+  route('/excel/:key', lazy('./pages/excel.js', 'renderExcel'), { nav: '' });
   route('/labels', async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }, { nav: 'account' });
   for (const m of MODULES) if (m.dot > 1) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
   route('/r/:key', async (view, ctx) => {

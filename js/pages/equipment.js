@@ -1,6 +1,7 @@
 // Thiết bị: EQ-01 danh sách, EQ-02..04 hồ sơ 4 tab, WEB-EQ-01 bảng + vùng hồ sơ; biểu mẫu thêm/sửa (4.4.1, 5.5, 6.3)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { excelLink } from '../excel-link.js';
 import { isWide, comingSoon } from '../shell.js';
 import { recs, byId, mapOf, can, invalidate, today } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -76,6 +77,7 @@ export async function renderEquipmentList(view, ctx) {
   const selId = params.id || query.get('sel') || '';
   const canCreate = await can('equipment.create');
   const canPrint = await can('qr.print');
+  const excelBtn = await excelLink('equipment');
   shell.setScreen({
     title: 'screen.equipment_list', back: params.id && !wide ? '/equipment' : '/',
     actions: canCreate && !wide ? [{ icon: 'plus', label: biText('btn.add'), onClick: () => navigate('/equipment/new'), disabled: !navigator.onLine }] : []
@@ -98,6 +100,7 @@ export async function renderEquipmentList(view, ctx) {
       ${canCreate && wide ? `<a class="btn small primary" href="#/equipment/new">${ICON.plus}<span>${bi('btn.add')}</span></a>` : ''}
       <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
       ${canPrint && wide ? `<button type="button" class="btn small" id="eq-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
+      ${excelBtn}
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}${!navigator.onLine && filt.retired ? ' · ' + bi('sync.need_network') : ''}</p>
   </div>`;

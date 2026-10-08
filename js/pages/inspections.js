@@ -1,6 +1,7 @@
 // Kiểm định: IN-01 danh sách yêu cầu, IN-02 hồ sơ yêu cầu, IN-03 nộp chứng nhận, WEB-IN-01; loại kiểm định (4.4.9, 3.17, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, blobToB64, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { excelLink } from '../excel-link.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, roleLevel, dueInfo, requirementRecordStatus, costModules, today } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -48,6 +49,7 @@ export async function renderInspectionList(view, ctx) {
   const canReq = await can('inspection.requirement.edit');
   const canType = await can('inspection.type.edit');
   const canPrint = await can('qr.print');
+  const excelBtn = await excelLink('inspection_requirements');
   shell.setScreen({
     title: 'module.inspections', back: '/',
     actions: !wide && canReq ? [{ icon: 'plus', label: biText('in.new_requirement'), onClick: () => navigate('/inspections/new'), disabled: !navigator.onLine }] : []
@@ -81,6 +83,7 @@ export async function renderInspectionList(view, ctx) {
       <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${bi('btn.schedule')}<span class="soon">${bi('tag.coming_soon')}</span></button>
       <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
       ${canPrint && wide ? `<button type="button" class="btn small" id="in-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
+      ${excelBtn}
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}</p></div>`;
   const rowsHtml = await Promise.all(rows.map(async (x) => ({ x, t: types.get(x.r.inspection_type_id), tg: await targetText(x.r) })));

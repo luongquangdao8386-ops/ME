@@ -6,6 +6,7 @@ import { recs, can } from '../data.js';
 import { textInput, textArea, selectInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, busy } from '../form.js';
 import { afterCommit } from '../app.js';
 import { handleWriteError } from './equipment.js';
+import { excelLink } from '../excel-link.js';
 
 const TABS = ['locations', 'vendors', 'lookups', 'glossary'];
 const LOC_TYPES = ['AREA', 'BUILDING', 'WORKSHOP', 'ROOM', 'STATION', 'OTHER'];
@@ -167,7 +168,8 @@ export async function renderCatalog(view, { shell }) {
       }
     }
   }
-  view.innerHTML = `${tabBar}<div class="tab-body"><div class="toolbar"><div class="row"><span class="muted">${bi('field.total', { N: items.length })}</span>${addBtn}</div></div>${body}</div>`;
+  const xl = await excelLink({ locations: 'locations', vendors: 'vendors', lookups: 'lookups', glossary: 'glossary' }[tab]);
+  view.innerHTML = `${tabBar}<div class="tab-body"><div class="toolbar"><div class="row"><span class="muted">${bi('field.total', { N: items.length })}</span>${addBtn}${xl}</div></div>${body}</div>`;
   $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; repaint(); }));
   $$('[data-group]', view).forEach((b) => b.addEventListener('click', () => { group = b.dataset.group; repaint(); }));
   const open = async (rec) => {

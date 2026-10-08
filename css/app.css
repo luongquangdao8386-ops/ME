@@ -562,3 +562,10 @@ details.rec-card > summary::-webkit-details-marker { display: none; }
 details.rec-card[open] .kv-grid { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; word-break: break-word; }
 .cards.audit code, .tbl.settings code { font-size: 12px; }
 .tbl.settings td:first-child { min-width: 220px; }
+
+/* Nhập/xuất Excel */
+.banner.err { background: #FDECEC; color: var(--red, #B42318); }
+label.file-btn { cursor: pointer; }
+label.file-btn.disabled { opacity: 0.5; pointer-events: none; }
+.list li .link { display: inline; margin: 0; padding: 6px 0; min-height: 0; text-align: left; }
+a.chip { text-decoration: none; display: inline-flex; align-items: center; }

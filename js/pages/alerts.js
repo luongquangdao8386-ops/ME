@@ -7,6 +7,7 @@ import { writeOnline } from '../form.js';
 import { afterCommit } from '../app.js';
 import { deadlineText } from './home.js';
 import { handleWriteError } from './equipment.js';
+import { excelLink } from '../excel-link.js';
 
 const STATES = ['ALL', 'DUE_SOON', 'DUE_TODAY', 'OVERDUE', 'MISSING'];
 // Bộ lọc chỉ giữ trong phiên làm việc (đăng xuất là mất, 2.5)
@@ -58,7 +59,7 @@ export async function renderAlerts(view, { shell }) {
     <div class="row">${sel('f-kind', [['', bi('due_filter.ALL')], ['INSPECTION', bi('module.inspections')], ['CONTRACT', bi('module.contracts')]], filt.kind)}
       ${sel('f-loc', [['', bi('field.location')]].concat(locIds.map((id) => [id, esc((locs.get(id) || {}).location_code || '') + ' ' + esc(nameText(locs.get(id)))])), filt.location)}
       ${sel('f-owner', [['', bi('col.owner')]].concat(owners.map(([id, n]) => [id, esc(n)])), filt.owner)}</div></div>
-    <p class="muted small">${bi('field.total', { N: list.length })}</p>
+    <div class="row"><p class="muted small">${bi('field.total', { N: list.length })}</p>${await excelLink('alerts', { exportOnly: true })}</div>
     ${list.length ? body : `<div class="card empty-state">${ICON.bell}<p class="muted">${bi('draft.empty')}</p></div>`}`;
   const rerender = () => renderAlerts(view, { shell });
   view.querySelectorAll('[data-state]').forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; rerender(); }));

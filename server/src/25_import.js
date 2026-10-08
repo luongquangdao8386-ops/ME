@@ -888,6 +888,15 @@ function importCommit_(ctx) {
 
 /* ---------------- Xuất Excel ---------------- */
 
+/** Kiểu ô khi xuất (5.4.6): num (#,##0), date (ô ngày thật dd/mm/yyyy), bool, code (chữ @, giữ số 0), text */
+function exportType_(c) {
+  if (c.type === 'int' || c.type === 'num' || c.type === 'ver') return 'num';
+  if (c.type === 'date') return 'date';
+  if (c.type === 'bool') return 'bool';
+  if (c.type === 'id' || c.type === 'code' || c.type === 'ref' || c.type === 'key' || c.keep) return 'code';
+  return 'text';
+}
+
 /** Giá trị một cột khi xuất (mã thay cho ID tham chiếu) */
 function exportCell_(c, row, codeOf) {
   if (c.type === 'ref') {
@@ -930,6 +939,7 @@ function exportXlsx_(ctx) {
       return [a.entity_type === 'CONTRACT' ? 'CONTRACT' : 'INSPECTION', code || '', name || '', eqCode, a.due_date, a.reference_date_kind, dr, a.stage, a.alert_state, owner];
     }).sort(function (x, y) { return x[6] - y[6]; });
     sheets.push({ name: 'alerts', keys: ['kind', 'code', 'name', 'equipment_code', 'due_date', 'reference_date_kind', 'days_remaining', 'stage', 'alert_state', 'owner'],
+      types: ['text', 'code', 'text', 'code', 'date', 'text', 'num', 'text', 'text', 'text'],
       labels: [['Loại', '类型'], ['Mã', '编号'], ['Tên', '名称'], ['Mã thiết bị', '设备编号'], ['Ngày tham chiếu', '参考日期'], ['Loại ngày', '日期类型'], ['Còn (ngày)', '剩余天数'], ['Mốc', '节点'], ['Trạng thái', '状态'], ['Phụ trách', '负责人']], rows: rowsA });
     filters.push(['list', 'alerts']);
   } else {
@@ -961,6 +971,7 @@ function exportXlsx_(ctx) {
       if (sh.table === 'Inspections') data = data.filter(function (r) { return r.status === 'APPROVED'; });
       var keys = cols.map(function (c) { return c.key; }).concat(['i18n_machine_fields']);
       var labels = cols.map(function (c) { return [c.vi, c.zh]; }).concat([['Trường dịch máy', '机器翻译字段']]);
+      var types = cols.map(function (c) { return exportType_(c); }).concat(['text']);
       var rows = data.map(function (r) {
         var line = cols.map(function (c) {
           if (sh.table === 'ContractEquipment' && c.key === 'contract_key') return codeOf('Contracts', r.contract_id);
@@ -971,7 +982,7 @@ function exportXlsx_(ctx) {
         line.push(mt.join(','));
         return line;
       });
-      sheets.push({ name: sh.name, keys: keys, labels: labels, rows: rows });
+      sheets.push({ name: sh.name, keys: keys, labels: labels, types: types, rows: rows });
     });
     filters.push(['template_key', p.template_key]);
     if (due !== 'ALL') filters.push(['due', due]);
