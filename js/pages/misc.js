@@ -53,7 +53,9 @@ export async function labelItem(type, rec) {
     if (!locId && e) locId = e.location_id;
   }
   const loc = type === 'EQUIPMENT' && locId ? await byId('LOCATION', locId) : null;
-  return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: loc ? loc.location_code : '' };
+  // Tem in văn bản hiện có, không in nhãn; màn xem trước đánh dấu tem có tên dịch máy chưa sửa (2.3 quy tắc 6)
+  const meta = rec.i18n_meta && (rec.i18n_meta.name || rec.i18n_meta.title);
+  return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: loc ? loc.location_code : '', machine: !!(meta && meta.state === 'MACHINE') };
 }
 
 export async function renderQrView(view, { shell, params }) {

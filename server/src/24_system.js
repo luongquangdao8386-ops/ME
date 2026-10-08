@@ -129,7 +129,7 @@ var SETTINGS_BOUNDS_ = {
 };
 var SETTINGS_ENUMS_ = {
   backup_weekday: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'],
-  qr_label_size: ['SMALL_70X37', 'LARGE_100X50']
+  qr_label_size: ['SMALL_70X37', 'LARGE_105X74']
 };
 
 function settingsList_() {

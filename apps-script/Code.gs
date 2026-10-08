@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-poc.4
+ * M&E · 机电管理 — Code.gs 1.0.0-d1.1
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-poc.4';
+var SERVER_VERSION = '1.0.0-d1.1';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.0';
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -7183,7 +7183,7 @@ var SETTINGS_BOUNDS_ = {
 };
 var SETTINGS_ENUMS_ = {
   backup_weekday: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'],
-  qr_label_size: ['SMALL_70X37', 'LARGE_100X50']
+  qr_label_size: ['SMALL_70X37', 'LARGE_105X74']
 };
 
 function settingsList_() {

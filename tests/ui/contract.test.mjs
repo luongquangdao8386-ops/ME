@@ -100,6 +100,9 @@ test('gia hạn: HĐ tạo dự thảo và gửi duyệt (giữ hạn cũ); C4 d
     await page.waitForSelector('.modal .pin-input');
     await page.fill('.modal .pin-input', OWNER_PIN);
     await page.click('.modal-actions .btn.primary');
+    // Chờ máy chủ ghi xong (màn dự thảo có sẵn chữ "Đang hiệu lực" của phiên cũ nên không dựa vào chữ)
+    await page.waitForSelector('#co-appr', { state: 'detached', timeout: 15000 });
+    for (let i = 0; i < 50 && env.rows('Contracts').find((x) => x.contract_id === d).lifecycle_status !== 'ACTIVE'; i++) await page.waitForTimeout(200);
     await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Đang hiệu lực · 生效中'), null, { timeout: 15000 });
     const rows = env.rows('Contracts');
     assert.equal(rows.find((x) => x.contract_id === id).lifecycle_status, 'SUPERSEDED');
