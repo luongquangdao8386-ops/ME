@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { openApp, SHOTS } from './harness.mjs';
-import { freshServer, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN, APP_VERSION } from '../helpers.mjs';
 
 async function noHorizontalOverflow(page) {
   return page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
@@ -96,6 +96,9 @@ test('P-03: ghi có xác nhận, DUPLICATE, REUSED, CONFLICT, UNKNOWN_RESULT →
     await page.waitForSelector('[data-poc="P-03"] .badge.pass, [data-poc="P-03"] .badge.fail', { timeout: 60000 });
     const out = await page.textContent('[data-poc="P-03"] .poc-out');
     assert.ok(await page.locator('[data-poc="P-03"] .badge.pass').count(), out);
+    // bản máy chủ hỏi trực tiếp, kết quả ghi kèm bản app/máy chủ
+    assert.equal(await page.textContent('#srv-ver'), APP_VERSION);
+    assert.ok((await page.textContent('[data-poc="P-03"] .poc-summary')).includes(`app ${APP_VERSION} / máy chủ ${APP_VERSION}`));
     const lost = env.rows('Equipment').filter((e) => e.name_vi === 'P03 mất phản hồi');
     assert.equal(lost.length, 1, 'mất phản hồi nhưng chỉ ghi một lần');
   } finally { await app.close(); }

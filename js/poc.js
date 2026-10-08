@@ -3,7 +3,7 @@ import {
   api, rawPost, envelope, session, idb, ls, uuid, bi, biText, esc, resMsg, fmtNumber, fmtDateTime, fmtDate, isoNowVN, todayVN,
   deviceInfo, execUrl, BUILD_VERSION, APP_BASE_URL, b64url
 } from './core.js';
-import { bootstrap, pullChanges, getRecords, getMeta, enqueue, queueItems, doneItems, flushQueue, upsertLocal, exportBackup } from './sync.js';
+import { bootstrap, pullChanges, getRecords, getMeta, setMeta, enqueue, queueItems, doneItems, flushQueue, upsertLocal, exportBackup } from './sync.js';
 import { pbkdf2, getVerifier, isIosSafariTab } from './auth.js';
 import { processPhoto, uploadDoc, downloadDoc, shareFileNow, makeTestPdf, photoUrls, probeImg, probeCors } from './media.js';
 import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
@@ -17,9 +17,23 @@ const results = {};
 async function loadResults() {
   for (const { key, value } of await idb.all('me_poc', 'results').catch(() => [])) results[key] = value;
 }
+/** Bản máy chủ hỏi trực tiếp lúc mở trang (bản lưu lúc bootstrap có thể cũ sau khi triển khai lại) */
+let serverVersion = null;
+async function refreshServerVersion(main) {
+  const r = await rawPost(envelope('system.getPublicState', {}, { token: null, epoch: null }), { timeoutMs: 30000 });
+  if (!r.ok || !r.data || !r.data.server_version) return;
+  serverVersion = r.data.server_version;
+  const boot = await getMeta('bootstrap');
+  if (boot && boot.server_version !== serverVersion) { boot.server_version = serverVersion; await setMeta('bootstrap', boot); }
+  const el = main.querySelector('#srv-ver');
+  if (el) el.textContent = serverVersion;
+}
 async function rec(code, status, summary, metrics = {}) {
   const d = deviceInfo();
-  results[code] = { code, status, summary, metrics, at: isoNowVN(), device: `${d.platform}${d.ios_version ? ' iOS ' + d.ios_version : ''} · ${d.standalone ? 'Màn hình chính' : d.browser}` };
+  results[code] = {
+    code, status, summary, metrics, at: isoNowVN(), ver: `app ${BUILD_VERSION} / máy chủ ${serverVersion || '?'}`,
+    device: `${d.platform}${d.ios_version ? ' iOS ' + d.ios_version : ''} · ${d.standalone ? 'Màn hình chính' : d.browser}`
+  };
   await idb.put('me_poc', 'results', code, results[code]).catch(() => {});
   paintStatus(code);
 }
@@ -31,7 +45,7 @@ function paintStatus(code) {
   if (!card) return;
   const r = results[code];
   $('.poc-badge', card).innerHTML = badge(r ? r.status : 'none');
-  $('.poc-summary', card).textContent = r ? `${r.summary} — ${fmtDateTime(r.at)}` : '';
+  $('.poc-summary', card).textContent = r ? `${r.summary} — ${fmtDateTime(r.at)}${r.ver ? ' · ' + r.ver : ''}` : '';
 }
 function out(code, html) {
   const el = document.querySelector(`[data-poc="${code}"] .poc-out`);
@@ -673,13 +687,13 @@ async function reportText() {
   const boot = await getMeta('bootstrap');
   const lines = [
     'M&E PoC — báo cáo · PoC报告',
-    `Lúc: ${fmtDateTime(new Date())} · App ${BUILD_VERSION} · Máy chủ ${boot ? boot.server_version : '?'} · Môi trường ${boot ? boot.env : '?'}`,
+    `Lúc: ${fmtDateTime(new Date())} · App ${BUILD_VERSION} · Máy chủ ${serverVersion || (boot ? boot.server_version + ' (bản lưu)' : '?')} · Môi trường ${boot ? boot.env : '?'}`,
     `Máy: ${d.platform}${d.ios_version ? ' iOS ' + d.ios_version : ''} · ${d.standalone ? 'Màn hình chính' : d.browser} · ${d.screen}`,
     `UA: ${d.user_agent}`, ''
   ];
   for (const c of POC_ORDER) {
     const r = results[c];
-    lines.push(`${c} ${r ? biText(ST[r.status]) : biText(ST.none)}${r ? ' — ' + r.summary + ' [' + fmtDateTime(r.at) + ']' : ''}`);
+    lines.push(`${c} ${r ? biText(ST[r.status]) : biText(ST.none)}${r ? ' — ' + r.summary + ' [' + fmtDateTime(r.at) + (r.ver ? ' · ' + r.ver : '') + ']' : ''}`);
   }
   lines.push('', 'Số đo chi tiết (JSON):', JSON.stringify(Object.fromEntries(POC_ORDER.filter((c) => results[c]).map((c) => [c, results[c].metrics]))));
   return lines.join('\n');
@@ -697,7 +711,7 @@ export async function renderPoc(main, { isOwner, offline }) {
   main.innerHTML = `
   <section class="card poc-head">
     <div class="kv"><span>${bi(['Máy', '设备'])}</span><strong>${esc(d.platform)}${d.ios_version ? ' iOS ' + esc(d.ios_version) : ''} · ${esc(d.standalone ? 'Màn hình chính' : d.browser)}</strong></div>
-    <div class="kv"><span>${bi(['Máy chủ', '服务器'])}</span><strong>${esc(boot ? boot.server_version : '—')} · ${esc(boot ? boot.env : '—')} · epoch ${esc((session.epoch || '').slice(0, 8))}</strong></div>
+    <div class="kv"><span>${bi(['Máy chủ', '服务器'])}</span><strong><span id="srv-ver">${esc(serverVersion || (boot ? boot.server_version : '—'))}</span> · ${esc(boot ? boot.env : '—')} · epoch ${esc((session.epoch || '').slice(0, 8))}</strong></div>
     <div class="kv"><span>${bi('last_sync')}</span><strong>${esc(fmtDateTime(last) || '—')}</strong></div>
     <div class="row">${btn('rep-copy', bi(['Sao chép báo cáo', '复制报告']), 'primary')}${btn('rep-share', bi(['Chia sẻ', '分享']))}${btn('rep-sync', bi('sync_now'))}${btn('rep-backup', bi('export_backup'))}</div>
     <p class="muted">${bi(['Chạy từng mục trên iPhone (Safari và Màn hình chính) và máy tính, rồi sao chép báo cáo gửi lại.', '在iPhone（Safari和主屏幕）及电脑上逐项运行，然后复制报告发回。'])}</p>
@@ -738,6 +752,7 @@ export async function renderPoc(main, { isOwner, offline }) {
     `<input id="p19-ios" class="tiny-input" style="width:96px" inputmode="decimal" placeholder="iOS" value="${esc(ls.get('ios_manual') || '')}">` + btn('p19', bi(['Kiểm tra', '检查']), 'primary'))}
   `;
   POC_ORDER.forEach(paintStatus);
+  if (!offline) refreshServerVersion(main).catch(() => {});
   const on = (id, fn) => { const el = $('#' + id, main); if (el) el.addEventListener('click', async () => { el.disabled = true; try { await fn(); } catch (e) { toast(esc(e.message), 'err'); } finally { el.disabled = false; } }); };
   on('p01', p01); on('p02v', p02vectors); on('p02w', p02weak); on('p02l', p02lock); on('p03', p03);
   on('p04d', p04draft); on('p04s', p04flush); on('p05s', p05scan); on('p06p', p06private);
