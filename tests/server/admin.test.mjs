@@ -381,6 +381,41 @@ test('khôi phục thủ công (6.5.4): cần bảo trì; đổi file Nghiệp v
   assert.equal(r3.data.display_code, 'TB-0003');
 });
 
+test('diễn tập Phần E đủ bước: B1 → thêm hồ sơ → bảo trì + B2 → khôi phục về B1 → quay lại bằng PREVIOUS_BUSINESS_SPREADSHEET_ID (khớp B2) → hồ sơ và QR trở lại', () => {
+  const { env, c } = setup();
+  c.write('equipment.create', { equipment_id: uuid(), name_vi: 'Máy MẪU' });
+  const b1 = env.g.backupData();
+  assert.equal(b1.status, 'VERIFIED');
+  const e2 = uuid();
+  const qr2 = c.write('equipment.create', { equipment_id: e2, name_vi: 'THỬ KHÔI PHỤC' }).data.qr_key;
+  env.g.adminMaintenanceOn();
+  env.clock.advance(60000);
+  assert.equal(env.g.backupData().status, 'VERIFIED', 'B2 chạy được khi bảo trì');
+  const oldBiz = env.props.getProperty('BUSINESS_SPREADSHEET_ID');
+  const copy = env.g.DriveApp.getFileById(b1.files.business).makeCopy('ME_NghiepVu_khoiphuc', null);
+  env.props.setProperty('RESTORE_SOURCE_ID', copy.getId());
+  env.g.adminFinalizeManualRestore();
+  env.g.adminMaintenanceOff();
+  let u = makeClient(env);
+  assert.equal(u.login('NV-001', OWNER_PIN).ok, true);
+  assert.equal(u.call('qr.resolve', { qr_key: qr2 }).data.qr_state, 'NOT_IN_RESTORED');
+  // Quay lại
+  env.clock.advance(60000);
+  env.g.adminMaintenanceOn();
+  env.props.setProperty('RESTORE_SOURCE_ID', env.props.getProperty('PREVIOUS_BUSINESS_SPREADSHEET_ID'));
+  env.g.adminFinalizeManualRestore();
+  env.g.adminMaintenanceOff();
+  assert.equal(env.props.getProperty('BUSINESS_SPREADSHEET_ID'), oldBiz);
+  assert.equal(env.props.getProperty('PREVIOUS_BUSINESS_SPREADSHEET_ID'), copy.getId());
+  assert.ok(env.rows('Equipment').some((x) => x.equipment_id === e2));
+  u = makeClient(env);
+  assert.equal(u.login('NV-001', OWNER_PIN).ok, true);
+  const q = u.call('qr.resolve', { qr_key: qr2 }).data;
+  assert.equal(q.qr_state, 'OK');
+  assert.equal(q.entity_id, e2);
+  assert.match(u.call('backup.view', {}).data.restored_from_ref, /_\d{4}$/);
+});
+
 test('system.status (C4): healthCheck báo trigger thiếu, sao lưu, quota, app_base_url; C3 FORBIDDEN', () => {
   const { env, c } = setup();
   let s = c.call('system.status', {});
