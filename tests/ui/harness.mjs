@@ -34,13 +34,13 @@ export function startStatic() {
  * 'EXEC_THEN_AS_GET': máy chủ đã chạy doPost nhưng phản hồi mất ở chặng chuyển hướng;
  * n là số thứ tự request của action đó (bắt đầu từ 1).
  */
-export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, delays = {}, sw = false, fault = null } = {}) {
+export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, delays = {}, sw = false, fault = null, launchArgs = [], permissions = [] } = {}) {
   const { srv, base } = await startStatic();
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: launchArgs });
   const context = await browser.newContext({
     viewport, deviceScaleFactor: mobile ? 3 : 1, isMobile: mobile, hasTouch: mobile,
     userAgent: mobile ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' : undefined,
-    serviceWorkers: sw ? 'allow' : 'block'
+    serviceWorkers: sw ? 'allow' : 'block', permissions
   });
   const calls = [];
   await context.route(EXEC + '**', async (route) => {

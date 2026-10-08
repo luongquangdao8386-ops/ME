@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d1.2
+ * M&E · 机电管理 — Code.gs 1.0.0-d1.3
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d1.2';
+var SERVER_VERSION = '1.0.0-d1.3';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.0';
 var TZ = 'Asia/Ho_Chi_Minh';

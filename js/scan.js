@@ -113,7 +113,9 @@ export function openScanner({ onResult, onClose }) {
     if (!detector) {
       worker = new Worker('js/qr-worker.js');
       worker.onmessage = (ev) => { busy = false; if (ev.data && !stopped) done(ev.data, false); };
+      worker.onerror = () => { busy = false; };
     }
+    let frame = 0;
     const tick = async () => {
       if (stopped) return;
       if (video.readyState >= 2 && !busy) {
@@ -123,10 +125,14 @@ export function openScanner({ onResult, onClose }) {
             if (codes.length && codes[0].rawValue) { done(codes[0].rawValue, false); return; }
           } catch (e) { /* bỏ qua khung lỗi */ }
         } else {
+          // Lượt chẵn: cả khung thu nhỏ ≤640 px; lượt lẻ: vùng giữa (khung ngắm) gần độ phân giải gốc ≤800 px —
+          // đọc được mã nhỏ, ở xa hoặc hiện trên màn hình máy tính mà khung thu nhỏ làm mất chi tiết
           const vw = video.videoWidth, vh = video.videoHeight;
-          const s = Math.min(1, 640 / Math.max(vw, vh));
-          canvas.width = Math.round(vw * s); canvas.height = Math.round(vh * s);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          let sx = 0, sy = 0, sw = vw, sh = vh, max = 640;
+          if (frame++ % 2) { sw = sh = Math.round(Math.min(vw, vh) * 0.8); sx = (vw - sw) >> 1; sy = (vh - sh) >> 1; max = 800; }
+          const s = Math.min(1, max / Math.max(sw, sh));
+          canvas.width = Math.round(sw * s); canvas.height = Math.round(sh * s);
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
           busy = true;
           worker.postMessage({ data: img.data.buffer, width: img.width, height: img.height }, [img.data.buffer]);
