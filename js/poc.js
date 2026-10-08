@@ -474,7 +474,8 @@ async function p08() {
 async function p09render() {
   const list = $('#p09-list');
   if (!list) return;
-  const eqs = (await getRecords('EQUIPMENT')).slice(-8).reverse();
+  // Thiết bị mẫu theo mã tăng dần (TB-0001…): hai máy cùng thấy một danh sách, dễ chọn cùng thiết bị
+  const eqs = (await getRecords('EQUIPMENT')).sort((a, b) => String(a.equipment_code).localeCompare(String(b.equipment_code))).slice(0, 5);
   const last = await getMeta('last_sync');
   $('#p09-last').innerHTML = `${bi('last_sync')}: ${esc(fmtDateTime(last) || '—')}`;
   list.innerHTML = eqs.map((e) => `<li><strong>${esc(e.equipment_code)}</strong> ${esc(e.name_vi)}${e.i18n_meta && e.i18n_meta.name && e.i18n_meta.name.state === 'MACHINE' ? ` <span class="mt">${bi('machine_translated')}</span>` : ''}<br><span class="zh">${esc(e.name_zh || '')}</span> · v${e.record_version}
@@ -815,7 +816,7 @@ export async function renderPoc(main, { isOwner, offline }) {
      ${btn('p07t', bi(['Dùng PDF thử', '使用测试PDF']))}${btn('p07d', bi('download'), 'primary')}<button type="button" class="btn small" id="p07-open" disabled>${bi('open_save')}</button>
      ${btn('p07f', bi(['Thử không có quyền (MAU-C1)', '测试无权限']))}${btn('p07big', bi(['Tải PDF 5 MB', '下载5MB PDF']))}`)}
   ${card('P-08', bi(['Cài lên Màn hình chính', '添加到主屏幕']), 'Safari → Chia sẻ → Thêm vào MH chính; mở standalone, không có màn chào mang logo; bộ nhớ và phiên tách riêng với Safari.', btn('p08', bi(['Kiểm tra', '检查']), 'primary'))}
-  ${card('P-09', bi(['Dùng chung web ↔ iPhone', '电脑与iPhone共用']), 'Sửa trên máy này, máy kia bấm Đồng bộ ngay thì thấy; hai máy cùng sửa một hồ sơ → VERSION_CONFLICT.',
+  ${card('P-09', bi(['Dùng chung web ↔ iPhone', '电脑与iPhone共用']), 'Cả hai máy Đồng bộ ngay → iPhone bấm ✎ TB-0001 (chưa Lưu) → máy tính ✎ TB-0001, Lưu → iPhone bấm Lưu: VERSION_CONFLICT → iPhone Đồng bộ ngay: thấy bản máy tính.',
     btn('p09s', bi('sync_now'), 'primary') + `<p class="muted" id="p09-last"></p><ul class="list" id="p09-list"></ul>`)}
   ${card('P-10', bi(['Ghi đồng thời', '并发写入']), '3 máy × 20 lệnh tạo gửi cùng lúc → đủ 60 dòng, không trùng mã. Mỗi máy đặt một nhãn riêng (vd. D, E, F) rồi bấm gần như cùng lúc.',
     `<input id="p10-tag" class="tiny-input" maxlength="6" value="${esc(ls.get('p10_tag') || '')}" placeholder="A">` + btn('p10', bi(['Gửi 20 lệnh tạo', '发送20个创建']), 'primary') + btn('p10c', bi(['Kiểm tra tổng', '检查总数'])))}
