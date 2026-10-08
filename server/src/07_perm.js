@@ -156,6 +156,8 @@ var ACTION_TABLE_ = [
   'settings.edit|system|E|N N N N N N N Y|pin|1|W',
   'permission.view|system|V|N N N N N N N Y|pin|1|R',
   'permission.edit|system|E|N N N N N N N Y|pin|1|W',
+  // Bổ sung kỹ thuật: màn Trạng thái hệ thống đọc healthCheck + Settings (5.2)
+  'system.status|system|V|N N N N N N N Y|net|1|R',
   'system.reset.preview|system|R|N N N N N N N OWNER|pin|4|R',
   'system.reset.request|system|R|N N N N N N N OWNER|pin|4|W',
   'system.reset.status|system|R|N N N N N N N OWNER|pin|4|R',

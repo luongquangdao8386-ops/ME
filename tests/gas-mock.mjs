@@ -252,6 +252,19 @@ class MockSpreadsheet {
   deleteSheet(s) { this._sheets = this._sheets.filter((x) => x !== s); }
   setSpreadsheetTimeZone(tz) { this._tz = tz; }
   getSpreadsheetTimeZone() { return this._tz; }
+  /** Bản sao sâu (Drive makeCopy của file spreadsheet) */
+  _clone(id, name) {
+    const c = new MockSpreadsheet(this._app, name);
+    c._id = id; c._tz = this._tz;
+    c._sheets = this._sheets.map((sh) => {
+      const n = new MockSheet(c, sh._name);
+      n._rows = sh._rows.map((r) => (r ? r.slice() : r));
+      n._maxRows = sh._maxRows; n._maxCols = sh._maxCols;
+      n._fmt = JSON.parse(JSON.stringify(sh._fmt));
+      return n;
+    });
+    return c;
+  }
 }
 
 function makeSpreadsheetApp(drive) {
@@ -264,6 +277,7 @@ function makeSpreadsheetApp(drive) {
   };
   app.openById = (id) => { const b = app._books.get(id); if (!b) throw new Error('No spreadsheet ' + id); return b; };
   app.flush = () => { app._stats.flushes++; };
+  drive._copyBook = (srcId, newId, name) => { const b = app._books.get(srcId); if (b) app._books.set(newId, b._clone(newId, name)); };
   return app;
 }
 
@@ -281,7 +295,10 @@ function makeDrive() {
     makeCopy: (name, folder) => {
       const id = 'f_' + crypto.randomBytes(8).toString('hex');
       const c = { ...rec, id, name, access: 'PRIVATE', permission: 'EDIT', trashed: false, parent: folder ? folder.getId() : rec.parent };
-      files.set(id, c); return mkFile(c);
+      files.set(id, c);
+      if (drive._copyBook) drive._copyBook(rec.id, id, name);
+      if (drive._afterCopy) drive._afterCopy(rec.id, id);
+      return mkFile(c);
     },
     moveTo: (folder) => { rec.parent = folder.getId(); return mkFile(rec); }
   });
@@ -293,7 +310,10 @@ function makeDrive() {
       const r = { id, name: blob.getName(), bytes: Buffer.from(blob._bytes), mime: blob.getContentType(), access: 'PRIVATE', permission: 'EDIT', trashed: false, parent: rec.id };
       files.set(id, r); return mkFile(r);
     },
-    getFiles: () => { const list = [...files.values()].filter((f) => f.parent === rec.id && !f.trashed); let i = 0; return { hasNext: () => i < list.length, next: () => mkFile(list[i++]) }; }
+    getFiles: () => { const list = [...files.values()].filter((f) => f.parent === rec.id && !f.trashed); let i = 0; return { hasNext: () => i < list.length, next: () => mkFile(list[i++]) }; },
+    getFolders: () => { const list = [...folders.values()].filter((f) => f.parent === rec.id && !f.trashed); let i = 0; return { hasNext: () => i < list.length, next: () => mkFolder(list[i++]) }; },
+    getFilesByName: (n) => { const list = [...files.values()].filter((f) => f.parent === rec.id && !f.trashed && f.name === n); let i = 0; return { hasNext: () => i < list.length, next: () => mkFile(list[i++]) }; },
+    setTrashed: (t) => { rec.trashed = !!t; }, isTrashed: () => !!rec.trashed
   });
   const newFolder = (name, parent) => {
     const id = 'd_' + crypto.randomBytes(8).toString('hex');
@@ -313,6 +333,7 @@ function makeDrive() {
 /* ---------------- Others ---------------- */
 function makeScriptApp() {
   const triggers = [];
+  let seq = 0;
   const WeekDay = { MONDAY: 'MONDAY', TUESDAY: 'TUESDAY', WEDNESDAY: 'WEDNESDAY', THURSDAY: 'THURSDAY', FRIDAY: 'FRIDAY', SATURDAY: 'SATURDAY', SUNDAY: 'SUNDAY' };
   const app = {
     WeekDay, EventType: { CLOCK: 'CLOCK' },
@@ -324,7 +345,7 @@ function makeScriptApp() {
         timeBased: () => b, everyDays: (n) => { spec.everyDays = n; return b; }, everyHours: (n) => { spec.everyHours = n; return b; },
         atHour: (h) => { spec.atHour = h; return b; }, onWeekDay: (d) => { spec.weekDay = d; return b; },
         inTimezone: (tz) => { spec.tz = tz; return b; }, after: (ms) => { spec.after = ms; return b; },
-        create: () => { const t = { spec, getHandlerFunction: () => fn, getEventType: () => 'CLOCK', getUniqueId: () => String(triggers.length) }; triggers.push(t); return t; }
+        create: () => { const uid = 't' + (++seq); const t = { spec, getHandlerFunction: () => fn, getEventType: () => 'CLOCK', getUniqueId: () => uid }; triggers.push(t); return t; }
       };
       return b;
     },

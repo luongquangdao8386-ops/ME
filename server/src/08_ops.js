@@ -286,11 +286,15 @@ function applyTranslations_(sheet, fields, input, current) {
     values[kv] = src === 'vi' ? text : '';
     values[kz] = src === 'zh' ? text : '';
     if (noMt.indexOf(f) >= 0) { meta[f] = { src: src, state: 'MANUAL_REQUIRED', at: nowIso }; return; }
+    var tgt = src === 'vi' ? 'zh' : 'vi';
+    // Cả chuỗi trùng thuật ngữ đã duyệt: lấy từ điển, không cần dịch máy (2.3 quy tắc 4)
+    var g = glossaryExact_(text, src, tgt);
+    if (g) { values[tgt === 'zh' ? kz : kv] = g; meta[f] = { src: src, state: 'GLOSSARY', at: nowIso }; return; }
     if (!mtEnabled_() || now_().getTime() > budgetEnd) { meta[f] = { src: src, state: 'PENDING', at: nowIso }; return; }
-    var out = mtTranslate_(text, src, src === 'vi' ? 'zh' : 'vi');
+    var out = translateText_(text, src, tgt);
     if (out) {
-      values[src === 'vi' ? kz : kv] = out;
-      meta[f] = { src: src, state: 'MACHINE', at: nowIso };
+      values[tgt === 'zh' ? kz : kv] = out.text;
+      meta[f] = { src: src, state: out.state, at: nowIso };
     } else {
       meta[f] = { src: src, state: 'PENDING', at: nowIso };
     }

@@ -169,7 +169,8 @@ function catalogView_(ctx) {
   return {
     locations: readRows_('Locations').map(function (r) { return projectRow_(ctx, r, 'Locations'); }),
     vendors: readRows_('Vendors').map(function (r) { return projectRow_(ctx, r, 'Vendors'); }),
-    lookups: readRows_('LookupValues').map(function (r) { return projectRow_(ctx, r, 'LookupValues'); })
+    lookups: readRows_('LookupValues').map(function (r) { return projectRow_(ctx, r, 'LookupValues'); }),
+    glossary: readRows_('Glossary').filter(function (r) { return !r.archived_at; }).map(function (r) { return projectRow_(ctx, r, 'Glossary'); })
   };
 }
 

@@ -394,6 +394,11 @@ function composeDigest_(rcpt, rows, today) {
  */
 function sendExpiryDigest() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
+  var t0 = Date.now();
+  try { sendExpiryDigestRun_(); } finally { recordTriggerRun_('sendExpiryDigest', t0); }
+}
+
+function sendExpiryDigestRun_() {
   dbReset_();
   refreshAlerts_();
   housekeeping_();

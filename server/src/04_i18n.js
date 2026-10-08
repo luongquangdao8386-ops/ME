@@ -55,6 +55,9 @@ var SUB_MSG = {
   UNIT_NOT_ALLOWED: ['Đơn vị không thuộc danh sách cho phép', '单位不在允许范围内'],
   URL_INVALID: ['Liên kết phải bắt đầu bằng https://', '链接须以 https:// 开头'],
   SELF_ACTION: ['Không thao tác lên chính mình', '不能对自己执行此操作'],
+  PERM_CEILING: ['Vượt trần quyền của cấp này', '超出该级别的权限上限'],
+  PERM_LOCKED: ['Ô quyền này khóa, không sửa trong app', '该权限项已锁定，不能在应用中修改'],
+  LAST_ADMIN: ['Phải còn ít nhất một tài khoản cấp 4 đang hoạt động', '必须保留至少一个启用的四级账号'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
 };
 

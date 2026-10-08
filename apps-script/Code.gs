@@ -958,6 +958,9 @@ var SUB_MSG = {
   UNIT_NOT_ALLOWED: ['Đơn vị không thuộc danh sách cho phép', '单位不在允许范围内'],
   URL_INVALID: ['Liên kết phải bắt đầu bằng https://', '链接须以 https:// 开头'],
   SELF_ACTION: ['Không thao tác lên chính mình', '不能对自己执行此操作'],
+  PERM_CEILING: ['Vượt trần quyền của cấp này', '超出该级别的权限上限'],
+  PERM_LOCKED: ['Ô quyền này khóa, không sửa trong app', '该权限项已锁定，不能在应用中修改'],
+  LAST_ADMIN: ['Phải còn ít nhất một tài khoản cấp 4 đang hoạt động', '必须保留至少一个启用的四级账号'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
 };
 
@@ -1759,6 +1762,8 @@ var ACTION_TABLE_ = [
   'settings.edit|system|E|N N N N N N N Y|pin|1|W',
   'permission.view|system|V|N N N N N N N Y|pin|1|R',
   'permission.edit|system|E|N N N N N N N Y|pin|1|W',
+  // Bổ sung kỹ thuật: màn Trạng thái hệ thống đọc healthCheck + Settings (5.2)
+  'system.status|system|V|N N N N N N N Y|net|1|R',
   'system.reset.preview|system|R|N N N N N N N OWNER|pin|4|R',
   'system.reset.request|system|R|N N N N N N N OWNER|pin|4|W',
   'system.reset.status|system|R|N N N N N N N OWNER|pin|4|R',
@@ -2308,11 +2313,15 @@ function applyTranslations_(sheet, fields, input, current) {
     values[kv] = src === 'vi' ? text : '';
     values[kz] = src === 'zh' ? text : '';
     if (noMt.indexOf(f) >= 0) { meta[f] = { src: src, state: 'MANUAL_REQUIRED', at: nowIso }; return; }
+    var tgt = src === 'vi' ? 'zh' : 'vi';
+    // Cả chuỗi trùng thuật ngữ đã duyệt: lấy từ điển, không cần dịch máy (2.3 quy tắc 4)
+    var g = glossaryExact_(text, src, tgt);
+    if (g) { values[tgt === 'zh' ? kz : kv] = g; meta[f] = { src: src, state: 'GLOSSARY', at: nowIso }; return; }
     if (!mtEnabled_() || now_().getTime() > budgetEnd) { meta[f] = { src: src, state: 'PENDING', at: nowIso }; return; }
-    var out = mtTranslate_(text, src, src === 'vi' ? 'zh' : 'vi');
+    var out = translateText_(text, src, tgt);
     if (out) {
-      values[src === 'vi' ? kz : kv] = out;
-      meta[f] = { src: src, state: 'MACHINE', at: nowIso };
+      values[tgt === 'zh' ? kz : kv] = out.text;
+      meta[f] = { src: src, state: out.state, at: nowIso };
     } else {
       meta[f] = { src: src, state: 'PENDING', at: nowIso };
     }
@@ -2410,6 +2419,13 @@ var HANDLERS_ = {
   'session.listOwn': function (ctx) { return sessionListOwn_(ctx); },
   'session.revokeOwn': function (ctx) { return sessionRevokeOwn_(ctx); },
   'user.pickList': function (ctx) { return userPickList_(ctx); },
+  'user.view': function (ctx) { return userView_(ctx); },
+  'user.create': function (ctx) { return userCreate_(ctx); },
+  'user.setRole': function (ctx) { return userSetRole_(ctx); },
+  'user.lock': function (ctx) { return userLock_(ctx); },
+  'user.unlock': function (ctx) { return userUnlock_(ctx); },
+  'user.resetPin': function (ctx) { return userResetPin_(ctx); },
+  'user.revokeSessions': function (ctx) { return userRevokeSessions_(ctx); },
   'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
@@ -2452,7 +2468,22 @@ var HANDLERS_ = {
   'notify.recipient.edit': function (ctx) { return notifyRecipientEdit_(ctx); },
   'notify.settings.edit': function (ctx) { return notifySettingsEdit_(ctx); },
   'notify.resend': function (ctx) { return notifyResend_(ctx); },
+  'audit.own': function (ctx) { return auditOwn_(ctx); },
+  'audit.view': function (ctx) { return auditView_(ctx); },
+  'audit.auth': function (ctx) { return auditAuth_(ctx); },
+  'backup.view': function (ctx) { return backupView_(ctx); },
+  'backup.run': function (ctx) { return backupRun_(ctx); },
+  'settings.edit': function (ctx) { return settingsEdit_(ctx); },
+  'permission.view': function (ctx) { return permissionView_(ctx); },
+  'permission.edit': function (ctx) { return permissionEdit_(ctx); },
+  'system.status': function (ctx) { return systemStatus_(ctx); },
   'catalog.view': function (ctx) { return catalogView_(ctx); },
+  'location.edit': function (ctx) { return locationEdit_(ctx); },
+  'vendor.edit': function (ctx) { return vendorEdit_(ctx); },
+  'lookup.edit': function (ctx) { return lookupEdit_(ctx); },
+  'glossary.edit': function (ctx) { return glossaryEdit_(ctx); },
+  'i18n.suggest': function (ctx) { return i18nSuggest_(ctx); },
+  'i18n.retranslate': function (ctx) { return i18nRetranslate_(ctx); },
   'doc.view': function (ctx) { return docView_(ctx); },
   'doc.upload': function (ctx) { return docUpload_(ctx); },
   'doc.download': function (ctx) { return docDownload_(ctx); },
@@ -2789,7 +2820,8 @@ function catalogView_(ctx) {
   return {
     locations: readRows_('Locations').map(function (r) { return projectRow_(ctx, r, 'Locations'); }),
     vendors: readRows_('Vendors').map(function (r) { return projectRow_(ctx, r, 'Vendors'); }),
-    lookups: readRows_('LookupValues').map(function (r) { return projectRow_(ctx, r, 'LookupValues'); })
+    lookups: readRows_('LookupValues').map(function (r) { return projectRow_(ctx, r, 'LookupValues'); }),
+    glossary: readRows_('Glossary').filter(function (r) { return !r.archived_at; }).map(function (r) { return projectRow_(ctx, r, 'Glossary'); })
   };
 }
 
@@ -4180,63 +4212,15 @@ function adminFlushAuthCache() {
   log_('Đã xóa ' + keys.length + ' khóa cache phiên/người dùng.');
 }
 
-function adminFinalizeManualRestore() {
-  throw new Error('Khôi phục thủ công (6.5.4) làm ở Đợt 1 sau PoC.');
-}
+/* adminFinalizeManualRestore (khôi phục thủ công) ở 23_backup.js */
 
 /* ---------------- Trigger ---------------- */
 
 /* sendExpiryDigest (trigger hằng ngày) ở 19_alerts.js */
 
-var MT_SHEETS_ = {
-  Equipment: ['name'], Documents: ['title'], Materials: ['name', 'specification'], EquipmentParts: ['function', 'position'],
-  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services']
-};
+/* runBackgroundJobs (dịch bù) ở 21_i18n.js */
 
-/** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
-function runBackgroundJobs() {
-  if (prop_('MAINTENANCE_MODE') === 'true') return;
-  if (!mtEnabled_()) return;
-  var t0 = Date.now();
-  var done = 0;
-  Object.keys(MT_SHEETS_).forEach(function (sheet) {
-    if (Date.now() - t0 > 150000) return;
-    readRows_(sheet).forEach(function (r) {
-      if (Date.now() - t0 > 150000 || !r.i18n_meta) return;
-      MT_SHEETS_[sheet].forEach(function (f) {
-        var m = r.i18n_meta[f];
-        if (!m || m.state !== 'PENDING') return;
-        var srcText = trimStr_(r[f + '_' + m.src]);
-        var out = mtTranslate_(srcText, m.src, m.src === 'vi' ? 'zh' : 'vi');
-        if (!out) return;
-        withWriteLock_(function () {
-          var cur = readRowAt_(sheet, r.__row);
-          var key = sheetSchema_(sheet).key;
-          if (cur[key] !== r[key] || trimStr_(cur[f + '_' + m.src]) !== srcText) return;
-          var meta = cur.i18n_meta || {};
-          if (!meta[f] || meta[f].state !== 'PENDING') return;
-          meta[f] = { src: m.src, state: 'MACHINE', at: isoVN_(now_()) };
-          var st = readState_();
-          var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
-          var upd = { i18n_meta: meta, sync_revision: rev };
-          upd[f + '_' + (m.src === 'vi' ? 'zh' : 'vi')] = out;
-          writeCells_(sheet, r.__row, upd);
-          var su = { sync_revision: ['INT', rev] };
-          su['table_rev.' + sheet] = ['INT', rev];
-          stateWrite_(st, su, SYSTEM_USER);
-          writeAudit_({ user_id: SYSTEM_USER, action: 'i18n.machineTranslate', entity_type: sheet, entity_id: r[key], before_json: null, after_json: { field: f }, auth_basis: 'SYSTEM' });
-          done++;
-        });
-      });
-    });
-  });
-  log_('runBackgroundJobs: dịch bù ' + done + ' trường.');
-}
-
-/** Hằng tuần: sao lưu có kiểm chứng (6.5.4) — làm ở Đợt 1 sau PoC */
-function backupData() {
-  log_('backupData: sao lưu tự động sẽ có ở Đợt 1 (sau PoC).');
-}
+/* backupData (sao lưu hằng tuần) ở 23_backup.js */
 
 // ===== 16_poc.js =====
 /* 16_poc: hàm thử của Bước 0 — PoC (phụ lục 1.5 mục 6.2). Chỉ chạy khi ENV = THU.
@@ -5889,6 +5873,11 @@ function composeDigest_(rcpt, rows, today) {
  */
 function sendExpiryDigest() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
+  var t0 = Date.now();
+  try { sendExpiryDigestRun_(); } finally { recordTriggerRun_('sendExpiryDigest', t0); }
+}
+
+function sendExpiryDigestRun_() {
   dbReset_();
   refreshAlerts_();
   housekeeping_();
@@ -5990,6 +5979,1424 @@ function housekeeping_() {
     }).map(function (s) { return s.__row; }).sort(function (a, b) { return b - a; });
     del.slice(0, 200).forEach(function (r) { sh_('Sessions').deleteRow(r); });
   });
+}
+
+// ===== 20_users.js =====
+/* 20_users: quản trị người dùng — phụ lục 1.5 mục 3.6 (PIN tạm), 4.4.14 (user.*), 4.6.
+ * Giới hạn (⁹): không thao tác lên chính mình; không thao tác lên owner trừ khi người làm là owner;
+ * không hạ cấp/khóa cấp 4 cuối cùng còn active; mọi thay đổi tăng auth_version, trừ user.unlock.
+ * PIN tạm chỉ trả một lần trong phản hồi: không ghi Operations.result_json/intent, AuditLogs, log. */
+
+var EMP_CODE_RE_ = /^[A-Z0-9][A-Z0-9._-]{0,39}$/;
+var EMAIL_RE_ = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
+
+/** Bản ghi người dùng gửi client: không bao giờ có pin_hash/salt; C3 không thấy email, lịch sử đăng nhập */
+function projectUser_(ctx, u, scopesByUser, sessionsByUser) {
+  var t = now_().getTime();
+  var lu = parseTime_(u.locked_until);
+  var o = {
+    user_id: u.user_id, employee_code: u.employee_code, display_name: u.display_name, role_level: Number(u.role_level),
+    subroles: (scopesByUser[u.user_id] || []).slice(), active: !!u.active, is_system_owner: !!u.is_system_owner,
+    pin_locked: !!(lu && lu.getTime() > t), locked_until: lu && lu.getTime() > t ? u.locked_until : '',
+    must_change_pin: !!u.must_change_pin, temp_pin_expires_at: u.must_change_pin ? u.temp_pin_expires_at : '',
+    record_version: u.record_version || 1, created_at: u.created_at, updated_at: u.updated_at
+  };
+  if (Number(ctx.user.role_level) >= 4) {
+    o.email = u.email || '';
+    o.last_login_at = u.last_login_at || '';
+    o.pin_changed_at = u.pin_changed_at || '';
+    o.active_sessions = sessionsByUser ? (sessionsByUser[u.user_id] || 0) : undefined;
+  }
+  return o;
+}
+
+function activeSubroles_() {
+  var m = {};
+  readRows_('UserScopes').forEach(function (s) {
+    if (!s.active || !SUBROLES[s.subrole] || s.location_id || s.module) return;
+    (m[s.user_id] = m[s.user_id] || []);
+    if (m[s.user_id].indexOf(s.subrole) < 0) m[s.user_id].push(s.subrole);
+  });
+  return m;
+}
+
+function userView_(ctx) {
+  var scopes = activeSubroles_();
+  var sess = null;
+  if (Number(ctx.user.role_level) >= 4) {
+    sess = {};
+    var t = now_().getTime();
+    readRows_('Sessions').forEach(function (s) {
+      if (s.session_kind === 'FULL' && isSessionActive_(s, t)) sess[s.user_id] = (sess[s.user_id] || 0) + 1;
+    });
+  }
+  var items = readRows_('Users').map(function (u) { return projectUser_(ctx, u, scopes, sess); });
+  items.sort(function (a, b) { return String(a.employee_code).localeCompare(String(b.employee_code)); });
+  return { items: items, subroles: Object.keys(SUBROLES), me: ctx.user.user_id };
+}
+
+/** Kiểm cấp và subrole. Trả danh sách subrole đã chuẩn hóa */
+function validateRole_(p, errs) {
+  var lvl = Number(p.role_level);
+  if (!(lvl >= 1 && lvl <= 4 && Math.floor(lvl) === lvl)) { errs.push(fieldError_('role_level', 'INVALID_VALUE')); return []; }
+  var subs = Array.isArray(p.subroles) ? p.subroles.map(String) : [];
+  var out = [];
+  subs.forEach(function (s) {
+    if (!SUBROLES[s]) errs.push(fieldError_('subroles', 'INVALID_VALUE'));
+    else if (out.indexOf(s) < 0) out.push(s);
+  });
+  if (lvl !== 2 && out.length) errs.push(fieldError_('subroles', 'INVALID_VALUE'));
+  if (lvl === 2 && !out.length) errs.push(fieldError_('subroles', 'REQUIRED'));
+  return out;
+}
+
+/** Người đích của thao tác quản trị: tồn tại, không phải mình, owner chỉ owner thao tác */
+function adminTarget_(ctx, userId) {
+  if (!isUuidV4_(userId)) throw validationError_([fieldError_('user_id', 'ID_INVALID')]);
+  var u = findOne_('Users', 'user_id', userId);
+  if (!u) throw apiError_('NOT_FOUND');
+  if (u.user_id === ctx.user.user_id) throw validationError_([fieldError_('user_id', 'SELF_ACTION')]);
+  if (u.is_system_owner && !ctx.user.is_system_owner) throw apiError_('FORBIDDEN');
+  return u;
+}
+
+/** Còn cấp 4 active nào khác ngoài người này không */
+function otherActiveAdmin_(userId) {
+  return readRows_('Users').some(function (u) { return u.user_id !== userId && u.active && Number(u.role_level) === 4; });
+}
+
+/** So expected_version (không lộ dòng Users ra phản hồi lỗi) */
+function assertUserVersion_(ctx, u) {
+  var ev = ctx.req.expected_version;
+  if (ev === undefined || ev === null || Number(ev) !== Number(u.record_version || 1)) {
+    throw apiError_('VERSION_CONFLICT', { entity_type: 'USER', server: projectUser_(ctx, u, activeSubroles_(), null), server_version: u.record_version || 1 });
+  }
+}
+
+/** Thu hồi mọi phiên còn hiệu lực (dưới khóa; ghi Sheet trước, cache sau) */
+function revokeUserSessions_(userId, reason) {
+  var t = now_().getTime();
+  findAll_('Sessions', 'user_id', userId).forEach(function (s) {
+    if (isSessionActive_(s, t)) revokeSessionRow_(s, reason || 'AUTH_VERSION');
+  });
+}
+
+/** Sau khi ghi Users: làm mới cache phiên/người dùng */
+function afterUserWrite_(userId, oldAv, newAv) {
+  var c = cache_();
+  if (newAv !== undefined && newAv !== oldAv) c.put('av:' + userId, String(newAv), 21600);
+  c.remove('us:' + userId);
+  c.remove('users:dir');
+  if (oldAv !== undefined) { c.remove('scope:' + userId + ':' + oldAv); c.remove('scope:' + userId + ':' + newAv); }
+  DB_.userDir = null;
+}
+
+/** Ghi UserScopes theo danh sách subrole mới: ngừng dòng thừa, thêm dòng thiếu */
+function planScopes_(ctx, userId, subs, writes) {
+  var nowIso = isoVN_(now_());
+  var have = {};
+  findAll_('UserScopes', 'user_id', userId).forEach(function (s) {
+    if (s.location_id || s.module) return;
+    if (s.active && subs.indexOf(s.subrole) < 0) {
+      var r = clone_(s); delete r.__row;
+      r.active = false; r.updated_at = nowIso; r.updated_by = ctx.user.user_id;
+      writes.push({ sheet: 'UserScopes', mode: 'update', row: r });
+    }
+    if (s.active) have[s.subrole] = true;
+  });
+  subs.forEach(function (sub) {
+    if (have[sub]) return;
+    writes.push({ sheet: 'UserScopes', mode: 'insert', row: { scope_id: uuid_(), user_id: userId, location_id: '', module: '', subrole: sub, active: true, created_at: nowIso, created_by: ctx.user.user_id, updated_at: nowIso, updated_by: ctx.user.user_id } });
+  });
+}
+
+/** Trả PIN tạm một lần, chỉ ở lần ghi đầu (gửi lại cùng operation_id không trả lại) */
+function withTempPin_(res, box) {
+  if (!res || res.code !== 'OK' || !box.pin) return res;
+  var out = clone_(res);
+  out.data = out.data || {};
+  out.data.temp_pin = box.pin;
+  return out;
+}
+
+/** user.create {user_id, employee_code, display_name, email?, role_level, subroles[]} — C4, PIN */
+function userCreate_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.user_id)) errs.push(fieldError_('user_id', 'ID_INVALID'));
+  var code = normEmpCode_(p.employee_code);
+  if (!code) errs.push(fieldError_('employee_code', 'REQUIRED'));
+  else if (!EMP_CODE_RE_.test(code)) errs.push(fieldError_('employee_code', 'CODE_INVALID'));
+  var name = trimStr_(p.display_name);
+  if (!name) errs.push(fieldError_('display_name', 'REQUIRED'));
+  if (name.length > 80) errs.push(fieldError_('display_name', 'INVALID_VALUE'));
+  var email = trimStr_(p.email).toLowerCase();
+  if (email && !EMAIL_RE_.test(email)) errs.push(fieldError_('email', 'INVALID_VALUE'));
+  var subs = validateRole_(p, errs);
+  if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var box = {};
+  var res = executeWrite_(ctx, {
+    entity_type: 'USER', entity_id: p.user_id,
+    build: function () {
+      if (findRowNums_('Users', 'user_id', p.user_id).length) throw validationError_([fieldError_('user_id', 'ID_EXISTS')]);
+      if (findRowNums_('Users', 'employee_code', code).length) throw validationError_([fieldError_('employee_code', 'CODE_DUPLICATE')]);
+      var pin = randomPin_(code);
+      var rec = newPinRecord_(pin);
+      var nowIso = isoVN_(now_());
+      var exp = isoVN_(new Date(now_().getTime() + setting_('temp_pin_hours') * 3600000));
+      var row = {
+        user_id: p.user_id, employee_code: code, display_name: name, email: email, role_level: Number(p.role_level), active: true,
+        pin_hash: rec.pin_hash, salt: rec.salt, pin_hash_version: rec.pin_hash_version, failed_attempts: 0, locked_until: '',
+        created_at: nowIso, updated_at: nowIso, auth_version: 1, is_system_owner: false, must_change_pin: true,
+        temp_pin_expires_at: exp, pin_changed_at: '', failed_window_started_at: '', last_login_at: '', record_version: 1,
+        created_by: ctx.user.user_id, updated_by: ctx.user.user_id
+      };
+      var writes = [{ sheet: 'Users', mode: 'insert', row: row }];
+      planScopes_(ctx, p.user_id, subs, writes);
+      box.pin = pin;
+      return {
+        writes: writes, noReplay: true,
+        result: { entity_type: 'USER', entity_id: p.user_id, employee_code: code, temp_pin_expires_at: exp, record_version: 1 },
+        record_version: 1,
+        audit: { entity_type: 'USER', entity_id: p.user_id, before_json: null, after_json: { employee_code: code, display_name: name, role_level: row.role_level, subroles: subs, temp_pin_issued: true } }
+      };
+    }
+  });
+  afterUserWrite_(p.user_id);
+  return withTempPin_(res, box);
+}
+
+/** user.setRole {user_id, role_level, subroles[], display_name?, email?} — đổi cấp/subrole (tăng auth_version) */
+function userSetRole_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  var subs = validateRole_(p, errs);
+  var name = p.display_name !== undefined ? trimStr_(p.display_name) : null;
+  if (name !== null && (!name || name.length > 80)) errs.push(fieldError_('display_name', name ? 'INVALID_VALUE' : 'REQUIRED'));
+  var email = p.email !== undefined ? trimStr_(p.email).toLowerCase() : null;
+  if (email && !EMAIL_RE_.test(email)) errs.push(fieldError_('email', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var av = {};
+  var res = executeWrite_(ctx, {
+    entity_type: 'USER', entity_id: p.user_id,
+    build: function () {
+      var u = adminTarget_(ctx, p.user_id);
+      assertUserVersion_(ctx, u);
+      var lvl = Number(p.role_level);
+      if (Number(u.role_level) === 4 && lvl !== 4 && u.active && !otherActiveAdmin_(u.user_id)) throw validationError_([fieldError_('role_level', 'LAST_ADMIN')]);
+      var before = { role_level: Number(u.role_level), subroles: (activeSubroles_()[u.user_id] || []), display_name: u.display_name, email: u.email ? 'set' : '' };
+      var row = clone_(u); delete row.__row;
+      row.role_level = lvl;
+      if (name !== null) row.display_name = name;
+      if (email !== null) row.email = email;
+      av.old = u.auth_version || 0;
+      row.auth_version = av.old + 1;
+      av.new = row.auth_version;
+      row.record_version = (u.record_version || 1) + 1;
+      row.updated_at = isoVN_(now_()); row.updated_by = ctx.user.user_id;
+      var writes = [{ sheet: 'Users', mode: 'update', row: row }];
+      planScopes_(ctx, u.user_id, subs, writes);
+      revokeUserSessions_(u.user_id, 'AUTH_VERSION');
+      return {
+        writes: writes, noReplay: true,
+        result: { entity_type: 'USER', entity_id: u.user_id, record_version: row.record_version },
+        record_version: row.record_version,
+        audit: { entity_type: 'USER', entity_id: u.user_id, before_json: before, after_json: { role_level: lvl, subroles: subs, display_name: row.display_name, email: row.email ? 'set' : '' } }
+      };
+    }
+  });
+  afterUserWrite_(p.user_id, av.old, av.new);
+  return res;
+}
+
+/** Khung chung cho lock/unlock/resetPin/revokeSessions */
+function userAdminOp_(ctx, kind) {
+  var p = ctx.req.payload || {};
+  var reason = trimStr_(p.reason);
+  if (kind === 'LOCK' && !reason) throw validationError_([fieldError_('reason', 'REQUIRED')]);
+  var av = {}, box = {};
+  var res = executeWrite_(ctx, {
+    entity_type: 'USER', entity_id: p.user_id,
+    build: function () {
+      var u = adminTarget_(ctx, p.user_id);
+      assertUserVersion_(ctx, u);
+      var row = clone_(u); delete row.__row;
+      var nowIso = isoVN_(now_());
+      var before, after;
+      av.old = u.auth_version || 0;
+      if (kind === 'LOCK') {
+        if (Number(u.role_level) === 4 && u.active && !otherActiveAdmin_(u.user_id)) throw validationError_([fieldError_('user_id', 'LAST_ADMIN')]);
+        row.active = false;
+        before = { active: !!u.active }; after = { active: false };
+      } else if (kind === 'UNLOCK') {
+        // Mở khóa: bật lại tài khoản và xóa khóa do nhập sai PIN; không tăng auth_version
+        row.active = true; row.failed_attempts = 0; row.failed_window_started_at = ''; row.locked_until = '';
+        before = { active: !!u.active, pin_locked: !!u.locked_until }; after = { active: true, pin_locked: false };
+      } else if (kind === 'RESET_PIN') {
+        var pin = randomPin_(u.employee_code);
+        var rec = newPinRecord_(pin);
+        row.pin_hash = rec.pin_hash; row.salt = rec.salt; row.pin_hash_version = rec.pin_hash_version;
+        row.must_change_pin = true;
+        row.temp_pin_expires_at = isoVN_(new Date(now_().getTime() + setting_('temp_pin_hours') * 3600000));
+        row.failed_attempts = 0; row.failed_window_started_at = ''; row.locked_until = '';
+        box.pin = pin;
+        before = { must_change_pin: !!u.must_change_pin }; after = { must_change_pin: true, temp_pin_issued: true };
+      } else {
+        before = { auth_version: av.old }; after = { sessions_revoked: true };
+      }
+      if (kind !== 'UNLOCK') row.auth_version = av.old + 1;
+      av.new = row.auth_version || 0;
+      row.record_version = (u.record_version || 1) + 1;
+      row.updated_at = nowIso; row.updated_by = ctx.user.user_id;
+      if (kind !== 'UNLOCK') revokeUserSessions_(u.user_id, 'AUTH_VERSION');
+      var result = { entity_type: 'USER', entity_id: u.user_id, record_version: row.record_version };
+      if (kind === 'RESET_PIN') result.temp_pin_expires_at = row.temp_pin_expires_at;
+      return {
+        writes: [{ sheet: 'Users', mode: 'update', row: row }], noReplay: true,
+        result: result, record_version: row.record_version,
+        audit: { entity_type: 'USER', entity_id: u.user_id, before_json: before, after_json: after, reason: reason }
+      };
+    }
+  });
+  afterUserWrite_(p.user_id, av.old, av.new);
+  return withTempPin_(res, box);
+}
+
+function userLock_(ctx) { return userAdminOp_(ctx, 'LOCK'); }
+function userUnlock_(ctx) { return userAdminOp_(ctx, 'UNLOCK'); }
+function userResetPin_(ctx) { return userAdminOp_(ctx, 'RESET_PIN'); }
+function userRevokeSessions_(ctx) { return userAdminOp_(ctx, 'REVOKE'); }
+
+// ===== 21_i18n.js =====
+/* 21_i18n: từ điển thuật ngữ khi dịch, gợi ý dịch, dịch lại — phụ lục 1.5 mục 2.3 (quy tắc 4, 8), 3.9, 4.4.17.
+ * Thuật ngữ chỉ dùng dòng active có approved_by; cả chuỗi trùng → GLOSSARY; chứa thuật ngữ → token ⟦n⟧ rồi dịch. */
+
+/** Thuật ngữ đã duyệt, cache 600 giây (3.9) */
+function glossaryTerms_() {
+  if (DB_.glossary) return DB_.glossary;
+  var c = cache_().get('glossary:approved');
+  var list;
+  if (c) {
+    list = JSON.parse(c);
+  } else {
+    list = readRows_('Glossary').filter(function (g) {
+      return g.active && g.approved_by && !g.archived_at && trimStr_(g.term_vi) && trimStr_(g.term_zh);
+    }).map(function (g) { return { vi: trimStr_(g.term_vi), zh: trimStr_(g.term_zh) }; });
+    try { cache_().put('glossary:approved', JSON.stringify(list), 600); } catch (e) { /* quá cỡ: đọc lại lần sau */ }
+  }
+  DB_.glossary = list;
+  return list;
+}
+
+function normTerm_(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function escapeRe_(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Cả chuỗi trùng một thuật ngữ: trả bản đích, không thì null */
+function glossaryExact_(text, src, tgt) {
+  var n = normTerm_(text);
+  if (!n) return null;
+  var terms = glossaryTerms_();
+  for (var i = 0; i < terms.length; i++) if (normTerm_(terms[i][src]) === n) return terms[i][tgt];
+  return null;
+}
+
+/** Mã hiển thị, model/serial dạng mã, số kèm đơn vị: giữ nguyên qua token */
+var KEEP_RE_ = /\b[A-Z]{1,6}-[0-9A-Z]{2,}(?:-[0-9A-Z]+)*\b|\d+(?:[.,]\d+)?\s?(?:kVA|kWh|kW|kg\/h|t\/h|m³\/h|m3\/h|MPa|bar|°C|Hz|mm|kg|V|A)(?![A-Za-z])/g;
+
+/**
+ * Dịch có thuật ngữ (2.3 quy tắc 4). Trả {text, state: 'GLOSSARY'|'MACHINE'} hoặc null khi dịch lỗi.
+ * Người gọi kiểm mtEnabled_ trước khi cần dịch máy.
+ */
+function translateText_(text, src, tgt) {
+  var exact = glossaryExact_(text, src, tgt);
+  if (exact) return { text: exact, state: 'GLOSSARY' };
+  var tokens = [];
+  var put = function (v) { tokens.push(v); return '⟦' + (tokens.length - 1) + '⟧'; };
+  var work = String(text);
+  glossaryTerms_().filter(function (t) { return t[src]; })
+    .sort(function (a, b) { return b[src].length - a[src].length; })
+    .forEach(function (t) {
+      work = work.replace(new RegExp(escapeRe_(t[src]), 'gi'), function () { return put(t[tgt]); });
+    });
+  work = work.replace(KEEP_RE_, function (m) { return put(m); });
+  var out = mtTranslate_(work, src, tgt);
+  if (!out) return null;
+  if (!tokens.length) return { text: out, state: 'MACHINE' };
+  // Thiếu hoặc thừa token → coi như dịch lỗi
+  var seen = {};
+  var bad = false;
+  var res = out.replace(/⟦\s*(\d+)\s*⟧/g, function (m, d) {
+    var i = Number(d);
+    if (i >= tokens.length || seen[i]) { bad = true; return m; }
+    seen[i] = true;
+    return tokens[i];
+  });
+  if (bad || Object.keys(seen).length !== tokens.length) return null;
+  return { text: res, state: 'MACHINE' };
+}
+
+/** Bảng có dịch máy (dịch bù, dịch lại) — trường gốc */
+var MT_SHEETS_ = {
+  Equipment: ['name'], Documents: ['title'], Materials: ['name', 'specification'], EquipmentParts: ['function', 'position'],
+  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services']
+};
+
+/**
+ * Dịch một trường PENDING của một dòng và ghi (không tăng record_version, 2.3 quy tắc 8).
+ * Gọi ngoài khóa ghi; ghi dưới khóa sau khi so lại bản gốc. Trả true nếu đã ghi.
+ */
+function fillPendingField_(sheet, r, f, actorId, opId) {
+  var m = r.i18n_meta && r.i18n_meta[f];
+  if (!m || m.state !== 'PENDING') return false;
+  var tgt = m.src === 'vi' ? 'zh' : 'vi';
+  var srcText = trimStr_(r[f + '_' + m.src]);
+  if (!srcText) return false;
+  var tr = translateText_(srcText, m.src, tgt);
+  if (!tr) return false;
+  var key = sheetSchema_(sheet).key;
+  return withWriteLock_(function () {
+    var rn = findRowNums_(sheet, key, r[key])[0];
+    if (!rn) return false;
+    var cur = readRowAt_(sheet, rn);
+    if (trimStr_(cur[f + '_' + m.src]) !== srcText) return false;
+    var meta = cur.i18n_meta || {};
+    if (!meta[f] || meta[f].state !== 'PENDING') return false;
+    meta[f] = { src: m.src, state: tr.state, at: isoVN_(now_()) };
+    var st = readState_();
+    var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
+    var upd = { i18n_meta: meta };
+    if (sheetSchema_(sheet).cols.indexOf('sync_revision') >= 0) upd.sync_revision = rev;
+    upd[f + '_' + tgt] = tr.text;
+    writeCells_(sheet, rn, upd);
+    var su = { sync_revision: ['INT', rev] };
+    su['table_rev.' + sheet] = ['INT', rev];
+    stateWrite_(st, su, actorId);
+    writeAudit_({ user_id: actorId, action: 'i18n.machineTranslate', entity_type: sheet, entity_id: r[key], before_json: null, after_json: { field: f, state: tr.state }, operation_id: opId || '', auth_basis: actorId === SYSTEM_USER ? 'SYSTEM' : 'ROLE_LEVEL' });
+    return true;
+  });
+}
+
+/** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
+function runBackgroundJobs() {
+  if (prop_('MAINTENANCE_MODE') === 'true') return;
+  if (!mtEnabled_()) return;
+  var t0 = Date.now();
+  var done = 0;
+  Object.keys(MT_SHEETS_).forEach(function (sheet) {
+    if (Date.now() - t0 > 150000) return;
+    readRows_(sheet).forEach(function (r) {
+      if (Date.now() - t0 > 150000 || !r.i18n_meta || !mtEnabled_()) return;
+      MT_SHEETS_[sheet].forEach(function (f) {
+        if (fillPendingField_(sheet, r, f, SYSTEM_USER)) done++;
+      });
+    });
+  });
+  recordTriggerRun_('runBackgroundJobs', t0);
+  log_('runBackgroundJobs: dịch bù ' + done + ' trường.');
+}
+
+/* ---------------- Gợi ý dịch, dịch lại (4.4.17) ---------------- */
+
+/** i18n.suggest {module, text, from}: trả bản dịch gợi ý, không lưu gì. Cần cờ C hoặc E của module hồ sơ */
+function i18nSuggest_(ctx) {
+  var p = ctx.req.payload || {};
+  var mod = String(p.module || '');
+  if (BUSINESS_MODULES_.indexOf(mod) < 0) throw validationError_([fieldError_('module', 'INVALID_VALUE')]);
+  authorize_(ctx, 'i18n.suggest', { module: mod });
+  var from = p.from === 'zh' ? 'zh' : 'vi', to = from === 'vi' ? 'zh' : 'vi';
+  var text = trimStr_(p.text);
+  if (!text) throw validationError_([fieldError_('text', 'REQUIRED')]);
+  if (text.length > 2000) throw validationError_([fieldError_('text', 'INVALID_VALUE')]);
+  if (!setting_('machine_translation_enabled')) throw apiError_('FEATURE_NOT_ENABLED');
+  var tr = translateText_(text, from, to);
+  if (!tr) throw apiError_('SERVER_BUSY');
+  return { text: tr.text, from: from, to: to, state: tr.state };
+}
+
+/** Loại hồ sơ → sheet, action sửa (quyền "theo hồ sơ"), module */
+var RETRANSLATE_ = {
+  EQUIPMENT: { sheet: 'Equipment', edit: 'equipment.edit' },
+  MATERIAL: { sheet: 'Materials', edit: 'material.edit' },
+  EQUIPMENT_PART: { sheet: 'EquipmentParts', edit: 'part.link' },
+  CONTRACT: { sheet: 'Contracts', edit: 'contract.edit' },
+  LOCATION: { sheet: 'Locations', edit: 'location.edit' },
+  VENDOR: { sheet: 'Vendors', edit: 'vendor.edit' },
+  LOOKUP: { sheet: 'LookupValues', edit: 'lookup.edit' },
+  DOCUMENT: { sheet: 'Documents', edit: 'doc.upload' }
+};
+
+/** i18n.retranslate {entity_type, entity_id}: dịch lại các trường PENDING của hồ sơ; chỉ người sửa được hồ sơ */
+function i18nRetranslate_(ctx) {
+  var p = ctx.req.payload || {};
+  var cfg = RETRANSLATE_[p.entity_type];
+  if (!cfg) throw validationError_([fieldError_('entity_type', 'INVALID_VALUE')]);
+  if (!isUuidV4_(p.entity_id)) throw validationError_([fieldError_('entity_id', 'ID_INVALID')]);
+  var row = findOne_(cfg.sheet, sheetSchema_(cfg.sheet).key, p.entity_id);
+  if (!row) throw apiError_('NOT_FOUND');
+  var mod = p.entity_type === 'DOCUMENT' ? docModule_(row.entity_type) : ENTITY_TYPES[p.entity_type] ? ENTITY_TYPES[p.entity_type].module :
+    (p.entity_type === 'EQUIPMENT_PART' ? 'equipment' : 'catalog');
+  if (!mod || !can_(ctx, cfg.edit, { module: mod }) || !can_(ctx, 'i18n.retranslate', { module: mod })) throw apiError_('FORBIDDEN');
+  if (!mtEnabled_()) throw apiError_('FEATURE_NOT_ENABLED');
+  var done = [], left = [];
+  (MT_SHEETS_[cfg.sheet] || []).forEach(function (f) {
+    var m = row.i18n_meta && row.i18n_meta[f];
+    if (!m || m.state !== 'PENDING') return;
+    if (fillPendingField_(cfg.sheet, row, f, ctx.user.user_id, ctx.req.operation_id)) done.push(f); else left.push(f);
+  });
+  dbReset_();
+  var cur = findOne_(cfg.sheet, sheetSchema_(cfg.sheet).key, p.entity_id);
+  return { entity_type: p.entity_type, entity_id: p.entity_id, translated: done, pending: left, record: cfg.sheet === 'Documents' ? projectDoc_(ctx, cur) : projectRow_(ctx, cur, cfg.sheet) };
+}
+
+// ===== 22_catalog.js =====
+/* 22_catalog: Danh mục chung — phụ lục 1.5 mục 4.4.13, 3.9 (Glossary), 5.5 (SPEC_KEY, UNIT).
+ * Mã khu vực/nhà cung cấp: nhập tay hoặc máy chủ cấp (KV-001, NCC-0001), không đổi sau khi tạo.
+ * Ngừng dùng = active FALSE (hồ sơ cũ vẫn trỏ được, không chọn mới). */
+
+var LOCATION_TYPES_ = ['AREA', 'BUILDING', 'WORKSHOP', 'ROOM', 'STATION', 'OTHER'];
+var LOOKUP_GROUPS_ = ['EQUIPMENT_CATEGORY', 'UNIT', 'SPEC_KEY', 'CAUSE'];
+
+/** Tạo hay sửa: tạo khi expected_version = 0 và chưa có dòng */
+function catalogCurrent_(ctx, sheet, key, id) {
+  var cur = findOne_(sheet, key, id);
+  if (!cur && Number(ctx.req.expected_version || 0) !== 0) throw apiError_('NOT_FOUND');
+  return cur;
+}
+
+function boolOr_(v, dflt) {
+  return v === undefined || v === null ? dflt : v === true || v === 'true' || v === 1;
+}
+
+/** location.edit {location_id, location_code?, parent_location_id?, name_vi|name_zh, type, active} — C4 */
+function locationEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.location_id)) errs.push(fieldError_('location_id', 'ID_INVALID'));
+  if (p.type !== undefined && p.type !== '' && LOCATION_TYPES_.indexOf(p.type) < 0) errs.push(fieldError_('type', 'INVALID_VALUE'));
+  if (p.parent_location_id && (!isUuidV4_(p.parent_location_id) || p.parent_location_id === p.location_id)) errs.push(fieldError_('parent_location_id', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var cur0 = findOne_('Locations', 'location_id', p.location_id);
+  var e2 = [];
+  requireOneLang_(e2, p, cur0, 'name');
+  if (e2.length) throw validationError_(e2);
+  var tr = applyTranslations_('Locations', ['name'], p, cur0);
+  return executeWrite_(ctx, {
+    entity_type: 'LOCATION', entity_id: p.location_id,
+    build: function (st) {
+      var cur = catalogCurrent_(ctx, 'Locations', 'location_id', p.location_id);
+      if (cur) assertVersion_(ctx, cur, 'LOCATION', 'Locations');
+      var su = {};
+      var row = cur ? clone_(cur) : { location_id: p.location_id, parent_location_id: '', type: 'AREA', active: true };
+      delete row.__row;
+      if (!cur) row.location_code = allocCode_(st, su, 'LOCATION', trimStr_(p.location_code) || null);
+      else if (p.location_code !== undefined && trimStr_(p.location_code).toUpperCase() !== cur.location_code) throw validationError_([fieldError_('location_code', 'INVALID_VALUE')]);
+      if (p.parent_location_id !== undefined) {
+        var parent = p.parent_location_id || '';
+        // Không tạo vòng cha–con
+        for (var x = parent, guard = 0; x && guard < 50; guard++) {
+          if (x === p.location_id) throw validationError_([fieldError_('parent_location_id', 'INVALID_VALUE')]);
+          var px = findOne_('Locations', 'location_id', x);
+          if (!px) throw validationError_([fieldError_('parent_location_id', 'NOT_FOUND')]);
+          x = px.parent_location_id;
+        }
+        row.parent_location_id = parent;
+      }
+      if (p.type !== undefined && p.type !== '') row.type = p.type;
+      row.active = boolOr_(p.active, row.active !== false);
+      row.name_vi = tr.values.name_vi; row.name_zh = tr.values.name_zh; row.i18n_meta = tr.meta;
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'Locations', mode: cur ? 'update' : 'insert', row: row }], state: su,
+        result: { entity_type: 'LOCATION', entity_id: row.location_id, display_code: row.location_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Locations') },
+        record_version: row.record_version,
+        audit: { entity_type: 'LOCATION', entity_id: row.location_id, before_json: cur ? { name_vi: cur.name_vi, active: cur.active, parent: cur.parent_location_id } : null, after_json: { location_code: row.location_code, name_vi: row.name_vi, active: row.active, parent: row.parent_location_id } }
+      };
+    }
+  });
+}
+
+var VENDOR_PLAIN_ = ['name', 'contact_name', 'phone', 'email', 'address'];
+
+/** vendor.edit {vendor_id, vendor_code?, name, contact_name, phone, email, address, services_vi|services_zh, active} — HĐ, C3, C4 */
+function vendorEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.vendor_id)) errs.push(fieldError_('vendor_id', 'ID_INVALID'));
+  if (p.email && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(trimStr_(p.email))) errs.push(fieldError_('email', 'INVALID_VALUE'));
+  VENDOR_PLAIN_.forEach(function (f) { if (p[f] !== undefined && trimStr_(p[f]).length > 200) errs.push(fieldError_(f, 'INVALID_VALUE')); });
+  var cur0 = isUuidV4_(p.vendor_id) ? findOne_('Vendors', 'vendor_id', p.vendor_id) : null;
+  if (!cur0 && !trimStr_(p.name)) errs.push(fieldError_('name', 'REQUIRED'));
+  if (cur0 && p.name !== undefined && !trimStr_(p.name)) errs.push(fieldError_('name', 'REQUIRED'));
+  if (errs.length) throw validationError_(errs);
+  var tr = applyTranslations_('Vendors', ['services'], p, cur0);
+  return executeWrite_(ctx, {
+    entity_type: 'VENDOR', entity_id: p.vendor_id,
+    build: function (st) {
+      var cur = catalogCurrent_(ctx, 'Vendors', 'vendor_id', p.vendor_id);
+      if (cur) assertVersion_(ctx, cur, 'VENDOR', 'Vendors');
+      var su = {};
+      var row = cur ? clone_(cur) : { vendor_id: p.vendor_id, contact_name: '', phone: '', email: '', address: '', active: true };
+      delete row.__row;
+      if (!cur) row.vendor_code = allocCode_(st, su, 'VENDOR', trimStr_(p.vendor_code) || null);
+      else if (p.vendor_code !== undefined && trimStr_(p.vendor_code).toUpperCase() !== cur.vendor_code) throw validationError_([fieldError_('vendor_code', 'INVALID_VALUE')]);
+      VENDOR_PLAIN_.forEach(function (f) { if (p[f] !== undefined) row[f] = f === 'email' ? trimStr_(p[f]).toLowerCase() : trimStr_(p[f]); });
+      row.active = boolOr_(p.active, row.active !== false);
+      row.services_vi = tr.values.services_vi; row.services_zh = tr.values.services_zh; row.i18n_meta = tr.meta;
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'Vendors', mode: cur ? 'update' : 'insert', row: row }], state: su,
+        result: { entity_type: 'VENDOR', entity_id: row.vendor_id, display_code: row.vendor_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Vendors') },
+        record_version: row.record_version,
+        audit: { entity_type: 'VENDOR', entity_id: row.vendor_id, before_json: cur ? { name: cur.name, active: cur.active } : null, after_json: { vendor_code: row.vendor_code, name: row.name, active: row.active } }
+      };
+    }
+  });
+}
+
+/** Mã LookupValues: SPEC_KEY snake_case (5.5); nhóm khác chữ, số và ký hiệu đơn vị */
+function lookupCodeOk_(group, code) {
+  if (group === 'SPEC_KEY') return /^[a-z][a-z0-9_]{1,39}$/.test(code);
+  return /^[A-Za-z0-9][A-Za-z0-9._\/³²°%-]{0,31}$/.test(code);
+}
+
+/** lookup.edit {value_id, group_key, code, name_vi|name_zh, parent_value_id?, active} — C3, C4 */
+function lookupEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.value_id)) errs.push(fieldError_('value_id', 'ID_INVALID'));
+  var cur0 = isUuidV4_(p.value_id) ? findOne_('LookupValues', 'value_id', p.value_id) : null;
+  var group = cur0 ? cur0.group_key : String(p.group_key || '');
+  var code = cur0 ? cur0.code : trimStr_(p.code);
+  if (!cur0) {
+    if (LOOKUP_GROUPS_.indexOf(group) < 0) errs.push(fieldError_('group_key', 'INVALID_VALUE'));
+    if (!code) errs.push(fieldError_('code', 'REQUIRED'));
+    else if (!lookupCodeOk_(group, code)) errs.push(fieldError_('code', 'CODE_INVALID'));
+    else if (group === 'SPEC_KEY' && SPEC_STD_[code]) errs.push(fieldError_('code', 'CODE_DUPLICATE'));
+  } else {
+    if (p.group_key !== undefined && p.group_key !== cur0.group_key) errs.push(fieldError_('group_key', 'INVALID_VALUE'));
+    if (p.code !== undefined && trimStr_(p.code) !== cur0.code) errs.push(fieldError_('code', 'INVALID_VALUE'));
+  }
+  if (p.parent_value_id && !isUuidV4_(p.parent_value_id)) errs.push(fieldError_('parent_value_id', 'INVALID_VALUE'));
+  requireOneLang_(errs, p, cur0, 'name');
+  if (errs.length) throw validationError_(errs);
+  var tr = applyTranslations_('LookupValues', ['name'], p, cur0);
+  return executeWrite_(ctx, {
+    entity_type: 'LOOKUP', entity_id: p.value_id,
+    build: function () {
+      var cur = catalogCurrent_(ctx, 'LookupValues', 'value_id', p.value_id);
+      if (cur) assertVersion_(ctx, cur, 'LOOKUP', 'LookupValues');
+      if (!cur) {
+        var dup = readRows_('LookupValues').some(function (l) { return l.group_key === group && String(l.code).toLowerCase() === code.toLowerCase(); });
+        if (dup) throw validationError_([fieldError_('code', 'CODE_DUPLICATE')]);
+      }
+      if (p.parent_value_id && !findRowNums_('LookupValues', 'value_id', p.parent_value_id).length) throw validationError_([fieldError_('parent_value_id', 'NOT_FOUND')]);
+      var row = cur ? clone_(cur) : { value_id: p.value_id, group_key: group, code: code, parent_value_id: '', active: true };
+      delete row.__row;
+      if (p.parent_value_id !== undefined) row.parent_value_id = p.parent_value_id || '';
+      row.active = boolOr_(p.active, row.active !== false);
+      row.name_vi = tr.values.name_vi; row.name_zh = tr.values.name_zh; row.i18n_meta = tr.meta;
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'LookupValues', mode: cur ? 'update' : 'insert', row: row }],
+        result: { entity_type: 'LOOKUP', entity_id: row.value_id, display_code: row.code, record_version: row.record_version, record: projectRow_(ctx, row, 'LookupValues') },
+        record_version: row.record_version,
+        audit: { entity_type: 'LOOKUP', entity_id: row.value_id, before_json: cur ? { name_vi: cur.name_vi, active: cur.active } : null, after_json: { group_key: row.group_key, code: row.code, name_vi: row.name_vi, active: row.active } }
+      };
+    }
+  });
+}
+
+/**
+ * glossary.edit {glossary_id, term_vi, term_zh, note, active, approve} — C3, C4.
+ * Cả hai thuật ngữ bắt buộc, không trùng trong các dòng active (không phân biệt hoa thường).
+ * Đổi thuật ngữ thì bỏ duyệt, trừ khi duyệt lại ngay (approve: true). Chỉ dòng đã duyệt được dùng khi dịch.
+ */
+function glossaryEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.glossary_id)) errs.push(fieldError_('glossary_id', 'ID_INVALID'));
+  var cur0 = isUuidV4_(p.glossary_id) ? findOne_('Glossary', 'glossary_id', p.glossary_id) : null;
+  var vi = p.term_vi !== undefined ? trimStr_(p.term_vi).replace(/\s+/g, ' ') : (cur0 ? cur0.term_vi : '');
+  var zh = p.term_zh !== undefined ? trimStr_(p.term_zh).replace(/\s+/g, ' ') : (cur0 ? cur0.term_zh : '');
+  if (!vi) errs.push(fieldError_('term_vi', 'REQUIRED'));
+  if (!zh) errs.push(fieldError_('term_zh', 'REQUIRED'));
+  if (vi.length > 120) errs.push(fieldError_('term_vi', 'INVALID_VALUE'));
+  if (zh.length > 120) errs.push(fieldError_('term_zh', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var res = executeWrite_(ctx, {
+    entity_type: 'GLOSSARY', entity_id: p.glossary_id,
+    build: function () {
+      var cur = catalogCurrent_(ctx, 'Glossary', 'glossary_id', p.glossary_id);
+      if (cur) assertVersion_(ctx, cur, 'GLOSSARY', 'Glossary');
+      var row = cur ? clone_(cur) : { glossary_id: p.glossary_id, note: '', active: true, approved_by: '', approved_at: '' };
+      delete row.__row;
+      var changed = !cur || row.term_vi !== vi || row.term_zh !== zh;
+      row.term_vi = vi; row.term_zh = zh;
+      if (p.note !== undefined) row.note = trimStr_(p.note).slice(0, 300);
+      row.active = boolOr_(p.active, row.active !== false);
+      if (row.active) {
+        var dup = readRows_('Glossary').filter(function (g) {
+          return g.glossary_id !== row.glossary_id && g.active && !g.archived_at;
+        });
+        var e3 = [];
+        if (dup.some(function (g) { return normTerm_(g.term_vi) === normTerm_(vi); })) e3.push(fieldError_('term_vi', 'CODE_DUPLICATE'));
+        if (dup.some(function (g) { return normTerm_(g.term_zh) === normTerm_(zh); })) e3.push(fieldError_('term_zh', 'CODE_DUPLICATE'));
+        if (e3.length) throw validationError_(e3);
+      }
+      if (changed) { row.approved_by = ''; row.approved_at = ''; }
+      if (p.approve === true) { row.approved_by = ctx.user.user_id; row.approved_at = isoVN_(now_()); }
+      if (p.approve === false) { row.approved_by = ''; row.approved_at = ''; }
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'Glossary', mode: cur ? 'update' : 'insert', row: row }],
+        result: { entity_type: 'GLOSSARY', entity_id: row.glossary_id, record_version: row.record_version, record: projectRow_(ctx, row, 'Glossary') },
+        record_version: row.record_version,
+        audit: { entity_type: 'GLOSSARY', entity_id: row.glossary_id, before_json: cur ? { term_vi: cur.term_vi, term_zh: cur.term_zh, approved: !!cur.approved_by, active: cur.active } : null, after_json: { term_vi: vi, term_zh: zh, approved: !!row.approved_by, active: row.active } }
+      };
+    }
+  });
+  cache_().remove('glossary:approved');
+  DB_.glossary = null;
+  return res;
+}
+
+// ===== 23_backup.js =====
+/* 23_backup: sao lưu có kiểm chứng, Sao lưu ngay, khôi phục thủ công — phụ lục 1.5 mục 6.5.4, 3.14, 4.4.16.
+ * Bản sao ở thư mục Backups riêng tư: <yyyy-mm-dd_HHmm>/ gồm 2 spreadsheet + manifest.json.
+ * ScriptProperties không nằm trong bản sao. Không chép ảnh/tài liệu (Đợt 1–3). */
+
+/** Sheet ghi không qua sync_revision (đăng nhập, phiên): không dùng để kiểm chứng số dòng */
+var BACKUP_VOLATILE_ = { AuthAttempts: 1, Sessions: 1, AuditLogs: 1, Operations: 1 };
+
+function backupRoot_() {
+  var id = prop_('DRIVE_BACKUP_FOLDER_ID');
+  if (!id) throw new Error('Chưa có DRIVE_BACKUP_FOLDER_ID');
+  return DriveApp.getFolderById(id);
+}
+
+/** Số dòng dữ liệu (trừ tiêu đề) từng sheet đã biết của một spreadsheet */
+function countRows_(ss, out) {
+  ss.getSheets().forEach(function (sh) {
+    if (SHEETS[sh.getName()]) out[sh.getName()] = Math.max(0, sh.getLastRow() - 1);
+  });
+  return out;
+}
+
+function backupStamp_(d) {
+  var iso = isoVN_(d);
+  return iso.slice(0, 10) + '_' + iso.slice(11, 13) + iso.slice(14, 16);
+}
+
+/** Đọc manifest.json của một thư mục sao lưu, null nếu không có/hỏng */
+function readManifest_(folder) {
+  var it = folder.getFilesByName('manifest.json');
+  if (!it.hasNext()) return null;
+  try { return JSON.parse(it.next().getBlob().getDataAsString()); } catch (e) { return null; }
+}
+
+/** Danh sách thư mục sao lưu, mới nhất trước: [{folder, name, manifest}] */
+function listBackups_() {
+  var out = [];
+  var it = backupRoot_().getFolders();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (!/^\d{4}-\d{2}-\d{2}_\d{4}/.test(f.getName())) continue;
+    out.push({ folder: f, name: f.getName(), manifest: readManifest_(f) });
+  }
+  out.sort(function (a, b) { return a.name < b.name ? 1 : a.name > b.name ? -1 : 0; });
+  return out;
+}
+
+/** Trigger chạy một lần của backupData (Sao lưu ngay, chạy lại sau INCONSISTENT) */
+function oneShotIds_() {
+  try { return JSON.parse(prop_('BACKUP_ONESHOT_IDS') || '[]'); } catch (e) { return []; }
+}
+function scheduleBackupOnce_(afterMs) {
+  var t = ScriptApp.newTrigger('backupData').timeBased().after(afterMs).create();
+  var ids = oneShotIds_();
+  ids.push(t.getUniqueId());
+  setProp_('BACKUP_ONESHOT_IDS', JSON.stringify(ids));
+  return t.getUniqueId();
+}
+function clearOneShotTriggers_() {
+  var ids = oneShotIds_();
+  if (!ids.length) return;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'backupData' && ids.indexOf(t.getUniqueId()) >= 0) ScriptApp.deleteTrigger(t);
+  });
+  setProp_('BACKUP_ONESHOT_IDS', '[]');
+}
+
+/**
+ * Trigger hằng tuần và "Sao lưu ngay" (6.5.4). Chạy được cả khi bảo trì (thủ tục khôi phục bước 2).
+ * VERIFIED: số dòng bản sao khớp và sync_revision không đổi; INCONSISTENT: có ghi trong lúc chép (chạy lại một lần sau 15 phút);
+ * FAILED: lỗi hoặc số dòng lệch khi không có ghi.
+ */
+function backupData() {
+  var t0 = Date.now();
+  try { return backupDataRun_(); } finally { recordTriggerRun_('backupData', t0); }
+}
+
+function backupDataRun_() {
+  clearOneShotTriggers_();
+  var isRetry = prop_('BACKUP_RETRY_PENDING') === 'true';
+  if (isRetry) delProp_('BACKUP_RETRY_PENDING');
+  dbReset_();
+  var started = now_();
+  var stamp = backupStamp_(started);
+  var root = backupRoot_();
+  var folder = root.createFolder(stamp);
+  var st0 = readState_();
+  var rev0 = Number(stateGet_(st0, 'sync_revision', 0));
+  var bizId = prop_('BUSINESS_SPREADSHEET_ID'), secId = prop_('SECURITY_SPREADSHEET_ID');
+  var manifest = {
+    app_id: APP_ID, env: envName_(), created_at: isoVN_(started), folder: stamp, schema_version: stateGet_(st0, 'schema_version', SCHEMA_VERSION),
+    server_version: SERVER_VERSION, dataset_epoch: sysProps_().dataset_epoch, sync_revision: rev0, retry: isRetry,
+    status: 'FAILED', consistent: false, counts: {}, copied_counts: {}, files: {}
+  };
+  try {
+    countRows_(SpreadsheetApp.openById(bizId), manifest.counts);
+    countRows_(SpreadsheetApp.openById(secId), manifest.counts);
+    manifest.documents = manifest.counts.Documents || 0;
+    var bizCopy = DriveApp.getFileById(bizId).makeCopy(NAME_PREFIX + 'NghiepVu_' + stamp, folder);
+    var secCopy = DriveApp.getFileById(secId).makeCopy(NAME_PREFIX + 'BaoMat_' + stamp, folder);
+    manifest.files = { business: bizCopy.getId(), security: secCopy.getId() };
+    countRows_(SpreadsheetApp.openById(bizCopy.getId()), manifest.copied_counts);
+    countRows_(SpreadsheetApp.openById(secCopy.getId()), manifest.copied_counts);
+    dbReset_();
+    var rev1 = Number(stateGet_(readState_(), 'sync_revision', 0));
+    manifest.sync_revision_end = rev1;
+    var mismatch = Object.keys(manifest.counts).filter(function (k) {
+      return !BACKUP_VOLATILE_[k] && manifest.counts[k] !== manifest.copied_counts[k];
+    });
+    manifest.mismatch = mismatch;
+    if (rev1 !== rev0) manifest.status = 'INCONSISTENT';
+    else manifest.status = mismatch.length ? 'FAILED' : 'VERIFIED';
+    manifest.consistent = manifest.status === 'VERIFIED';
+  } catch (e) {
+    manifest.status = 'FAILED';
+    manifest.error = String(e && e.message || e).slice(0, 200);
+  }
+  manifest.finished_at = isoVN_(now_());
+  folder.createFile(Utilities.newBlob(JSON.stringify(manifest, null, 2), 'application/json', 'manifest.json'));
+  withWriteLock_(function () {
+    var st = readState_();
+    stateWrite_(st, {
+      last_backup_at: ['DATETIME', manifest.created_at], last_backup_ref: ['STRING', stamp], last_backup_status: ['ENUM', manifest.status]
+    }, SYSTEM_USER);
+  });
+  cache_().remove('sys:state');
+  if (manifest.status === 'INCONSISTENT' && !isRetry) {
+    setProp_('BACKUP_RETRY_PENDING', 'true');
+    scheduleBackupOnce_(15 * 60000);
+  }
+  var trashed = pruneBackups_();
+  log_('backupData: ' + stamp + ' → ' + manifest.status + (trashed ? '; đã chuyển ' + trashed + ' bản cũ vào thùng rác' : '') + '.');
+  return manifest;
+}
+
+/** Giữ backup_keep_count bản VERIFIED mới nhất; thư mục cũ hơn bản giữ cuối cùng vào thùng rác (chỉ trong Backups) */
+function pruneBackups_() {
+  var keep = Number(setting_('backup_keep_count') || 8);
+  var list = listBackups_();
+  var verified = list.filter(function (b) { return b.manifest && b.manifest.status === 'VERIFIED'; });
+  if (verified.length <= keep) return 0;
+  var cut = verified[keep - 1].name;
+  var n = 0;
+  list.forEach(function (b) {
+    if (b.name >= cut) return;
+    var it = b.folder.getFiles();
+    while (it.hasNext()) it.next().setTrashed(true);
+    b.folder.setTrashed(true);
+    n++;
+  });
+  return n;
+}
+
+/* ---------------- Action ---------------- */
+
+/** backup.view: danh sách bản, trạng thái kiểm chứng, lần gần nhất, đang chờ chạy (C4) */
+function backupView_(ctx) {
+  var st = readState_();
+  var items = listBackups_().slice(0, 30).map(function (b) {
+    var m = b.manifest || {};
+    var total = 0;
+    Object.keys(m.counts || {}).forEach(function (k) { if (!BACKUP_VOLATILE_[k]) total += m.counts[k]; });
+    return {
+      ref: b.name, created_at: m.created_at || '', finished_at: m.finished_at || '', status: m.status || 'FAILED', consistent: !!m.consistent,
+      schema_version: m.schema_version || '', rows: total, documents: m.documents || 0, retry: !!m.retry, error: m.error || '',
+      mismatch: m.mismatch || []
+    };
+  });
+  return {
+    items: items, queued: oneShotIds_().length > 0,
+    last_backup_at: stateGet_(st, 'last_backup_at', ''), last_backup_ref: stateGet_(st, 'last_backup_ref', ''), last_backup_status: stateGet_(st, 'last_backup_status', ''),
+    last_restore_at: stateGet_(st, 'last_restore_at', ''), restored_from_ref: stateGet_(st, 'restored_from_ref', ''),
+    backup_weekday: setting_('backup_weekday'), backup_hour: setting_('backup_hour'), keep_count: setting_('backup_keep_count')
+  };
+}
+
+/** backup.run: tạo trigger chạy một lần cho backupData, trả QUEUED (C4, PIN) */
+function backupRun_(ctx) {
+  if (oneShotIds_().length) return { status: 'QUEUED', already: true };
+  withWriteLock_(function () {
+    scheduleBackupOnce_(1000);
+    writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'backup.run', entity_type: 'BACKUP', entity_id: '',
+      before_json: null, after_json: { status: 'QUEUED' }, operation_id: ctx.req.operation_id || '', auth_basis: 'ROLE_LEVEL' });
+  });
+  return { status: 'QUEUED', already: false };
+}
+
+/* ---------------- Khôi phục thủ công (6.5.4 bước 6) ---------------- */
+
+/** Thao tác dở (PREPARED) của bản khôi phục: áp lại theo intent; không có intent thì đánh dấu cần xử lý */
+function recoverOperations_() {
+  var n = 0;
+  readRows_('Operations').forEach(function (op) {
+    if (op.state !== 'PREPARED') return;
+    var intent = op.intent_json;
+    if (intent && intent.writes) {
+      applyWrites_(intent.writes, true);
+      writeCells_('Operations', op.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(intent.result || null) });
+    } else {
+      writeCells_('Operations', op.__row, { state: 'FAILED', result_code: 'RECOVERY_REQUIRED' });
+    }
+    n++;
+  });
+  return n;
+}
+
+/** Số lớn nhất của mã hiển thị theo tiền tố trong dữ liệu (để bộ đếm không cấp trùng) */
+function maxCodeSeqs_() {
+  var out = {};
+  Object.keys(CODE_PATTERNS).forEach(function (t) {
+    var et = ENTITY_TYPES[t], pat = CODE_PATTERNS[t];
+    if (!et || !et.code) return;
+    var re = pat.yymm ? new RegExp('^' + pat.prefix + '-(\\d{4})-(\\d+)$') : new RegExp('^' + pat.prefix + '-(\\d+)$');
+    readRows_(et.sheet).forEach(function (r) {
+      var m = re.exec(String(r[et.code] || ''));
+      if (!m) return;
+      var key = 'code_seq.' + pat.prefix + (pat.yymm ? '.' + m[1] : '');
+      var v = Number(pat.yymm ? m[2] : m[1]);
+      if (!(out[key] >= v)) out[key] = v;
+    });
+  });
+  return out;
+}
+
+/**
+ * Bước cuối của khôi phục thủ công. Chạy từ trình soạn (tài khoản M&E), khi đang bảo trì,
+ * sau khi đặt RESTORE_SOURCE_ID = ID bản sao file Nghiệp vụ. Chạy lại nhiều lần không sai; lỗi thì dừng.
+ */
+function adminFinalizeManualRestore() {
+  var srcId = prop_('RESTORE_SOURCE_ID');
+  if (!srcId) throw new Error('Chưa đặt RESTORE_SOURCE_ID (ID bản sao file Nghiệp vụ cần khôi phục).');
+  if (prop_('MAINTENANCE_MODE') !== 'true') throw new Error('Phải bật bảo trì trước: chạy adminMaintenanceOn.');
+  var curId = prop_('BUSINESS_SPREADSHEET_ID');
+  var switched = curId === srcId;
+  var prevId = switched ? prop_('PREVIOUS_BUSINESS_SPREADSHEET_ID') : curId;
+  if (!prevId) throw new Error('Không xác định được file Nghiệp vụ đang chạy trước khôi phục.');
+  var src = SpreadsheetApp.openById(srcId);
+  // 1. Kiểm schema: đủ sheet Nghiệp vụ của đợt hiện hành và cột khóa
+  var missing = [];
+  sheetsForDot_(RELEASED_DOT).forEach(function (name) {
+    var s = sheetSchema_(name);
+    if (s.book !== 'B') return;
+    var sh = src.getSheetByName(name);
+    if (!sh) { missing.push(name); return; }
+    var hdr = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+    if (hdr.indexOf(s.key) < 0) missing.push(name + '.' + s.key);
+  });
+  if (missing.length) throw new Error('File nguồn thiếu sheet/cột: ' + missing.join(', ') + '. Dừng — hỏi người code.');
+  // 2. Đối chiếu số dòng với manifest (bỏ NotificationLogs và sheet ghi không qua sync_revision)
+  var srcCounts = countRows_(src, {});
+  var srcState = {};
+  src.getSheetByName('SystemState').getDataRange().getValues().slice(1).forEach(function (r) { srcState[r[0]] = r[1]; });
+  var match = null;
+  var backups = listBackups_();
+  // Chạy lại sau khi đã đổi file: dùng đúng bản đã ghi ở lần trước
+  if (switched && srcState.restored_from_ref) match = backups.filter(function (b) { return b.name === srcState.restored_from_ref && b.manifest; })[0] || null;
+  backups.forEach(function (b) {
+    if (match || !b.manifest || b.manifest.status !== 'VERIFIED') return;
+    var m = b.manifest;
+    if (String(m.schema_version) !== String(srcState.schema_version || m.schema_version)) return;
+    var ok = Object.keys(srcCounts).every(function (k) {
+      if (k === 'NotificationLogs' || BACKUP_VOLATILE_[k] || k === 'SystemState') return true;
+      return m.counts[k] === srcCounts[k];
+    });
+    if (ok) match = b;
+  });
+  if (!match) throw new Error('Không tìm thấy bản sao lưu VERIFIED khớp số dòng với file nguồn. Dừng — hỏi người code.');
+  var schemaNow = SCHEMA_VERSION;
+  if (String(match.manifest.schema_version) !== String(schemaNow)) throw new Error('schema_version của bản sao (' + match.manifest.schema_version + ') khác bản đang chạy (' + schemaNow + ').');
+  // 3. Đọc trạng thái và NotificationLogs của bản đang chạy trước khôi phục
+  var prev = SpreadsheetApp.openById(prevId);
+  var prevState = {};
+  prev.getSheetByName('SystemState').getDataRange().getValues().slice(1).forEach(function (r) { prevState[r[0]] = r; });
+  var prevLogsSheet = prev.getSheetByName('NotificationLogs');
+  var prevLogs = prevLogsSheet.getDataRange().getValues();
+  // 4. Đổi file Nghiệp vụ, epoch mới
+  if (!switched) {
+    setProp_('PREVIOUS_BUSINESS_SPREADSHEET_ID', curId);
+    setProp_('BUSINESS_SPREADSHEET_ID', srcId);
+  }
+  setProp_('DATASET_EPOCH', uuid_());
+  cache_().remove('sys:props');
+  cache_().remove('sys:state');
+  dbReset_();
+  var actor = 'ADMIN_RESTORE';
+  withWriteLock_(function () {
+    // 5. Thu hồi mọi phiên
+    var t = now_().getTime();
+    readRows_('Sessions').forEach(function (s) { if (isSessionActive_(s, t)) revokeSessionRow_(s, 'DATASET_RESET'); });
+    // 6. NotificationLogs: chép từ bản đang chạy; QUEUED → SKIPPED, SENDING → UNKNOWN
+    var dst = sh_('NotificationLogs');
+    var hdr = prevLogs[0].map(String);
+    if (dst.getLastRow() > 1) dst.deleteRows(2, dst.getLastRow() - 1);
+    var rows = prevLogs.slice(1).filter(function (r) { return r.some(function (v) { return v !== ''; }); }).map(function (r) {
+      var o = {};
+      hdr.forEach(function (h, i) { o[h] = r[i] instanceof Date ? isoVN_(r[i]) : r[i]; });
+      if (o.status === 'QUEUED') { o.status = 'SKIPPED'; o.error_code = 'CANCELLED_BY_RESTORE'; }
+      else if (o.status === 'SENDING') o.status = 'UNKNOWN';
+      return o;
+    });
+    DB_.sheets = {}; DB_.headers = {};
+    if (rows.length) insertRows_('NotificationLogs', rows);
+    // 7. SystemState: bộ đếm mã, perm_version, giữ khóa vận hành của bản đang chạy, ghi dấu khôi phục
+    var st = readState_();
+    var su = {};
+    var seqs = maxCodeSeqs_();
+    Object.keys(prevState).forEach(function (k) {
+      if (k.indexOf('code_seq.') === 0) seqs[k] = Math.max(Number(seqs[k] || 0), Number(prevState[k][1] || 0));
+    });
+    Object.keys(st.map).forEach(function (k) {
+      if (k.indexOf('code_seq.') === 0) seqs[k] = Math.max(Number(seqs[k] || 0), Number(st.map[k] || 0));
+    });
+    Object.keys(seqs).forEach(function (k) { su[k] = ['INT', seqs[k]]; });
+    var pv = Math.max(Number(stateGet_(st, 'perm_version', 1)), Number(prevState.perm_version ? prevState.perm_version[1] : 1));
+    su.perm_version = ['INT', pv + 1];
+    var sr = Math.max(Number(stateGet_(st, 'sync_revision', 0)), Number(prevState.sync_revision ? prevState.sync_revision[1] : 0));
+    su.sync_revision = ['INT', sr + 1];
+    ['last_backup_at', 'last_backup_ref', 'last_backup_status', 'login_paused_until', 'mt_paused_until'].forEach(function (k) {
+      if (prevState[k]) su[k] = [prevState[k][2] || 'STRING', prevState[k][1] instanceof Date ? isoVN_(prevState[k][1]) : prevState[k][1]];
+    });
+    su.dataset_epoch = ['STRING', prop_('DATASET_EPOCH')];
+    su.last_restore_at = ['DATETIME', isoVN_(now_())];
+    su.restored_from_ref = ['STRING', match.name];
+    su.restored_backup_at = ['DATETIME', match.manifest.created_at || ''];
+    su.restored_by = ['STRING', actor];
+    stateWrite_(st, su, actor);
+    // 8. Lô nhập dở → FAILED; thao tác PREPARED → áp lại
+    readRows_('ImportBatches').forEach(function (b) {
+      if (b.status !== 'COMMITTED' && b.status !== 'FAILED') writeCells_('ImportBatches', b.__row, { status: 'FAILED', updated_at: isoVN_(now_()) });
+    });
+    recoverOperations_();
+    // 9. Người nhận gắn tài khoản không còn → ngừng
+    var users = {};
+    readRows_('Users').forEach(function (u) { users[u.user_id] = true; });
+    readRows_('NotificationRecipients').forEach(function (r) {
+      if (r.user_id && !users[r.user_id] && r.active !== false) writeCells_('NotificationRecipients', r.__row, { active: false });
+    });
+  });
+  // 10. Tính lại Alerts; kiểm QrRegistry; đếm tài liệu hỏng
+  dbReset_();
+  refreshAlerts_();
+  var qrBad = 0;
+  readRows_('QrRegistry').forEach(function (q) {
+    var et = ENTITY_TYPES[q.entity_type];
+    if (et && !findRowNums_(et.sheet, et.key, q.entity_id).length) qrBad++;
+  });
+  var docBad = 0;
+  readRows_('Documents').forEach(function (d) {
+    if (!d.active || !d.drive_file_id) return;
+    try { DriveApp.getFileById(d.drive_file_id); } catch (e) { docBad++; }
+  });
+  withWriteLock_(function () {
+    writeAudit_({ user_id: 'ADMIN_RESTORE', action: 'system.manualRestore', entity_type: 'SYSTEM', entity_id: match.name,
+      before_json: { business_spreadsheet: prevId }, after_json: { business_spreadsheet: srcId, backup: match.name, qr_missing: qrBad, documents_missing: docBad },
+      operation_id: '', auth_basis: 'SYSTEM' });
+  });
+  delProp_('RESTORE_SOURCE_ID');
+  cache_().remove('sys:state');
+  clearSysCaches_();
+  log_('Khôi phục xong từ bản ' + match.name + '. QR trỏ hồ sơ không còn: ' + qrBad + '; tài liệu không mở được: ' + docBad +
+    '. Kiểm tra theo bước 7 rồi chạy adminMaintenanceOff. Bảo trì vẫn đang BẬT.');
+}
+
+// ===== 24_system.js =====
+/* 24_system: nhật ký thao tác, cấu hình, bảng quyền, trạng thái hệ thống — phụ lục 1.5 mục 4.4.16, 4.8, 3.14, 5.2 (Trạng thái hệ thống).
+ * system.status (C4) là bổ sung kỹ thuật: màn Trạng thái hệ thống chỉ đọc kết quả healthCheck và danh sách Settings. */
+
+/* ---------------- Nhật ký thao tác ---------------- */
+
+/** Module của một dòng AuditLogs theo action (để lọc quyền xem) */
+function auditModule_(a) {
+  var act = String(a.action || '');
+  var pre = act.split('.')[0];
+  var map = {
+    equipment: 'equipment', part: 'equipment', material: 'warehouse', contract: 'contracts', inspection: 'inspections',
+    notify: 'notifications', location: 'catalog', vendor: 'catalog', lookup: 'catalog', glossary: 'catalog',
+    user: 'users', auth: 'users', session: 'users', pin: 'users', settings: 'system', permission: 'system', system: 'system', backup: 'system'
+  };
+  if (map[pre]) return map[pre];
+  if (pre === 'alert') return a.entity_type === 'CONTRACT' ? 'contracts' : 'inspections';
+  if (pre === 'doc' || pre === 'qr' || pre === 'i18n' || pre === 'import' || pre === 'export') {
+    var et = ENTITY_TYPES[a.entity_type];
+    if (et && et.module) return et.module;
+    var sh = SHEETS[a.entity_type];
+    if (sh) {
+      var e2 = Object.keys(ENTITY_TYPES).filter(function (k) { return ENTITY_TYPES[k].sheet === a.entity_type; })[0];
+      return e2 ? ENTITY_TYPES[e2].module : 'catalog';
+    }
+    return 'catalog';
+  }
+  return 'system';
+}
+
+/** Bỏ trường giá khỏi before/after khi người xem không có quyền giá của module */
+function stripCost_(o) {
+  if (!o || typeof o !== 'object') return o;
+  var out = Array.isArray(o) ? [] : {};
+  Object.keys(o).forEach(function (k) {
+    if (['value', 'price', 'cost', 'currency', 'unit_price', 'amount'].indexOf(k) >= 0) return;
+    out[k] = typeof o[k] === 'object' ? stripCost_(o[k]) : o[k];
+  });
+  return out;
+}
+
+function projectAudit_(ctx, a, costMods, dir) {
+  var mod = auditModule_(a);
+  var o = {
+    audit_id: a.audit_id, occurred_at: a.occurred_at, user_id: a.user_id, action: a.action, entity_type: a.entity_type, entity_id: a.entity_id,
+    before_json: a.before_json || null, after_json: a.after_json || null, reason: a.reason || '', operation_id: a.operation_id || '',
+    auth_basis: a.auth_basis || '', module: mod
+  };
+  if (!costMods[mod]) { o.before_json = stripCost_(o.before_json); o.after_json = stripCost_(o.after_json); }
+  var u = dir[a.user_id];
+  o.user_name = u ? u.employee_code + ' · ' + u.display_name : a.user_id;
+  return o;
+}
+
+/** audit.own: nhật ký thao tác và trạng thái đồng bộ (Operations) của chính mình */
+function auditOwn_(ctx) {
+  var uid = ctx.user.user_id;
+  var costMods = {};
+  BUSINESS_MODULES_.forEach(function (m) { costMods[m] = canViewCost_(ctx, m); });
+  var dir = userDirectory_();
+  var logs = findAll_('AuditLogs', 'user_id', uid).sort(function (a, b) { return String(b.occurred_at).localeCompare(String(a.occurred_at)); })
+    .slice(0, 200).map(function (a) { return projectAudit_(ctx, a, costMods, dir); });
+  var ops = findAll_('Operations', 'user_id', uid).sort(function (a, b) { return String(b.received_at).localeCompare(String(a.received_at)); })
+    .slice(0, 100).map(function (o) {
+      return { operation_id: o.operation_id, action: o.action, entity_type: o.entity_type, entity_id: o.entity_id, state: o.state, result_code: o.result_code, received_at: o.received_at, committed_at: o.committed_at };
+    });
+  return { items: logs, operations: ops };
+}
+
+/**
+ * audit.view {module?, entity_id?, user_id?, action?, from?, to?, limit?}: C3, C4.
+ * C3 không xem module users/system và nhật ký xác thực; giá ẩn khi thiếu quyền giá.
+ */
+function auditView_(ctx) {
+  var p = ctx.req.payload || {};
+  var lvl = Number(ctx.user.role_level);
+  var costMods = {};
+  BUSINESS_MODULES_.forEach(function (m) { costMods[m] = canViewCost_(ctx, m); });
+  var dir = userDirectory_();
+  var limit = Math.min(500, Number(p.limit) || 200);
+  var from = p.from && isDateStr_(p.from) ? p.from : '', to = p.to && isDateStr_(p.to) ? p.to : '';
+  var items = [];
+  var rows = readRows_('AuditLogs');
+  for (var i = rows.length - 1; i >= 0 && items.length < limit; i--) {
+    var a = rows[i];
+    var mod = auditModule_(a);
+    if (lvl < 4 && (mod === 'users' || mod === 'system')) continue;
+    if (p.module && mod !== p.module) continue;
+    if (p.entity_id && a.entity_id !== p.entity_id) continue;
+    if (p.user_id && a.user_id !== p.user_id) continue;
+    if (p.action && String(a.action).indexOf(p.action) !== 0) continue;
+    var day = String(a.occurred_at).slice(0, 10);
+    if (from && day < from) continue;
+    if (to && day > to) continue;
+    items.push(projectAudit_(ctx, a, costMods, dir));
+  }
+  items.sort(function (x, y) { return String(y.occurred_at).localeCompare(String(x.occurred_at)); });
+  return { items: items, more: items.length >= limit };
+}
+
+/** audit.auth (C4, PIN): nhật ký đăng nhập, phiên đang hiệu lực; không có token_hash, mã băm nhân viên */
+function auditAuth_(ctx) {
+  var dir = userDirectory_();
+  var name = function (id) { var u = dir[id]; return u ? u.employee_code + ' · ' + u.display_name : ''; };
+  var att = readRows_('AuthAttempts');
+  var attempts = att.slice(Math.max(0, att.length - 300)).reverse().map(function (r) {
+    return { occurred_at: r.occurred_at, outcome: r.outcome, attempt_kind: r.attempt_kind, user: r.user_id ? name(r.user_id) : '', device: String(r.device_id || '').slice(0, 8) };
+  });
+  var t = now_().getTime();
+  var sessions = readRows_('Sessions').filter(function (s) { return isSessionActive_(s, t); }).map(function (s) {
+    return { session_id: s.session_id, user: name(s.user_id), session_kind: s.session_kind, device_label: s.device_label, issued_at: s.issued_at, last_seen_at: s.last_seen_at, expires_at: s.expires_at };
+  }).sort(function (a, b) { return String(b.last_seen_at).localeCompare(String(a.last_seen_at)); });
+  return { attempts: attempts, sessions: sessions, login_paused_until: sysStateCached_().login_paused_until || '' };
+}
+
+/* ---------------- Cấu hình ---------------- */
+
+/** Khóa không sửa trong app: mốc A7 cố định, kho làm sau, khóa của đợt sau */
+var SETTINGS_READONLY_ = { email_stages: 1, overdue_repeat_days: 1, lead_days: 1, warehouse_connected: 1 };
+var SETTINGS_BOUNDS_ = {
+  session_days: [1, 90], session_warn_days: [0, 30], change_pin_session_minutes: [5, 60], reauth_window_minutes: [1, 30], temp_pin_hours: [1, 168],
+  max_sessions_per_user: [1, 50], login_fail_limit: [3, 20], login_fail_window_minutes: [1, 120], login_lock_minutes: [1, 1440],
+  login_global_fail_limit: [5, 1000], login_global_window_minutes: [1, 120], login_global_pause_minutes: [1, 1440], auth_attempts_retention_days: [7, 3650],
+  offline_unlock_attempts: [3, 20], offline_lock_minutes: [1, 1440], offline_max_lockouts: [1, 10], offline_pbkdf2_iterations: [150000, 2000000],
+  offline_probe_seconds: [3, 30], mt_chunk_chars: [200, 5000], mt_max_fields_per_request: [1, 100], mt_sync_budget_seconds: [1, 20], mt_daily_budget: [0, 100000],
+  email_hour: [0, 23], email_max_attempts: [1, 10], client_timeout_seconds: [10, 60], client_long_timeout_seconds: [20, 300], list_page_size: [10, 200],
+  sync_page_size: [100, 2000], doc_max_bytes: [1048576, 52428800], doc_mobile_upload_max_bytes: [1048576, 52428800], offline_files_max_mb: [10, 2000],
+  photo_max_edge_px: [640, 4096], photo_jpeg_quality: [0.5, 0.95], photo_thumb_edge_px: [120, 1024], backup_hour: [0, 23], backup_keep_count: [2, 52],
+  meter_boundary_window_hours: [1, 24], reading_self_edit_hours: [1, 168]
+};
+var SETTINGS_ENUMS_ = {
+  backup_weekday: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'],
+  qr_label_size: ['SMALL_70X37', 'LARGE_100X50']
+};
+
+function settingsList_() {
+  var s = settings_();
+  return SETTINGS_DEFAULTS.filter(function (d) { return d[4] <= RELEASED_DOT; }).map(function (d) {
+    return {
+      key: d[0], type: d[1], value: s[d[0]], default_value: d[2], client: !!d[3], description_vi: d[5], description_zh: d[6],
+      readonly: !!SETTINGS_READONLY_[d[0]], bounds: SETTINGS_BOUNDS_[d[0]] || null, options: SETTINGS_ENUMS_[d[0]] || null
+    };
+  });
+}
+
+/** Chuẩn hóa và kiểm một giá trị Settings; ném VALIDATION_ERROR */
+function parseSettingInput_(def, v) {
+  var key = def[0], type = def[1];
+  var bad = function () { return validationError_([fieldError_(key, 'INVALID_VALUE')]); };
+  if (type === 'INT' || type === 'NUMBER') {
+    var n = Number(v);
+    if (v === '' || v === null || !isFinite(n) || (type === 'INT' && Math.floor(n) !== n)) throw bad();
+    var b = SETTINGS_BOUNDS_[key];
+    if (b && (n < b[0] || n > b[1])) throw bad();
+    return n;
+  }
+  if (type === 'BOOL') { if (typeof v !== 'boolean') throw bad(); return v; }
+  if (type === 'ENUM') { if ((SETTINGS_ENUMS_[key] || []).indexOf(v) < 0) throw bad(); return v; }
+  if (type === 'JSON') {
+    var arr = typeof v === 'string' ? JSON.parse(v) : v;
+    if (!Array.isArray(arr)) throw bad();
+    if (key === 'self_approval_exceptions') {
+      arr.forEach(function (e) {
+        var def2 = e && ACTION_REGISTRY[e.action_code];
+        if (!def2 || def2.flags.indexOf('A') < 0) throw bad();
+      });
+    }
+    return arr;
+  }
+  var s = trimStr_(v);
+  if (key === 'app_base_url' && s && !/^https:\/\/[^\s]+\/$/.test(s)) throw bad();
+  if (key === 'min_client_version' && !/^\d+\.\d+\.\d+$/.test(s)) throw bad();
+  if (key === 'default_currency' && !/^[A-Z]{3}$/.test(s)) throw bad();
+  if (s.length > 500) throw bad();
+  return s;
+}
+
+/** settings.edit {changes: {key: value}, reason} — C4, PIN. Khóa chỉ đọc không sửa được */
+function settingsEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var changes = p.changes && typeof p.changes === 'object' ? p.changes : null;
+  if (!changes || !Object.keys(changes).length) throw validationError_([fieldError_('changes', 'REQUIRED')]);
+  var parsed = {};
+  var errs = [];
+  Object.keys(changes).forEach(function (k) {
+    var def = SETTINGS_DEFAULTS.filter(function (d) { return d[0] === k; })[0];
+    if (!def || def[4] > RELEASED_DOT || SETTINGS_READONLY_[k]) { errs.push(fieldError_(k, 'INVALID_VALUE')); return; }
+    try { parsed[k] = parseSettingInput_(def, changes[k]); } catch (e) { errs.push(fieldError_(k, 'INVALID_VALUE')); }
+  });
+  if (parsed.client_long_timeout_seconds !== undefined || parsed.client_timeout_seconds !== undefined) {
+    var shortT = parsed.client_timeout_seconds !== undefined ? parsed.client_timeout_seconds : setting_('client_timeout_seconds');
+    var longT = parsed.client_long_timeout_seconds !== undefined ? parsed.client_long_timeout_seconds : setting_('client_long_timeout_seconds');
+    if (longT < shortT) errs.push(fieldError_('client_long_timeout_seconds', 'INVALID_VALUE'));
+  }
+  if (errs.length) throw validationError_(errs);
+  var before = {};
+  Object.keys(parsed).forEach(function (k) { before[k] = setting_(k); });
+  withWriteLock_(function () {
+    Object.keys(parsed).forEach(function (k) { writeSetting_(k, parsed[k], ctx.user.user_id); });
+    writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'settings.edit', entity_type: 'SETTINGS', entity_id: Object.keys(parsed).join(','),
+      before_json: before, after_json: parsed, operation_id: ctx.req.operation_id || '', reason: trimStr_(p.reason).slice(0, 300), auth_basis: 'ROLE_LEVEL' });
+  });
+  cache_().remove('cfg:settings');
+  DB_.settings = null;
+  if (['email_hour', 'backup_weekday', 'backup_hour'].some(function (k) { return parsed[k] !== undefined && parsed[k] !== before[k]; })) {
+    try { installTriggers(); } catch (e) { console.warn('installTriggers ' + (e && e.message)); }
+  }
+  return { settings: settingsList_() };
+}
+
+/* ---------------- Bảng quyền (4.8) ---------------- */
+
+/** Ô khóa: không sửa được trong app */
+function permLocked_(level, module) {
+  if (level === 4 && module === 'users') return 'VCEA';
+  if (level === 4 && module === 'system') return 'VER';
+  if (level === 4 && module === 'audit') return 'V';
+  if (level === 4 && module === 'backup') return 'VE';
+  return 'R';
+}
+
+function permissionMatrix_() {
+  var rows = readRows_('RolePermissions');
+  var out = [];
+  [1, 2, 3, 4].forEach(function (lvl) {
+    PERM_MODULES.forEach(function (m) {
+      var r = rows.filter(function (x) { return Number(x.role_level) === lvl && x.module === m; })[0];
+      var flags = '';
+      if (r) Object.keys(FLAG_COL_).forEach(function (k) { if (r[FLAG_COL_[k]]) flags += k; });
+      var ceil = roleCeiling_(lvl, m);
+      out.push({ role_level: lvl, module: m, flags: flags, ceiling: ceil, locked: permLocked_(lvl, m), missing: !r,
+        over_ceiling: flags.split('').filter(function (f) { return ceil.indexOf(f) < 0; }).join('') });
+    });
+  });
+  return out;
+}
+
+/** permission.view (C4, PIN): ma trận 60 ô, trần, ô khóa */
+function permissionView_(ctx) {
+  return { rows: permissionMatrix_(), perm_version: sysStateCached_().perm_version || 1, flags: Object.keys(FLAG_COL_) };
+}
+
+/**
+ * permission.edit {changes: [{role_level, module, flags}], reason} — C4, PIN, bắt nhập lý do.
+ * Kiểm trần, không đổi ô khóa; ghi trước–sau; perm_version + 1 (có hiệu lực ở request kế tiếp).
+ */
+function permissionEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var reason = trimStr_(p.reason);
+  var errs = [];
+  if (!reason) errs.push(fieldError_('reason', 'REQUIRED'));
+  var changes = Array.isArray(p.changes) ? p.changes : [];
+  if (!changes.length) errs.push(fieldError_('changes', 'REQUIRED'));
+  changes.forEach(function (c, i) {
+    var lvl = Number(c.role_level);
+    var f = String(c.flags || '');
+    if (!(lvl >= 1 && lvl <= 4) || PERM_MODULES.indexOf(c.module) < 0 || !/^[VCEAIX$R]*$/.test(f)) { errs.push(fieldError_('changes', 'INVALID_VALUE', i)); return; }
+    var ceil = roleCeiling_(lvl, c.module);
+    if (f.split('').some(function (x) { return ceil.indexOf(x) < 0; })) errs.push(fieldError_('changes', 'PERM_CEILING', i));
+  });
+  if (errs.length) throw validationError_(errs);
+  var before = [], after = [];
+  withWriteLock_(function () {
+    var rows = readRows_('RolePermissions');
+    changes.forEach(function (c, i) {
+      var lvl = Number(c.role_level);
+      var r = rows.filter(function (x) { return Number(x.role_level) === lvl && x.module === c.module; })[0];
+      if (!r) throw validationError_([fieldError_('changes', 'NOT_FOUND', i)]);
+      var cur = '';
+      Object.keys(FLAG_COL_).forEach(function (k) { if (r[FLAG_COL_[k]]) cur += k; });
+      var want = String(c.flags || '');
+      var locked = permLocked_(lvl, c.module);
+      // Ô khóa giữ nguyên giá trị đang có
+      var diffLocked = locked.split('').some(function (k) { return (cur.indexOf(k) >= 0) !== (want.indexOf(k) >= 0); });
+      if (diffLocked) throw validationError_([fieldError_('changes', 'PERM_LOCKED', i)]);
+      if (cur === want) return;
+      var upd = { updated_at: isoVN_(now_()), updated_by: ctx.user.user_id };
+      Object.keys(FLAG_COL_).forEach(function (k) { upd[FLAG_COL_[k]] = want.indexOf(k) >= 0; });
+      writeCells_('RolePermissions', r.__row, upd);
+      before.push({ role_level: lvl, module: c.module, flags: cur });
+      after.push({ role_level: lvl, module: c.module, flags: want });
+    });
+    if (!after.length) return;
+    var st = readState_();
+    var pv = Number(stateGet_(st, 'perm_version', 1)) + 1;
+    stateWrite_(st, { perm_version: ['INT', pv] }, ctx.user.user_id);
+    writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'permission.edit', entity_type: 'PERMISSIONS', entity_id: 'RolePermissions',
+      before_json: before, after_json: after, operation_id: ctx.req.operation_id || '', reason: reason.slice(0, 300), auth_basis: 'ROLE_LEVEL' });
+  });
+  SpreadsheetApp.flush();
+  cache_().remove('sys:state');
+  DB_.rolePerms = null;
+  return { changed: after.length, rows: permissionMatrix_(), perm_version: sysStateCached_().perm_version };
+}
+
+/* ---------------- Trạng thái hệ thống (healthCheck) ---------------- */
+
+/** Ghi thời gian chạy trigger (24 giờ gần nhất) để healthCheck báo tổng phút */
+function recordTriggerRun_(fn, startMs) {
+  try {
+    var now = Date.now();
+    var list = JSON.parse(prop_('TRIGGER_RUNS') || '[]').filter(function (r) { return now - r.s < 86400000; });
+    list.push({ f: fn, s: startMs, ms: now - startMs });
+    setProp_('TRIGGER_RUNS', JSON.stringify(list.slice(-60)));
+  } catch (e) { /* không chặn trigger */ }
+}
+
+/** Kết quả kiểm tra: [{key, ok: 'OK'|'WARN', value, note}] */
+function healthRows_() {
+  var rows = [];
+  var add = function (key, ok, value, note) { rows.push({ key: key, status: ok ? 'OK' : 'WARN', value: value === undefined ? '' : value, note: note || '' }); };
+  dbReset_();
+  var st = readState_();
+  var props = sysProps_();
+  add('schema_version', String(stateGet_(st, 'schema_version', '')) === SCHEMA_VERSION, stateGet_(st, 'schema_version', ''), SCHEMA_VERSION);
+  add('server_version', true, SERVER_VERSION);
+  add('dataset_epoch', !!props.dataset_epoch, String(props.dataset_epoch || '').slice(0, 8));
+  add('env', true, envName_());
+  add('maintenance', !props.maintenance_mode, props.maintenance_mode ? 'ON' : 'OFF');
+  var trig = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
+  var missing = TRIGGER_FUNCS_.filter(function (f) { return trig.indexOf(f) < 0; });
+  add('triggers', !missing.length, trig.join(', '), missing.length ? 'Thiếu: ' + missing.join(', ') + ' — chạy installTriggers' : '');
+  var runs = [];
+  try { runs = JSON.parse(prop_('TRIGGER_RUNS') || '[]'); } catch (e) { runs = []; }
+  var minutes = Math.round(runs.filter(function (r) { return Date.now() - r.s < 86400000; }).reduce(function (s, r) { return s + r.ms; }, 0) / 600) / 100;
+  add('trigger_minutes_24h', minutes < 90, minutes);
+  var lb = stateGet_(st, 'last_backup_at', ''), lbs = stateGet_(st, 'last_backup_status', '');
+  var lbt = parseTime_(lb);
+  add('last_backup', lbs === 'VERIFIED' && lbt && now_().getTime() - lbt.getTime() < 8 * 86400000, (lb ? lb.slice(0, 16).replace('T', ' ') : '') + (lbs ? ' · ' + lbs : ''), stateGet_(st, 'last_backup_ref', ''));
+  var mtp = parseTime_(stateGet_(st, 'mt_paused_until', ''));
+  add('mt_paused_until', !(mtp && mtp.getTime() > now_().getTime()), stateGet_(st, 'mt_paused_until', ''));
+  var lpu = parseTime_(stateGet_(st, 'login_paused_until', ''));
+  add('login_paused_until', !(lpu && lpu.getTime() > now_().getTime()), stateGet_(st, 'login_paused_until', ''));
+  var quota = MailApp.getRemainingDailyQuota();
+  add('mail_quota', quota > 10, quota);
+  var lastSent = '';
+  readRows_('NotificationLogs').forEach(function (n) { if (n.status === 'SENT' && String(n.sent_at) > lastSent) lastSent = String(n.sent_at); });
+  add('last_mail_sent', true, lastSent ? lastSent.slice(0, 16).replace('T', ' ') : '', setting_('gmail_enabled') ? 'Gmail ON' : 'Gmail OFF');
+  var base = String(setting_('app_base_url') || '');
+  add('app_base_url', !!base, base, base ? '' : 'Chưa điền app_base_url (link trong email)');
+  var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
+  add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
+  var docBad = 0, checked = 0;
+  readRows_('Documents').forEach(function (d) {
+    if (!d.active || !d.drive_file_id || checked >= 300) return;
+    checked++;
+    try { DriveApp.getFileById(d.drive_file_id); } catch (e) { docBad++; }
+  });
+  add('documents_broken', !docBad, docBad, checked >= 300 ? 'Đã kiểm 300 tệp đầu' : '');
+  var cells = 0;
+  [prop_('BUSINESS_SPREADSHEET_ID'), prop_('SECURITY_SPREADSHEET_ID')].forEach(function (id) {
+    if (!id) return;
+    SpreadsheetApp.openById(id).getSheets().forEach(function (s) { cells += s.getMaxRows() * s.getMaxColumns(); });
+  });
+  add('spreadsheet_cells', cells < 5000000, cells);
+  return rows;
+}
+
+/** Chạy từ trình soạn: in kết quả kiểm tra */
+function healthCheck() {
+  var rows = healthRows_();
+  rows.forEach(function (r) { log_((r.status === 'OK' ? 'ĐẠT     ' : 'CẢNH BÁO') + '  ' + r.key + ': ' + r.value + (r.note ? ' (' + r.note + ')' : '')); });
+  return rows;
+}
+
+/** system.status (C4): kết quả healthCheck + Settings để màn Trạng thái hệ thống hiển thị */
+function systemStatus_(ctx) {
+  return { checks: healthRows_(), settings: settingsList_(), checked_at: isoVN_(now_()) };
 }
 
 // ===== i18n/labels.json =====

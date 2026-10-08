@@ -231,60 +231,12 @@ function adminFlushAuthCache() {
   log_('Đã xóa ' + keys.length + ' khóa cache phiên/người dùng.');
 }
 
-function adminFinalizeManualRestore() {
-  throw new Error('Khôi phục thủ công (6.5.4) làm ở Đợt 1 sau PoC.');
-}
+/* adminFinalizeManualRestore (khôi phục thủ công) ở 23_backup.js */
 
 /* ---------------- Trigger ---------------- */
 
 /* sendExpiryDigest (trigger hằng ngày) ở 19_alerts.js */
 
-var MT_SHEETS_ = {
-  Equipment: ['name'], Documents: ['title'], Materials: ['name', 'specification'], EquipmentParts: ['function', 'position'],
-  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services']
-};
+/* runBackgroundJobs (dịch bù) ở 21_i18n.js */
 
-/** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
-function runBackgroundJobs() {
-  if (prop_('MAINTENANCE_MODE') === 'true') return;
-  if (!mtEnabled_()) return;
-  var t0 = Date.now();
-  var done = 0;
-  Object.keys(MT_SHEETS_).forEach(function (sheet) {
-    if (Date.now() - t0 > 150000) return;
-    readRows_(sheet).forEach(function (r) {
-      if (Date.now() - t0 > 150000 || !r.i18n_meta) return;
-      MT_SHEETS_[sheet].forEach(function (f) {
-        var m = r.i18n_meta[f];
-        if (!m || m.state !== 'PENDING') return;
-        var srcText = trimStr_(r[f + '_' + m.src]);
-        var out = mtTranslate_(srcText, m.src, m.src === 'vi' ? 'zh' : 'vi');
-        if (!out) return;
-        withWriteLock_(function () {
-          var cur = readRowAt_(sheet, r.__row);
-          var key = sheetSchema_(sheet).key;
-          if (cur[key] !== r[key] || trimStr_(cur[f + '_' + m.src]) !== srcText) return;
-          var meta = cur.i18n_meta || {};
-          if (!meta[f] || meta[f].state !== 'PENDING') return;
-          meta[f] = { src: m.src, state: 'MACHINE', at: isoVN_(now_()) };
-          var st = readState_();
-          var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
-          var upd = { i18n_meta: meta, sync_revision: rev };
-          upd[f + '_' + (m.src === 'vi' ? 'zh' : 'vi')] = out;
-          writeCells_(sheet, r.__row, upd);
-          var su = { sync_revision: ['INT', rev] };
-          su['table_rev.' + sheet] = ['INT', rev];
-          stateWrite_(st, su, SYSTEM_USER);
-          writeAudit_({ user_id: SYSTEM_USER, action: 'i18n.machineTranslate', entity_type: sheet, entity_id: r[key], before_json: null, after_json: { field: f }, auth_basis: 'SYSTEM' });
-          done++;
-        });
-      });
-    });
-  });
-  log_('runBackgroundJobs: dịch bù ' + done + ' trường.');
-}
-
-/** Hằng tuần: sao lưu có kiểm chứng (6.5.4) — làm ở Đợt 1 sau PoC */
-function backupData() {
-  log_('backupData: sao lưu tự động sẽ có ở Đợt 1 (sau PoC).');
-}
+/* backupData (sao lưu hằng tuần) ở 23_backup.js */
