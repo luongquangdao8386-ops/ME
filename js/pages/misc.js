@@ -131,8 +131,17 @@ export async function renderPrintLabels(view, { shell, query }) {
   shell.setScreen({ title: 'screen.labels', back: cfg && ids.length === 1 ? cfg.back + ids[0] : (cfg ? cfg.back.replace(/\/$/, '').replace('/record', '') : '/') });
   if (!(await can('qr.print'))) { view.innerHTML = `<div class="card">${bi('err.forbidden')}</div>`; return; }
   if (!cfg) { view.innerHTML = `<div class="card">${bi('err.not_found')}</div>`; return; }
+  if (!navigator.onLine) { view.innerHTML = `<div class="card">${bi('sync.need_network')}</div>`; return; }
+  view.innerHTML = `<div class="card"><div class="spinner small"></div></div>`;
+  // qr.print: máy chủ kiểm quyền, trả dữ liệu tem và ghi nhật ký in (4.4.11)
+  const { api, resMsg } = await import('../core.js');
+  const res = await api('qr.print', { entity_type: cfg.type, ids }, { retry: true });
+  if (!res.ok) { view.innerHTML = `<div class="card">${esc(resMsg(res))}</div>`; return; }
   const items = [];
-  for (const id of ids) { const r = await byId(cfg.type, id); if (r && r.qr_key) items.push(await labelItem(cfg.type, r)); }
+  for (const it of res.data.items) {
+    const local = await byId(cfg.type, it.entity_id);
+    items.push(local ? { ...(await labelItem(cfg.type, local)), qr_key: it.qr_key, code: it.code } : it);
+  }
   const b = await boot();
   const { labelSheetHtml } = await import('../labels.js');
   const size = ls.get('label_size') || (session.settings.qr_label_size === 'LARGE_105X74' ? 'LARGE' : 'SMALL');

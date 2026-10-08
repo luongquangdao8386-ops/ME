@@ -50,6 +50,11 @@ var SUB_MSG = {
   NEEDS_NETWORK: ['Cần kết nối mạng', '需要网络连接'],
   FILE_TOO_LARGE: ['Tệp quá lớn để mở trong app', '文件过大，无法在应用内打开'],
   FILE_TYPE: ['Loại tệp không được hỗ trợ', '不支持的文件类型'],
+  WAREHOUSE_NOT_CONNECTED: ['Chưa kết nối kho: không nhận số tồn, giá kho', '尚未连接仓库：不接受库存和仓库价格'],
+  NOT_COMPONENT: ['Vật tư này không gắn máy được', '该物料不可关联设备'],
+  UNIT_NOT_ALLOWED: ['Đơn vị không thuộc danh sách cho phép', '单位不在允许范围内'],
+  URL_INVALID: ['Liên kết phải bắt đầu bằng https://', '链接须以 https:// 开头'],
+  SELF_ACTION: ['Không thao tác lên chính mình', '不能对自己执行此操作'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
 };
 

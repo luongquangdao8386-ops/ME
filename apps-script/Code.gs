@@ -953,6 +953,11 @@ var SUB_MSG = {
   NEEDS_NETWORK: ['Cần kết nối mạng', '需要网络连接'],
   FILE_TOO_LARGE: ['Tệp quá lớn để mở trong app', '文件过大，无法在应用内打开'],
   FILE_TYPE: ['Loại tệp không được hỗ trợ', '不支持的文件类型'],
+  WAREHOUSE_NOT_CONNECTED: ['Chưa kết nối kho: không nhận số tồn, giá kho', '尚未连接仓库：不接受库存和仓库价格'],
+  NOT_COMPONENT: ['Vật tư này không gắn máy được', '该物料不可关联设备'],
+  UNIT_NOT_ALLOWED: ['Đơn vị không thuộc danh sách cho phép', '单位不在允许范围内'],
+  URL_INVALID: ['Liên kết phải bắt đầu bằng https://', '链接须以 https:// 开头'],
+  SELF_ACTION: ['Không thao tác lên chính mình', '不能对自己执行此操作'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
 };
 
@@ -2414,6 +2419,16 @@ var HANDLERS_ = {
   'equipment.view': function (ctx) { return equipmentView_(ctx); },
   'equipment.create': function (ctx) { return equipmentCreate_(ctx); },
   'equipment.edit': function (ctx) { return equipmentEdit_(ctx); },
+  'equipment.archive': function (ctx) { return equipmentArchive_(ctx); },
+  'equipment.unarchive': function (ctx) { return equipmentUnarchive_(ctx); },
+  'equipment.spec.edit': function (ctx) { return equipmentSpecEdit_(ctx); },
+  'material.view': function (ctx) { return materialView_(ctx); },
+  'material.create': function (ctx) { return materialCreate_(ctx); },
+  'material.edit': function (ctx) { return materialEdit_(ctx); },
+  'material.archive': function (ctx) { return materialArchive_(ctx); },
+  'part.link': function (ctx) { return partLink_(ctx); },
+  'part.unlink': function (ctx) { return partUnlink_(ctx); },
+  'part.approve': function (ctx) { return partApprove_(ctx); },
   'inspection.view': function (ctx) { return inspectionView_(ctx); },
   'inspection.submit': function (ctx) { return inspectionSubmit_(ctx); },
   'catalog.view': function (ctx) { return catalogView_(ctx); },
@@ -2422,7 +2437,9 @@ var HANDLERS_ = {
   'doc.download': function (ctx) { return docDownload_(ctx); },
   'doc.thumbs': function (ctx) { return docThumbs_(ctx); },
   'doc.setPrivate': function (ctx) { return docSetPrivate_(ctx); },
+  'doc.archive': function (ctx) { return docArchive_(ctx); },
   'qr.resolve': function (ctx) { return qrResolve_(ctx); },
+  'qr.print': function (ctx) { return qrPrint_(ctx); },
   'poc.vectors': function (ctx) { return pocVectors_(ctx); },
   'poc.echo': function (ctx) { return pocEcho_(ctx); },
   'poc.sleep': function (ctx) { return pocSleep_(ctx); },
@@ -2702,17 +2719,36 @@ function qrMap_() {
   return m;
 }
 
+/**
+ * equipment.view: một hồ sơ {equipment_id} (kèm thông số) hoặc danh sách
+ * {filters: {q, status, location_id, category_id}, include_archived, page_size, page_token}
+ */
 function equipmentView_(ctx) {
-  var p = ctx.req.payload;
+  var p = ctx.req.payload || {};
   var qm = qrMap_();
   if (p.equipment_id) {
     var r = findOne_('Equipment', 'equipment_id', p.equipment_id);
     if (!r) throw apiError_('NOT_FOUND');
     var o = projectRow_(ctx, r, 'Equipment');
     o.qr_key = qm[r.equipment_id] || null;
-    return { item: o };
+    var specs = findAll_('EquipmentSpecs', 'equipment_id', r.equipment_id).filter(function (s) { return !s.archived_at; })
+      .map(function (s) { return projectRow_(ctx, s, 'EquipmentSpecs'); });
+    return { item: o, specs: specs };
   }
-  var rows = readRows_('Equipment').filter(function (r) { return p.include_archived || !r.archived_at; });
+  var f = p.filters || {};
+  var q = trimStr_(f.q).toLowerCase();
+  var rows = readRows_('Equipment').filter(function (r) {
+    if (r.archived_at && !p.include_archived) return false;
+    if (f.status && r.status !== f.status) return false;
+    if (f.location_id && r.location_id !== f.location_id) return false;
+    if (f.category_id && r.category_id !== f.category_id) return false;
+    if (q) {
+      var hay = [r.equipment_code, r.name_vi, r.name_zh, r.model, r.serial, r.manufacturer].join(' ').toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+  rows.sort(function (a, b) { return String(a.equipment_code).localeCompare(String(b.equipment_code)); });
   var size = Math.min(200, Number(p.page_size) || setting_('list_page_size'));
   var start = Number(p.page_token || 0);
   var items = rows.slice(start, start + size).map(function (r) {
@@ -2727,6 +2763,217 @@ function catalogView_(ctx) {
     vendors: readRows_('Vendors').map(function (r) { return projectRow_(ctx, r, 'Vendors'); }),
     lookups: readRows_('LookupValues').map(function (r) { return projectRow_(ctx, r, 'LookupValues'); })
   };
+}
+
+/* ---------------- Lưu trữ / dùng lại (4.4.1) ---------------- */
+
+/** Ảnh LINK_VIEW của hồ sơ bị lưu trữ → riêng tư (2.6). Gọi ngoài khóa ghi; lỗi thì FAILED kèm mã */
+function revokeEntityPhotos_(ctx, entityType, entityId) {
+  var docs = findAll_('Documents', 'entity_id', entityId).filter(function (d) {
+    return d.entity_type === entityType && d.access_scope === 'LINK_VIEW' && d.drive_sharing_state === 'LINK_SHARED';
+  });
+  docs.forEach(function (d) {
+    var ok = true, err = '';
+    try {
+      ok = makePrivate_(d.drive_file_id);
+      if (d.thumb_drive_file_id) ok = makePrivate_(d.thumb_drive_file_id) && ok;
+    } catch (e) { ok = false; err = String(e && e.message || e).slice(0, 80); }
+    withWriteLock_(function () {
+      var cur = findOne_('Documents', 'document_id', d.document_id);
+      if (!cur) return;
+      var st = readState_();
+      var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
+      writeCells_('Documents', cur.__row, {
+        drive_sharing_state: ok ? 'REVOKED' : 'FAILED', sharing_updated_at: isoVN_(now_()),
+        sharing_error_code: ok ? '' : (err || 'NOT_PRIVATE'), sync_revision: rev
+      });
+      stateWrite_(st, { sync_revision: ['INT', rev], 'table_rev.Documents': ['INT', rev] }, ctx.user.user_id);
+    });
+  });
+}
+
+function equipmentArchive_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.equipment_id)) throw validationError_([fieldError_('equipment_id', 'ID_INVALID')]);
+  if (!trimStr_(p.reason)) throw validationError_([fieldError_('reason', 'REQUIRED')]);
+  var res = executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT', entity_id: p.equipment_id,
+    build: function () {
+      var cur = findOne_('Equipment', 'equipment_id', p.equipment_id);
+      if (!cur) throw apiError_('NOT_FOUND');
+      assertVersion_(ctx, cur, 'EQUIPMENT', 'Equipment');
+      if (cur.archived_at) throw validationError_([fieldError_('equipment_id', 'INVALID_VALUE')]);
+      var before = clone_(cur); delete before.__row;
+      var row = clone_(cur);
+      row.status = 'RETIRED';
+      row.archived_at = isoVN_(now_());
+      cUpdate_(ctx, row);
+      var writes = [{ sheet: 'Equipment', mode: 'update', row: row }];
+      var qr = findOne_('QrRegistry', 'entity_id', p.equipment_id);
+      if (qr && qr.active) { var q2 = clone_(qr); delete q2.__row; q2.active = false; writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 }); }
+      return {
+        writes: writes,
+        result: { entity_type: 'EQUIPMENT', entity_id: p.equipment_id, display_code: row.equipment_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Equipment') },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: p.equipment_id, before_json: { status: before.status, archived_at: '' }, after_json: { status: 'RETIRED', archived_at: row.archived_at }, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+  if (res.ok && res.code === 'OK') revokeEntityPhotos_(ctx, 'EQUIPMENT', p.equipment_id);
+  return res;
+}
+
+function equipmentUnarchive_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.equipment_id)) errs.push(fieldError_('equipment_id', 'ID_INVALID'));
+  if (!trimStr_(p.reason)) errs.push(fieldError_('reason', 'REQUIRED'));
+  if (EQUIPMENT_STATUS_.indexOf(p.status) < 0 || p.status === 'RETIRED') errs.push(fieldError_('status', 'REQUIRED'));
+  if (errs.length) throw validationError_(errs);
+  return executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT', entity_id: p.equipment_id,
+    build: function () {
+      var cur = findOne_('Equipment', 'equipment_id', p.equipment_id);
+      if (!cur) throw apiError_('NOT_FOUND');
+      assertVersion_(ctx, cur, 'EQUIPMENT', 'Equipment');
+      if (!cur.archived_at) throw validationError_([fieldError_('equipment_id', 'INVALID_VALUE')]);
+      var row = clone_(cur);
+      row.status = p.status;
+      row.archived_at = '';
+      cUpdate_(ctx, row);
+      var writes = [{ sheet: 'Equipment', mode: 'update', row: row }];
+      var qr = findOne_('QrRegistry', 'entity_id', p.equipment_id);
+      if (qr && !qr.active) { var q2 = clone_(qr); delete q2.__row; q2.active = true; writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 }); }
+      return {
+        writes: writes,
+        result: { entity_type: 'EQUIPMENT', entity_id: p.equipment_id, display_code: row.equipment_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Equipment') },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: p.equipment_id, before_json: { status: 'RETIRED', archived_at: cur.archived_at }, after_json: { status: p.status, archived_at: '' }, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+}
+
+/* ---------------- Thông số thiết bị (5.5) ---------------- */
+
+/** Khóa chuẩn: [đơn vị mặc định, đơn vị cho phép, cột giá trị (num|text), thứ tự] */
+var SPEC_STD_ = {
+  voltage: ['V', ['V', 'kV'], 'num', 10],
+  rated_current: ['A', ['A'], 'num', 20],
+  electrical_power: ['kW', ['kW', 'W', 'HP'], 'num', 30],
+  frequency: ['Hz', ['Hz'], 'num', 40],
+  working_pressure: ['bar', ['bar', 'MPa', 'kPa'], 'num', 50],
+  flow_rate: ['m³/h', ['m³/h', 'L/min', 'L/s'], 'num', 60],
+  speed: ['rpm', ['rpm'], 'num', 70],
+  dimensions: ['mm', ['mm', 'm'], 'text', 80],
+  weight: ['kg', ['kg', 't'], 'num', 90],
+  throughput: ['kg/h', ['kg/h', 't/h', 'm³/h'], 'num', 100],
+  rated_capacity_kva: ['kVA', ['kVA'], 'num', 110]
+};
+
+/** Ký hiệu đơn vị chuẩn (5.4.4); bí danh chuẩn hóa không phân biệt hoa thường */
+var UNITS_ = ['kWh', 'm³', 'kW', 'kVA', 'W', 'HP', 'V', 'kV', 'A', 'Hz', 'bar', 'MPa', 'kPa', 'm³/h', 'L/min', 'L/s', 'rpm',
+  'kg/h', 't/h', 'mm²', 'mm', 'm', 'kg', 't', '°C', 'h', 'min', '%', 'cái', 'bộ', 'm²', 'L', 'cuộn', 'hộp'];
+var UNIT_ALIAS_ = { 'm3': 'm³', 'mm2': 'mm²', 'm3/h': 'm³/h', 'm2': 'm²', 'r/min': 'rpm', 'v/ph': 'rpm', 'l': 'L', 'oc': '°C', 'độ c': '°C' };
+
+function normUnit_(u) {
+  var s = trimStr_(u);
+  if (!s) return '';
+  if (UNITS_.indexOf(s) >= 0) return s;
+  var low = s.toLowerCase();
+  if (UNIT_ALIAS_[low]) return UNIT_ALIAS_[low];
+  for (var i = 0; i < UNITS_.length; i++) if (UNITS_[i].toLowerCase() === low) return UNITS_[i];
+  return s;
+}
+
+/** Đơn vị hợp lệ cho một khóa: chuẩn theo bảng 5.5; khóa riêng: danh sách đơn vị + LookupValues UNIT */
+function allowedUnits_(key, lookups) {
+  if (SPEC_STD_[key]) return SPEC_STD_[key][1];
+  var extra = lookups.filter(function (l) { return l.group_key === 'UNIT' && l.active !== false && !l.archived_at; }).map(function (l) { return l.code; });
+  return UNITS_.concat(extra);
+}
+
+function specLabel_(key, lookups) {
+  if (SPEC_STD_[key]) { var p = LABELS['spec.' + key]; return { vi: p[0], zh: p[1], sort: SPEC_STD_[key][3] }; }
+  var l = lookups.filter(function (x) { return x.group_key === 'SPEC_KEY' && x.code === key && x.active !== false && !x.archived_at; })[0];
+  return l ? { vi: l.name_vi || l.name_zh, zh: l.name_zh || l.name_vi, sort: 500 } : null;
+}
+
+/**
+ * equipment.spec.edit: một dòng thông số mỗi request.
+ * {spec_id, equipment_id, spec_key, value_num, value_text, unit, sort_order} — expected_version 0 khi thêm;
+ * {spec_id, remove: true, reason?} — bỏ dòng (lưu trữ mềm).
+ */
+function equipmentSpecEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.spec_id)) errs.push(fieldError_('spec_id', 'ID_INVALID'));
+  if (errs.length) throw validationError_(errs);
+  var cur0 = findOne_('EquipmentSpecs', 'spec_id', p.spec_id);
+  if (p.remove) {
+    if (!cur0) throw apiError_('NOT_FOUND');
+    return executeWrite_(ctx, {
+      entity_type: 'EQUIPMENT_SPEC', entity_id: p.spec_id,
+      build: function () {
+        var cur = findOne_('EquipmentSpecs', 'spec_id', p.spec_id);
+        assertVersion_(ctx, cur, 'EQUIPMENT_SPEC', 'EquipmentSpecs');
+        var row = clone_(cur);
+        row.archived_at = isoVN_(now_());
+        cUpdate_(ctx, row);
+        return {
+          writes: [{ sheet: 'EquipmentSpecs', mode: 'update', row: row }],
+          result: { entity_type: 'EQUIPMENT_SPEC', entity_id: p.spec_id, record_version: row.record_version, removed: true },
+          record_version: row.record_version,
+          audit: { entity_type: 'EQUIPMENT', entity_id: cur.equipment_id, before_json: { spec_key: cur.spec_key, value_num: cur.value_num, value_text: cur.value_text, unit: cur.unit }, after_json: null, reason: trimStr_(p.reason) }
+        };
+      }
+    });
+  }
+  var lookups = readRows_('LookupValues');
+  var key = trimStr_(p.spec_key);
+  var lab = /^[a-z][a-z0-9_]{0,40}$/.test(key) ? specLabel_(key, lookups) : null;
+  if (!lab) errs.push(fieldError_('spec_key', 'INVALID_VALUE'));
+  if (!cur0 && !isUuidV4_(p.equipment_id)) errs.push(fieldError_('equipment_id', 'ID_INVALID'));
+  if (cur0 && p.equipment_id && p.equipment_id !== cur0.equipment_id) errs.push(fieldError_('equipment_id', 'INVALID_VALUE'));
+  var num = p.value_num === '' || p.value_num === null || p.value_num === undefined ? null : Number(p.value_num);
+  if (num !== null && !isFinite(num)) errs.push(fieldError_('value_num', 'INVALID_VALUE'));
+  var text = trimStr_(p.value_text).slice(0, 200);
+  if (key === 'dimensions' && text) text = text.replace(/\s*[xX*×]\s*/g, '×').replace(/\s+/g, '');
+  if (num === null && !text) errs.push(fieldError_('value_num', 'REQUIRED'));
+  var unit = normUnit_(p.unit);
+  if (lab && !unit && SPEC_STD_[key]) unit = SPEC_STD_[key][0];
+  if (lab && unit && allowedUnits_(key, lookups).indexOf(unit) < 0) errs.push(fieldError_('unit', 'UNIT_NOT_ALLOWED'));
+  var sort = p.sort_order === undefined || p.sort_order === '' || p.sort_order === null ? (lab ? lab.sort : 500) : Number(p.sort_order);
+  if (!(sort >= 0 && sort <= 100000)) errs.push(fieldError_('sort_order', 'INVALID_VALUE'));
+  if (!cur0 && Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var eqId = cur0 ? cur0.equipment_id : p.equipment_id;
+  return executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT_SPEC', entity_id: p.spec_id,
+    build: function () {
+      var eq = findOne_('Equipment', 'equipment_id', eqId);
+      if (!eq || eq.archived_at) throw validationError_([fieldError_('equipment_id', 'NOT_FOUND')]);
+      var cur = findOne_('EquipmentSpecs', 'spec_id', p.spec_id);
+      if (cur) assertVersion_(ctx, cur, 'EQUIPMENT_SPEC', 'EquipmentSpecs');
+      // Mỗi cặp (thiết bị, khóa) một dòng còn hiệu lực
+      var dup = findAll_('EquipmentSpecs', 'equipment_id', eqId).filter(function (s) {
+        return !s.archived_at && s.spec_key === key && s.spec_id !== p.spec_id;
+      });
+      if (dup.length) throw validationError_([fieldError_('spec_key', 'CODE_DUPLICATE')]);
+      var row = cur ? clone_(cur) : { spec_id: p.spec_id, equipment_id: eqId };
+      var before = cur ? { spec_key: cur.spec_key, value_num: cur.value_num, value_text: cur.value_text, unit: cur.unit } : null;
+      row.spec_key = key; row.label_vi = lab.vi; row.label_zh = lab.zh;
+      row.value_num = num === null ? '' : num; row.value_text = text; row.unit = unit; row.sort_order = sort;
+      row.i18n_meta = { label: { src: 'vi', state: 'HUMAN', at: isoVN_(now_()) } };
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'EquipmentSpecs', mode: cur ? 'update' : 'insert', row: row }],
+        result: { entity_type: 'EQUIPMENT_SPEC', entity_id: p.spec_id, record_version: row.record_version, record: projectRow_(ctx, row, 'EquipmentSpecs') },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: eqId, before_json: before, after_json: { spec_key: key, value_num: row.value_num, value_text: text, unit: unit } }
+      };
+    }
+  });
 }
 
 // ===== 11_inspection.js =====
@@ -2853,6 +3100,7 @@ function docUploadCondOk_(ctx, auth, module, kind, entity) {
 
 function docUpload_(ctx) {
   var p = ctx.req.payload;
+  if (p.external_url !== undefined && p.content_b64 === undefined) return docAddLink_(ctx);
   var errs = [];
   if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
   var et = ENTITY_TYPES[p.entity_type];
@@ -3038,6 +3286,93 @@ function docSetPrivate_(ctx) {
   });
 }
 
+/** doc.upload kèm external_url (không có tệp): liên kết tài liệu ngoài, riêng tư theo loại (EQ-04) */
+function docAddLink_(ctx) {
+  var p = ctx.req.payload;
+  var errs = [];
+  if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
+  var et = ENTITY_TYPES[p.entity_type];
+  if (!et || !et.module) errs.push(fieldError_('entity_type', 'INVALID_VALUE'));
+  if (!isUuidV4_(p.entity_id)) errs.push(fieldError_('entity_id', 'ID_INVALID'));
+  var scope = DOC_KIND_SCOPE[p.kind];
+  if (!scope || scope === 'LINK_VIEW') errs.push(fieldError_('kind', 'INVALID_VALUE'));
+  var url = trimStr_(p.external_url);
+  if (!/^https:\/\/[^\s<>"]{3,2000}$/.test(url)) errs.push(fieldError_('external_url', 'URL_INVALID'));
+  if (p.document_date && !isDateStr_(p.document_date)) errs.push(fieldError_('document_date', 'INVALID_DATE'));
+  requireOneLang_(errs, p, null, 'title');
+  if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var module = et.module;
+  var auth = authorize_(ctx, 'doc.upload', { module: module });
+  var entity = findOne_(et.sheet, et.key, p.entity_id);
+  if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
+  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity)) throw apiError_('FORBIDDEN');
+  if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  var tr = applyTranslations_('Documents', ['title'], { title_vi: p.title_vi, title_zh: p.title_zh }, null);
+  return executeWrite_(ctx, {
+    entity_type: 'DOCUMENT', entity_id: p.document_id,
+    build: function () {
+      if (findRowNums_('Documents', 'document_id', p.document_id).length) throw validationError_([fieldError_('document_id', 'ID_EXISTS')]);
+      var row = {
+        document_id: p.document_id, entity_type: p.entity_type, entity_id: p.entity_id,
+        title_vi: tr.values.title_vi, title_zh: tr.values.title_zh, i18n_meta: tr.meta,
+        kind: p.kind, drive_file_id: '', external_url: url, mime_type: '', file_version: 1, access_scope: scope,
+        document_date: p.document_date || dateVN_(now_()), active: true, managed_folder_id: '', storage_kind: 'LINK',
+        owned_by_app: false, drive_sharing_state: 'NOT_SHARED', sharing_updated_at: '', sharing_error_code: '', size_bytes: '', thumb_drive_file_id: ''
+      };
+      cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'Documents', mode: 'insert', row: row }],
+        result: { entity_type: 'DOCUMENT', entity_id: p.document_id, document_id: p.document_id, record_version: 1, record: projectDoc_(ctx, row) },
+        record_version: 1,
+        audit: { entity_type: 'DOCUMENT', entity_id: p.document_id, before_json: null, after_json: { kind: p.kind, entity_type: p.entity_type, entity_id: p.entity_id, external_url: url } }
+      };
+    }
+  });
+}
+
+/** doc.archive: gỡ tài liệu khỏi hồ sơ (không xóa file Drive); ảnh LINK_VIEW đưa về riêng tư (2.6) */
+function docArchive_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.document_id)) throw validationError_([fieldError_('document_id', 'ID_INVALID')]);
+  var d0 = findOne_('Documents', 'document_id', p.document_id);
+  if (!d0) throw apiError_('NOT_FOUND');
+  var module = docModule_(d0.entity_type);
+  var auth = authorize_(ctx, 'doc.archive', { module: module });
+  if (auth.conds.length && d0.created_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');
+  if (d0.access_scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
+  if (ex) return withWriteLock_(function () { return existingOpResponse_(ctx, ex, payloadHash_(ctx)); });
+  if (!d0.active || d0.archived_at) throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
+  var share = null;
+  if (d0.access_scope === 'LINK_VIEW' && d0.drive_sharing_state === 'LINK_SHARED') {
+    var ok = true, err = '';
+    try {
+      ok = makePrivate_(d0.drive_file_id);
+      if (d0.thumb_drive_file_id) ok = makePrivate_(d0.thumb_drive_file_id) && ok;
+    } catch (e) { ok = false; err = String(e && e.message || e).slice(0, 80); }
+    share = { state: ok ? 'REVOKED' : 'FAILED', err: ok ? '' : (err || 'NOT_PRIVATE') };
+  }
+  return executeWrite_(ctx, {
+    entity_type: 'DOCUMENT', entity_id: p.document_id,
+    build: function () {
+      var cur = findOne_('Documents', 'document_id', p.document_id);
+      assertVersion_(ctx, cur, 'DOCUMENT', 'Documents');
+      var row = clone_(cur);
+      row.active = false;
+      row.archived_at = isoVN_(now_());
+      if (share) { row.drive_sharing_state = share.state; row.sharing_error_code = share.err; row.sharing_updated_at = row.archived_at; }
+      cUpdate_(ctx, row);
+      return {
+        writes: [{ sheet: 'Documents', mode: 'update', row: row }],
+        result: { entity_type: 'DOCUMENT', entity_id: p.document_id, record_version: row.record_version, archived: true },
+        record_version: row.record_version,
+        audit: { entity_type: 'DOCUMENT', entity_id: p.document_id, before_json: { active: true }, after_json: { active: false, drive_sharing_state: row.drive_sharing_state }, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+}
+
 // ===== 13_sync.js =====
 /* 13_sync: sync.bootstrap, sync.changes, sync.push, sync.getOperationStatus (phụ lục 1.5 mục 3.15) */
 
@@ -3046,6 +3381,10 @@ var SYNC_ENTITIES_ = [
   { type: 'VENDOR', sheet: 'Vendors', action: 'catalog.view', module: 'catalog' },
   { type: 'LOOKUP', sheet: 'LookupValues', action: 'catalog.view', module: 'catalog' },
   { type: 'EQUIPMENT', sheet: 'Equipment', action: 'equipment.view', module: 'equipment', qr: true },
+  { type: 'EQUIPMENT_SPEC', sheet: 'EquipmentSpecs', action: 'equipment.view', module: 'equipment' },
+  { type: 'MATERIAL', sheet: 'Materials', action: 'material.view', module: 'warehouse', qr: true },
+  { type: 'EQUIPMENT_PART', sheet: 'EquipmentParts', action: 'equipment.view', module: 'equipment' },
+  { type: 'EQUIPMENT_PART_EVENT', sheet: 'EquipmentPartEvents', action: 'equipment.view', module: 'equipment' },
   { type: 'INSPECTION_TYPE', sheet: 'InspectionTypes', action: 'inspection.view', module: 'inspections' },
   { type: 'INSPECTION_REQUIREMENT', sheet: 'InspectionRequirements', action: 'inspection.view', module: 'inspections', qr: true },
   { type: 'INSPECTION', sheet: 'Inspections', action: 'inspection.view', module: 'inspections', qr: true },
@@ -3234,6 +3573,41 @@ function qrResolve_(ctx) {
     qr_state: row.active ? 'OK' : 'INACTIVE', entity_type: row.entity_type, entity_id: row.entity_id,
     code: row.code, qr_key: row.qr_key
   };
+}
+
+/**
+ * qr.print {entity_type, ids}: dữ liệu tem (mã, tên, khu vực, qr_key) cho hồ sơ người in được xem; ghi AuditLogs số tem.
+ * Tem không có logo, không giá, không PIN/token (6.5.2). Cần mạng (4.4.11).
+ */
+var PRINTABLE_ = { EQUIPMENT: 1, MATERIAL: 1, INSPECTION_REQUIREMENT: 1, CONTRACT: 1 };
+function qrPrint_(ctx) {
+  var p = ctx.req.payload || {};
+  var et = ENTITY_TYPES[p.entity_type];
+  if (!et || !PRINTABLE_[p.entity_type]) throw validationError_([fieldError_('entity_type', 'INVALID_VALUE')]);
+  if (!Array.isArray(p.ids) || !p.ids.length || p.ids.length > 240) throw validationError_([fieldError_('ids', 'INVALID_VALUE')]);
+  authorize_(ctx, 'qr.print', { module: et.module });
+  if (!can_(ctx, VIEW_ACTION_BY_MODULE_[et.module], { module: et.module })) throw apiError_('FORBIDDEN');
+  var want = {};
+  p.ids.forEach(function (id) { if (isUuidV4_(id)) want[id] = true; });
+  var items = [];
+  readRows_('QrRegistry').forEach(function (q) {
+    if (q.entity_type !== p.entity_type || !want[q.entity_id] || !q.active) return;
+    items.push({ entity_type: q.entity_type, entity_id: q.entity_id, code: q.code, qr_key: q.qr_key, name_vi: q.label_vi, name_zh: q.label_zh });
+  });
+  if (p.entity_type === 'EQUIPMENT' && items.length) {
+    var locs = {};
+    readRows_('Locations').forEach(function (l) { locs[l.location_id] = l.location_code; });
+    var eqLoc = {};
+    readRows_('Equipment').forEach(function (e) { eqLoc[e.equipment_id] = locs[e.location_id] || ''; });
+    items.forEach(function (it) { it.location_code = eqLoc[it.entity_id] || ''; });
+  }
+  withWriteLock_(function () {
+    writeAudit_({
+      user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'qr.print', entity_type: p.entity_type, entity_id: items.length === 1 ? items[0].entity_id : '',
+      before_json: null, after_json: { count: items.length, codes: items.slice(0, 50).map(function (x) { return x.code; }) }, operation_id: '', auth_basis: authBasis_(ctx)
+    });
+  });
+  return { items: items, env: envName_() };
 }
 
 // ===== 15_admin.js =====
@@ -3935,6 +4309,341 @@ function pocResetPin() {
   log_('Đã cấp PIN tạm cho ' + code + ' (hạn 72 giờ), mọi phiên cũ của người này đã bị thu hồi.');
 }
 
+// ===== 17_materials.js =====
+/* 17_materials: Kho vật tư (danh mục) và linh kiện theo máy — 1.4 §5.1, §5.4; phụ lục 1.5 mục 4.4.2, 6.4.
+ * M&E không chốt tồn: không có cột tồn, giá kho; gắn linh kiện không tạo phiếu xuất. */
+
+var MATERIAL_GROUPS_ = ['EQUIPMENT_PART', 'ELECTRICAL', 'WATER', 'CONSUMABLE', 'TOOL', 'PPE'];
+var ITEM_KINDS_ = ['COMPONENT', 'CONSUMABLE', 'REUSABLE_TOOL'];
+var MATERIAL_FIELDS_ = ['part_number', 'manufacturer', 'model', 'base_unit', 'vendor_id', 'lead_time_days', 'group_key', 'item_kind', 'is_equipment_component'];
+
+function validateMaterialFields_(p, errs, isNew) {
+  if (p.group_key !== undefined && p.group_key !== '' && MATERIAL_GROUPS_.indexOf(p.group_key) < 0) errs.push(fieldError_('group_key', 'INVALID_VALUE'));
+  if (p.item_kind !== undefined && p.item_kind !== '' && ITEM_KINDS_.indexOf(p.item_kind) < 0) errs.push(fieldError_('item_kind', 'INVALID_VALUE'));
+  if (isNew && !trimStr_(p.base_unit)) errs.push(fieldError_('base_unit', 'REQUIRED'));
+  if (p.base_unit !== undefined && String(p.base_unit).length > 20) errs.push(fieldError_('base_unit', 'INVALID_VALUE'));
+  if (p.lead_time_days !== undefined && p.lead_time_days !== '' && p.lead_time_days !== null) {
+    var d = Number(p.lead_time_days);
+    if (!(d >= 0 && d <= 3650 && Math.floor(d) === d)) errs.push(fieldError_('lead_time_days', 'INVALID_VALUE'));
+  }
+  ['part_number', 'manufacturer', 'model'].forEach(function (f) {
+    if (p[f] !== undefined && String(p[f]).length > 120) errs.push(fieldError_(f, 'INVALID_VALUE'));
+  });
+  // Kho làm sau (1.4 §22): cột tồn tối thiểu, lô, serial không nhận ở Đợt 1
+  ['reorder_level', 'lot_tracking', 'serial_tracking', 'stock', 'unit_cost', 'price'].forEach(function (f) {
+    if (p[f] !== undefined && p[f] !== '' && p[f] !== null) errs.push(fieldError_(f, 'WAREHOUSE_NOT_CONNECTED'));
+  });
+}
+
+function materialRefs_(p, errs) {
+  if (p.vendor_id && (!isUuidV4_(p.vendor_id) || !findRowNums_('Vendors', 'vendor_id', p.vendor_id).length)) errs.push(fieldError_('vendor_id', 'NOT_FOUND'));
+}
+
+/** Điều kiện "nếu bật" của Thủ kho: authorize_ đã kiểm cờ (2, warehouse) C/E */
+function materialCreate_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.material_id)) errs.push(fieldError_('material_id', 'ID_INVALID'));
+  requireOneLang_(errs, p, null, 'name');
+  validateMaterialFields_(p, errs, true);
+  if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var tr = applyTranslations_('Materials', ['name', 'specification'], p, null);
+  return executeWrite_(ctx, {
+    entity_type: 'MATERIAL', entity_id: p.material_id,
+    build: function (st) {
+      var e2 = [];
+      if (findRowNums_('Materials', 'material_id', p.material_id).length) e2.push(fieldError_('material_id', 'ID_EXISTS'));
+      materialRefs_(p, e2);
+      if (e2.length) throw validationError_(e2);
+      var su = {};
+      var code = allocCode_(st, su, 'MATERIAL', p.material_code, null);
+      var qrKey = allocQrKey_();
+      var row = {
+        material_id: p.material_id, material_code: code, name_vi: tr.values.name_vi, name_zh: tr.values.name_zh,
+        specification_vi: tr.values.specification_vi, specification_zh: tr.values.specification_zh, i18n_meta: tr.meta,
+        reorder_level: '', lot_tracking: false, serial_tracking: false, active: true
+      };
+      MATERIAL_FIELDS_.forEach(function (f) { row[f] = p[f] !== undefined ? p[f] : ''; });
+      row.base_unit = normUnit_(row.base_unit);
+      row.is_equipment_component = p.is_equipment_component === true || p.is_equipment_component === 'true';
+      if (!row.group_key) row.group_key = row.is_equipment_component ? 'EQUIPMENT_PART' : 'CONSUMABLE';
+      if (!row.item_kind) row.item_kind = row.is_equipment_component ? 'COMPONENT' : 'CONSUMABLE';
+      if (row.lead_time_days !== '' && row.lead_time_days !== null) row.lead_time_days = Number(row.lead_time_days);
+      cNew_(ctx, row);
+      return {
+        writes: [
+          { sheet: 'Materials', mode: 'insert', row: row },
+          { sheet: 'QrRegistry', mode: 'insert', row: qrRow_(qrKey, 'MATERIAL', p.material_id, code, row.name_vi, row.name_zh) }
+        ],
+        state: su,
+        result: { entity_type: 'MATERIAL', entity_id: p.material_id, display_code: code, qr_key: qrKey, record_version: 1, record: projectRow_(ctx, row, 'Materials') },
+        record_version: 1,
+        audit: { entity_type: 'MATERIAL', entity_id: p.material_id, before_json: null, after_json: row }
+      };
+    }
+  });
+}
+
+function materialEdit_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.material_id)) throw validationError_([fieldError_('material_id', 'ID_INVALID')]);
+  var cur0 = findOne_('Materials', 'material_id', p.material_id);
+  if (!cur0) throw apiError_('NOT_FOUND');
+  var errs = [];
+  requireOneLang_(errs, p, cur0, 'name');
+  validateMaterialFields_(p, errs, false);
+  if (p.base_unit !== undefined && !trimStr_(p.base_unit)) errs.push(fieldError_('base_unit', 'REQUIRED'));
+  if (p.active !== undefined && typeof p.active !== 'boolean') errs.push(fieldError_('active', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var tr = applyTranslations_('Materials', ['name', 'specification'], p, cur0);
+  return executeWrite_(ctx, {
+    entity_type: 'MATERIAL', entity_id: p.material_id,
+    build: function (st) {
+      var cur = findOne_('Materials', 'material_id', p.material_id);
+      assertVersion_(ctx, cur, 'MATERIAL', 'Materials');
+      var e2 = [];
+      materialRefs_(p, e2);
+      if (e2.length) throw validationError_(e2);
+      var before = clone_(cur); delete before.__row;
+      var row = clone_(cur);
+      var su = {};
+      if (p.material_code !== undefined && trimStr_(p.material_code).toUpperCase() !== cur.material_code) {
+        row.material_code = allocCode_(st, su, 'MATERIAL', p.material_code, null);
+      }
+      row.name_vi = tr.values.name_vi; row.name_zh = tr.values.name_zh;
+      row.specification_vi = tr.values.specification_vi; row.specification_zh = tr.values.specification_zh; row.i18n_meta = tr.meta;
+      MATERIAL_FIELDS_.forEach(function (f) { if (p[f] !== undefined) row[f] = p[f]; });
+      if (p.base_unit !== undefined) row.base_unit = normUnit_(p.base_unit);
+      if (p.is_equipment_component !== undefined) row.is_equipment_component = p.is_equipment_component === true || p.is_equipment_component === 'true';
+      if (p.active !== undefined) row.active = p.active;
+      if (row.lead_time_days !== '' && row.lead_time_days !== null) row.lead_time_days = Number(row.lead_time_days);
+      cUpdate_(ctx, row);
+      var writes = [{ sheet: 'Materials', mode: 'update', row: row }];
+      var qr = findOne_('QrRegistry', 'entity_id', p.material_id);
+      if (qr && (qr.code !== row.material_code || qr.label_vi !== row.name_vi || qr.label_zh !== row.name_zh || qr.active !== !!row.active)) {
+        var q2 = clone_(qr); delete q2.__row;
+        q2.code = row.material_code; q2.label_vi = row.name_vi; q2.label_zh = row.name_zh; q2.active = !!row.active;
+        writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 });
+      }
+      var after = clone_(row); delete after.__row;
+      return {
+        writes: writes, state: su,
+        result: { entity_type: 'MATERIAL', entity_id: p.material_id, display_code: row.material_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Materials') },
+        record_version: row.record_version,
+        audit: { entity_type: 'MATERIAL', entity_id: p.material_id, before_json: before, after_json: after, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+}
+
+/**
+ * material.archive: Ngừng dùng (active = false). Giữ dòng và quan hệ lịch sử; máy đang gắn vẫn hiện tên.
+ * Không xóa khỏi danh mục khi máy khác còn liên kết (4.4.2).
+ */
+function materialArchive_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.material_id)) throw validationError_([fieldError_('material_id', 'ID_INVALID')]);
+  if (!trimStr_(p.reason)) throw validationError_([fieldError_('reason', 'REQUIRED')]);
+  var res = executeWrite_(ctx, {
+    entity_type: 'MATERIAL', entity_id: p.material_id,
+    build: function () {
+      var cur = findOne_('Materials', 'material_id', p.material_id);
+      if (!cur) throw apiError_('NOT_FOUND');
+      assertVersion_(ctx, cur, 'MATERIAL', 'Materials');
+      if (!cur.active) throw validationError_([fieldError_('material_id', 'INVALID_VALUE')]);
+      var row = clone_(cur);
+      row.active = false;
+      cUpdate_(ctx, row);
+      var writes = [{ sheet: 'Materials', mode: 'update', row: row }];
+      var qr = findOne_('QrRegistry', 'entity_id', p.material_id);
+      if (qr && qr.active) { var q2 = clone_(qr); delete q2.__row; q2.active = false; writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 }); }
+      return {
+        writes: writes,
+        result: { entity_type: 'MATERIAL', entity_id: p.material_id, display_code: row.material_code, record_version: row.record_version, record: projectRow_(ctx, row, 'Materials') },
+        record_version: row.record_version,
+        audit: { entity_type: 'MATERIAL', entity_id: p.material_id, before_json: { active: true }, after_json: { active: false }, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+  if (res.ok && res.code === 'OK') revokeEntityPhotos_(ctx, 'MATERIAL', p.material_id);
+  return res;
+}
+
+function materialView_(ctx) {
+  var p = ctx.req.payload || {};
+  var qm = qrMap_();
+  if (p.material_id) {
+    var r = findOne_('Materials', 'material_id', p.material_id);
+    if (!r) throw apiError_('NOT_FOUND');
+    var o = projectRow_(ctx, r, 'Materials');
+    o.qr_key = qm[r.material_id] || null;
+    var parts = findAll_('EquipmentParts', 'material_id', r.material_id).filter(function (x) { return !x.removed_at && !x.archived_at; })
+      .map(function (x) { return projectRow_(ctx, x, 'EquipmentParts'); });
+    return { item: o, used_on: parts, warehouse_connected: !!setting_('warehouse_connected') };
+  }
+  var f = p.filters || {};
+  var q = trimStr_(f.q).toLowerCase();
+  var rows = readRows_('Materials').filter(function (r) {
+    if (!r.active && !p.include_inactive) return false;
+    if (f.group_key && r.group_key !== f.group_key) return false;
+    if (f.item_kind && r.item_kind !== f.item_kind) return false;
+    if (f.is_equipment_component !== undefined && f.is_equipment_component !== '' && !!r.is_equipment_component !== !!f.is_equipment_component) return false;
+    if (q && [r.material_code, r.name_vi, r.name_zh, r.part_number, r.model].join(' ').toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  rows.sort(function (a, b) { return String(a.material_code).localeCompare(String(b.material_code)); });
+  var size = Math.min(200, Number(p.page_size) || setting_('list_page_size'));
+  var start = Number(p.page_token || 0);
+  return {
+    items: rows.slice(start, start + size).map(function (r) { var o = projectRow_(ctx, r, 'Materials'); o.qr_key = qm[r.material_id] || null; return o; }),
+    total: rows.length, next_page_token: start + size < rows.length ? String(start + size) : null,
+    warehouse_connected: !!setting_('warehouse_connected')
+  };
+}
+
+/* ---------------- Linh kiện theo máy (EquipmentParts) ---------------- */
+
+function partEvent_(ctx, part, type, extra) {
+  var nowIso = isoVN_(now_());
+  var ev = {
+    event_id: uuid_(), equipment_id: part.equipment_id, equipment_part_id: part.equipment_part_id, material_id: part.material_id,
+    event_type: type, quantity: part.installed_qty, unit: part.unit, position_vi: part.position_vi || '', position_zh: part.position_zh || '',
+    occurred_at: nowIso, work_type: '', work_id: '', usage_line_id: '', actor_user_id: ctx.user.user_id,
+    note_vi: '', note_zh: '', dataset_epoch: sysProps_().dataset_epoch, created_at: nowIso, created_by: ctx.user.user_id,
+    i18n_meta: {}
+  };
+  if (extra && extra.note) { ev.note_vi = extra.note; ev.i18n_meta = { note: { src: 'vi', state: 'MANUAL_REQUIRED', at: nowIso } }; }
+  return ev;
+}
+
+/**
+ * part.link: gắn vật tư có sẵn vào máy hoặc sửa liên kết (lượng lắp, vị trí, chức năng).
+ * Cấp 2 (KT) gắn/sửa thì chưa xác nhận (approved_by trống); C3/C4 gắn thì tự ghi approved_by (4.4.2 ²).
+ * Không tạo tồn hay phiếu xuất.
+ */
+function partLink_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  if (!isUuidV4_(p.equipment_part_id)) errs.push(fieldError_('equipment_part_id', 'ID_INVALID'));
+  var cur0 = isUuidV4_(p.equipment_part_id) ? findOne_('EquipmentParts', 'equipment_part_id', p.equipment_part_id) : null;
+  if (!cur0) {
+    if (!isUuidV4_(p.equipment_id)) errs.push(fieldError_('equipment_id', 'ID_INVALID'));
+    if (!isUuidV4_(p.material_id)) errs.push(fieldError_('material_id', 'REQUIRED'));
+    if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  }
+  var qty = p.installed_qty === undefined ? (cur0 ? cur0.installed_qty : null) : (p.installed_qty === '' || p.installed_qty === null ? null : Number(p.installed_qty));
+  if (qty === null || !(qty > 0) || !isFinite(qty)) errs.push(fieldError_('installed_qty', qty === null ? 'REQUIRED' : 'INVALID_VALUE'));
+  if (p.effective_from && !isDateStr_(p.effective_from)) errs.push(fieldError_('effective_from', 'INVALID_DATE'));
+  var lvl = Number(ctx.user.role_level);
+  if (p.alternate_part_id !== undefined && p.alternate_part_id !== '' && lvl < 3) errs.push(fieldError_('alternate_part_id', 'INVALID_VALUE'));
+  if (p.alternate_part_id && !isUuidV4_(p.alternate_part_id)) errs.push(fieldError_('alternate_part_id', 'ID_INVALID'));
+  if (errs.length) throw validationError_(errs);
+  var tr = applyTranslations_('EquipmentParts', ['function', 'position'], p, cur0);
+  var entityId = cur0 ? cur0.equipment_part_id : p.equipment_part_id;
+  return executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT_PART', entity_id: entityId,
+    build: function () {
+      var cur = findOne_('EquipmentParts', 'equipment_part_id', p.equipment_part_id);
+      if (cur) {
+        assertVersion_(ctx, cur, 'EQUIPMENT_PART', 'EquipmentParts');
+        if (cur.removed_at || cur.archived_at) throw validationError_([fieldError_('equipment_part_id', 'INVALID_VALUE')]);
+      }
+      var eqId = cur ? cur.equipment_id : p.equipment_id;
+      var matId = cur ? cur.material_id : p.material_id;
+      var eq = findOne_('Equipment', 'equipment_id', eqId);
+      if (!eq || eq.archived_at) throw validationError_([fieldError_('equipment_id', 'NOT_FOUND')]);
+      var mat = findOne_('Materials', 'material_id', matId);
+      if (!mat || (!cur && !mat.active)) throw validationError_([fieldError_('material_id', 'NOT_FOUND')]);
+      if (!cur && !mat.is_equipment_component) throw validationError_([fieldError_('material_id', 'NOT_COMPONENT')]);
+      if (!cur) {
+        var dup = findAll_('EquipmentParts', 'equipment_id', eqId).filter(function (x) { return x.material_id === matId && !x.removed_at && !x.archived_at; });
+        if (dup.length) throw validationError_([fieldError_('material_id', 'CODE_DUPLICATE')]);
+      }
+      if (p.alternate_part_id && !findRowNums_('Materials', 'material_id', p.alternate_part_id).length) throw validationError_([fieldError_('alternate_part_id', 'NOT_FOUND')]);
+      var nowIso = isoVN_(now_());
+      var row = cur ? clone_(cur) : { equipment_part_id: p.equipment_part_id, equipment_id: eqId, material_id: matId, removed_at: '' };
+      var before = cur ? { installed_qty: cur.installed_qty, function_vi: cur.function_vi, position_vi: cur.position_vi, approved_by: cur.approved_by } : null;
+      row.installed_qty = qty;
+      row.unit = mat.base_unit;
+      row.function_vi = tr.values.function_vi; row.function_zh = tr.values.function_zh;
+      row.position_vi = tr.values.position_vi; row.position_zh = tr.values.position_zh; row.i18n_meta = tr.meta;
+      if (p.compatibility_note !== undefined) row.compatibility_note = trimStr_(p.compatibility_note).slice(0, 300);
+      if (p.alternate_part_id !== undefined) row.alternate_part_id = p.alternate_part_id || '';
+      if (p.effective_from !== undefined) row.effective_from = p.effective_from || '';
+      if (!row.effective_from) row.effective_from = dateVN_(now_());
+      // C3/C4 gắn hoặc sửa: tự xác nhận; cấp 2 gắn/sửa: chờ C3/C4 xác nhận
+      row.approved_by = lvl >= 3 ? ctx.user.user_id : '';
+      if (cur) cUpdate_(ctx, row); else cNew_(ctx, row);
+      var ev = partEvent_(ctx, row, cur ? 'EDITED' : 'LINKED');
+      return {
+        writes: [{ sheet: 'EquipmentParts', mode: cur ? 'update' : 'insert', row: row }, { sheet: 'EquipmentPartEvents', mode: 'insert', row: ev }],
+        result: { entity_type: 'EQUIPMENT_PART', entity_id: row.equipment_part_id, record_version: row.record_version, record: projectRow_(ctx, row, 'EquipmentParts') },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: eqId, before_json: before, after_json: { material_id: matId, installed_qty: qty, approved_by: row.approved_by } }
+      };
+    }
+  });
+}
+
+/** part.unlink: kết thúc liên kết (removed_at); KT chỉ gỡ liên kết mình tạo chưa xác nhận; bắt lý do */
+function partUnlink_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.equipment_part_id)) throw validationError_([fieldError_('equipment_part_id', 'ID_INVALID')]);
+  if (!trimStr_(p.reason)) throw validationError_([fieldError_('reason', 'REQUIRED')]);
+  return executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT_PART', entity_id: p.equipment_part_id,
+    build: function () {
+      var cur = findOne_('EquipmentParts', 'equipment_part_id', p.equipment_part_id);
+      if (!cur) throw apiError_('NOT_FOUND');
+      if (ctx.auth && ctx.auth.conds.length && (cur.created_by !== ctx.user.user_id || cur.approved_by)) throw apiError_('FORBIDDEN');
+      assertVersion_(ctx, cur, 'EQUIPMENT_PART', 'EquipmentParts');
+      if (cur.removed_at || cur.archived_at) throw validationError_([fieldError_('equipment_part_id', 'INVALID_VALUE')]);
+      var row = clone_(cur);
+      var nowIso = isoVN_(now_());
+      row.removed_at = nowIso;
+      row.archived_at = nowIso;
+      cUpdate_(ctx, row);
+      var ev = partEvent_(ctx, row, 'UNLINKED', { note: trimStr_(p.reason).slice(0, 300) });
+      return {
+        writes: [{ sheet: 'EquipmentParts', mode: 'update', row: row }, { sheet: 'EquipmentPartEvents', mode: 'insert', row: ev }],
+        result: { entity_type: 'EQUIPMENT_PART', entity_id: row.equipment_part_id, record_version: row.record_version, removed: true },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: row.equipment_id, before_json: { material_id: row.material_id }, after_json: { removed_at: nowIso }, reason: trimStr_(p.reason) }
+      };
+    }
+  });
+}
+
+/** part.approve: C3/C4 xác nhận liên kết do người khác gắn (không tự duyệt, 4.6); đặt alternate_part_id */
+function partApprove_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.equipment_part_id)) throw validationError_([fieldError_('equipment_part_id', 'ID_INVALID')]);
+  if (p.alternate_part_id && !isUuidV4_(p.alternate_part_id)) throw validationError_([fieldError_('alternate_part_id', 'ID_INVALID')]);
+  return executeWrite_(ctx, {
+    entity_type: 'EQUIPMENT_PART', entity_id: p.equipment_part_id,
+    build: function () {
+      var cur = findOne_('EquipmentParts', 'equipment_part_id', p.equipment_part_id);
+      if (!cur || cur.removed_at || cur.archived_at) throw apiError_('NOT_FOUND');
+      var basis = assertNotSelf_(ctx, 'part.approve', [cur.created_by, cur.updated_by]);
+      assertVersion_(ctx, cur, 'EQUIPMENT_PART', 'EquipmentParts');
+      if (cur.approved_by) throw validationError_([fieldError_('equipment_part_id', 'INVALID_VALUE')]);
+      if (p.alternate_part_id && !findRowNums_('Materials', 'material_id', p.alternate_part_id).length) throw validationError_([fieldError_('alternate_part_id', 'NOT_FOUND')]);
+      var row = clone_(cur);
+      row.approved_by = ctx.user.user_id;
+      if (p.alternate_part_id !== undefined) row.alternate_part_id = p.alternate_part_id || '';
+      cUpdate_(ctx, row);
+      var ev = partEvent_(ctx, row, 'APPROVED');
+      return {
+        writes: [{ sheet: 'EquipmentParts', mode: 'update', row: row }, { sheet: 'EquipmentPartEvents', mode: 'insert', row: ev }],
+        result: { entity_type: 'EQUIPMENT_PART', entity_id: row.equipment_part_id, record_version: row.record_version, record: projectRow_(ctx, row, 'EquipmentParts') },
+        record_version: row.record_version,
+        audit: { entity_type: 'EQUIPMENT', entity_id: row.equipment_id, before_json: { approved_by: '' }, after_json: { approved_by: row.approved_by, alternate_part_id: row.alternate_part_id }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+      };
+    }
+  });
+}
+
 // ===== i18n/labels.json =====
 /** Bản chép từ điển nhãn của app (5.3) cho email, Excel, lời báo */
-var LABELS = {"nav.home":["Trang chủ","首页"],"nav.work":["Công việc","工单"],"nav.scan":["Quét QR","扫码"],"nav.alerts":["Nhắc hạn","到期提醒"],"nav.account":["Tài khoản","账户"],"menu.title":["Danh mục","功能菜单"],"module.equipment":["Thiết bị","设备"],"module.maintenance":["Bảo trì","保养"],"module.repairs":["Sửa chữa","维修"],"module.warehouse":["Kho vật tư","物料库"],"module.utilities":["Điện nước","水电"],"module.reports":["Báo cáo","报表"],"module.circuits":["Tra cứu lộ điện","电路查询"],"module.contracts":["Hợp đồng thuê ngoài","外包合同"],"module.inspections":["Kiểm định","检验"],"tab.specs":["Thông số","参数"],"tab.parts":["Linh kiện","配件"],"tab.documents":["Tài liệu","文件"],"tab.history":["Lịch sử","历史记录"],"tab.plans":["Kế hoạch","计划"],"tab.work_orders":["Phiếu thực hiện","执行工单"],"tab.calendar":["Lịch","日程"],"tab.catalog":["Danh mục","物料目录"],"tab.parts_by_equipment":["Vật tư theo máy","设备用料"],"tab.requests":["Đề nghị","物料申请"],"tab.usage":["Lượng dùng","物料用量"],"btn.import_excel":["Nhập Excel","导入Excel"],"btn.export_excel":["Xuất Excel","导出Excel"],"btn.report":["Báo cáo","报表"],"btn.qr":["QR","二维码"],"btn.view_qr":["Xem QR","查看二维码"],"btn.print_qr":["In QR","打印二维码"],"btn.save_draft":["Lưu nháp","保存草稿"],"btn.submit_review":["Gửi duyệt","提交审核"],"btn.submit_acceptance":["Gửi nghiệm thu","提交验收"],"btn.approve":["Duyệt","批准"],"btn.reject":["Từ chối","驳回"],"btn.accept_pass":["Nghiệm thu đạt","验收通过"],"btn.accept_fail":["Không đạt, trả lại","验收不通过"],"btn.add":["Thêm","新增"],"btn.edit":["Sửa","编辑"],"btn.save":["Lưu","保存"],"btn.cancel":["Hủy","取消"],"btn.back":["Quay lại","返回"],"btn.close":["Đóng","关闭"],"btn.ok":["Đồng ý","确定"],"btn.confirm":["Đúng","确认"],"btn.retry":["Thử lại","重试"],"btn.more":["Thêm thao tác","更多操作"],"btn.search":["Tìm","搜索"],"btn.filter":["Lọc","筛选"],"btn.clear_filter":["Bỏ lọc","清除筛选"],"btn.sync_now":["Đồng bộ ngay","立即同步"],"btn.export_backup":["Xuất dự phòng","导出备份"],"btn.keep_drafts":["Giữ nháp trên máy","保留本机草稿"],"btn.delete_drafts":["Xóa nháp","删除草稿"],"btn.delete_draft":["Xóa nháp","删除草稿"],"btn.change_pin":["Đổi PIN","修改PIN"],"btn.logout":["Đăng xuất","退出登录"],"btn.logout_all":["Đăng xuất mọi thiết bị","退出所有设备"],"btn.relogin":["Đăng nhập lại","重新登录"],"btn.download":["Tải về","下载"],"btn.open_save":["Mở / Lưu","打开/保存"],"btn.download_offline":["Tải để xem ngoại tuyến","下载以离线查看"],"btn.set_private":["Đặt riêng tư","设为私有"],"btn.suggest_translation":["Gợi ý dịch","翻译建议"],"btn.retranslate":["Dịch lại","重新翻译"],"btn.backup_now":["Sao lưu ngay","立即备份"],"btn.resend":["Gửi lại","重新发送"],"btn.archive":["Ngừng sử dụng","停用"],"btn.unarchive":["Dùng lại","恢复使用"],"btn.upload":["Tải lên","上传"],"btn.add_link":["Thêm liên kết","添加链接"],"btn.take_photo":["Chụp ảnh","拍照"],"btn.choose_file":["Chọn tệp","选择文件"],"btn.remove":["Bỏ","移除"],"btn.use_server":["Dùng bản máy chủ","采用服务器版本"],"btn.edit_on_server":["Sửa tiếp trên bản máy chủ","基于服务器版本修改"],"btn.copy_to_draft":["Chép thành nháp mới","复制为新草稿"],"btn.view":["Xem","查看"],"btn.open":["Mở","打开"],"btn.revoke":["Thu hồi","撤销"],"btn.replace_part":["Thay linh kiện","更换配件"],"btn.link_part":["Gắn linh kiện có sẵn","关联已有配件"],"btn.new_part":["Thêm linh kiện mới","新增配件"],"btn.edit_unlink":["Sửa/Gỡ liên kết","编辑或解除关联"],"btn.unlink":["Gỡ liên kết","解除关联"],"btn.schedule":["Lịch hẹn","预约"],"btn.month_calendar":["Lịch tháng","月历"],"btn.acknowledge":["Tiếp nhận","受理"],"wo_status.DRAFT":["Nháp","草稿","grey"],"wo_status.ASSIGNED":["Đã giao việc","已分配","navy"],"wo_status.IN_PROGRESS":["Đang làm","进行中","navy"],"wo_status.PENDING_ACCEPTANCE":["Chờ nghiệm thu","待验收","amber"],"wo_status.COMPLETED":["Hoàn thành","已完成","green"],"wo_status.CANCELLED":["Đã hủy","已取消","grey"],"repair_status.REPORTED":["Mới báo","新报告","amber"],"repair_status.ASSIGNED":["Đã phân công","已分配","navy"],"repair_status.IN_PROGRESS":["Đang xử lý","处理中","navy"],"repair_status.PENDING_ACCEPTANCE":["Chờ nghiệm thu","待验收","amber"],"repair_status.COMPLETED":["Hoàn thành","已完成","green"],"repair_status.CANCELLED":["Đã hủy","已取消","grey"],"mreq_status.DRAFT":["Nháp","草稿","grey"],"mreq_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"mreq_status.APPROVED":["Đã duyệt","已批准","green"],"mreq_status.REJECTED":["Bị từ chối","已驳回","red"],"mreq_status.CANCELLED":["Đã hủy","已取消","grey"],"mreq_status.PENDING_WAREHOUSE":["Chờ chuyển kho","待转仓库","amber"],"mreq_status.SENT":["Đã gửi kho","已发送仓库","navy"],"mreq_status.PARTIALLY_ISSUED":["Đã xuất một phần","部分出库","amber"],"mreq_status.FULFILLED":["Đã xuất đủ","已全部出库","green"],"cert_status.DRAFT":["Nháp","草稿","grey"],"cert_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"cert_status.APPROVED":["Đã duyệt","已批准","green"],"cert_status.REJECTED":["Bị từ chối","已驳回","red"],"cert_status.SUPERSEDED":["Đã thay thế","已被取代","grey"],"cert_status.REVOKED":["Đã thu hồi","已撤销","red"],"renewal_status.DRAFT":["Nháp","草稿","grey"],"renewal_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"renewal_status.APPROVED":["Đã duyệt","已批准","green"],"renewal_status.REJECTED":["Bị từ chối","已驳回","red"],"stock_status.DRAFT":["Nháp","草稿","grey"],"stock_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"stock_status.APPROVED":["Đã duyệt","已批准","green"],"stock_status.CANCELLED":["Đã hủy","已取消","grey"],"stock_status.POSTED":["Đã chốt","已过账","green"],"usage_status.DRAFT":["Nháp","草稿","grey"],"usage_status.PENDING_CONFIRMATION":["Chờ xác nhận","待确认","amber"],"usage_status.CONFIRMED":["Đã xác nhận","已确认","green"],"reset_status.PREVIEWED":["Đã xem trước","已预览","grey"],"reset_status.LOCKED":["Đã khóa vận hành","已锁定","amber"],"reset_status.BACKING_UP":["Đang sao lưu","正在备份","navy"],"reset_status.RESETTING":["Đang xóa","正在清除","navy"],"reset_status.VERIFYING":["Đang kiểm tra","正在校验","navy"],"reset_status.COMPLETED":["Hoàn tất","已完成","green"],"reset_status.FAILED_NEEDS_RECOVERY":["Lỗi, cần xử lý tiếp","失败，需恢复","red"],"import_status.VALIDATING":["Đang kiểm tra","校验中","navy"],"import_status.NEEDS_FIX":["Cần sửa lỗi","需修正","red"],"import_status.READY":["Sẵn sàng nhập","可导入","green"],"import_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"import_status.COMMITTING":["Đang ghi","写入中","navy"],"import_status.COMMITTED":["Đã nhập","已导入","green"],"import_status.PARTIAL":["Nhập dở","部分导入","amber"],"import_status.FAILED":["Thất bại","失败","red"],"op_state.QUEUED":["Chờ gửi","待同步","amber"],"op_state.PREPARED":["Đang gửi","同步中","navy"],"op_state.SENDING":["Đang gửi","同步中","navy"],"op_state.COMMITTED":["Đã lưu máy chủ","已同步","green"],"op_state.FAILED":["Lỗi gửi","同步失败","red"],"op_state.REJECTED":["Bị từ chối","被拒","red"],"op_state.CONFLICT":["Xung đột","冲突","red"],"op_state.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"op_state.UNKNOWN_RESULT":["Chưa rõ kết quả","结果未知","amber"],"email_status.QUEUED":["Chờ gửi","待发送","amber"],"email_status.SENDING":["Đang gửi","发送中","navy"],"email_status.SENT":["Đã gửi","已发送","green"],"email_status.FAILED":["Gửi lỗi","发送失败","red"],"email_status.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"email_status.SKIPPED":["Bỏ qua","已跳过","grey"],"contract_lifecycle.ACTIVE":["Đang hiệu lực","生效中","green"],"contract_lifecycle.SUPERSEDED":["Đã thay thế","已被取代","grey"],"contract_lifecycle.ENDED":["Đã kết thúc","已终止","grey"],"contract_lifecycle.NOT_RENEWED":["Không gia hạn","不续约","grey"],"alert_state.OPEN":["Đang nhắc","提醒中","amber"],"alert_state.ACKNOWLEDGED":["Đã tiếp nhận","已受理","navy"],"alert_state.RESOLVED":["Đã đóng","已关闭","grey"],"user_status.ACTIVE":["Đang hoạt động","正常","green"],"user_status.LOCKED":["Tạm khóa","已锁定","red"],"user_status.MUST_CHANGE_PIN":["Phải đổi PIN","需修改PIN","amber"],"user_status.DISABLED":["Ngừng dùng","已停用","grey"],"backup_status.VERIFIED":["Đã kiểm chứng","已校验","green"],"backup_status.INCONSISTENT":["Không nhất quán","不一致","amber"],"backup_status.FAILED":["Thất bại","失败","red"],"doc_kind.PHOTO_EQUIPMENT":["Ảnh thiết bị","设备照片"],"doc_kind.PHOTO_MATERIAL":["Ảnh vật tư","物料照片"],"doc_kind.PHOTO_SITE":["Ảnh hiện trường","现场照片"],"doc_kind.PHOTO_METER":["Ảnh đồng hồ","表计照片"],"doc_kind.CERTIFICATE":["Chứng nhận, biên bản kiểm định","检验证书、报告"],"doc_kind.DRAWING":["Bản vẽ, sơ đồ","图纸、图表"],"doc_kind.MANUAL":["Hướng dẫn, datasheet","说明书、技术资料"],"doc_kind.IMPORT_FILE":["File Excel đã nhập","已导入文件"],"doc_kind.OTHER":["Khác","其他"],"doc_kind.CONTRACT":["Hợp đồng, phụ lục","合同、附件"],"doc_kind.INVOICE":["Hóa đơn, biên bản dịch vụ","发票、服务记录"],"doc_kind.REPORT_FILE":["File báo cáo đã tạo","已生成报表"],"doc_scope.LINK_VIEW":["Ai có link: xem","知道链接者可查看","grey"],"doc_scope.MODULE_VIEW":["Riêng tư","私有","navy"],"doc_scope.COST_VIEW":["Riêng tư, có giá","私有（含价格）","navy"],"sharing.NOT_SHARED":["Chưa chia sẻ","未共享","grey"],"sharing.LINK_SHARED":["Đã chia sẻ link","已共享链接","green"],"sharing.PENDING":["Đang chia sẻ","共享中","amber"],"sharing.FAILED":["Chia sẻ lỗi","共享失败","red"],"sharing.REVOKED":["Đã đưa về riêng tư","已设为私有","grey"],"due_state.NOT_DUE":["Còn hạn","未到期","green"],"due_state.DUE_SOON":["Sắp tới hạn — Còn {N} ngày","即将到期 — 剩余 {N} 天","amber"],"due_state.DUE_TODAY":["Đến hạn hôm nay","今日到期","red"],"due_state.OVERDUE":["Quá hạn {N} ngày","已逾期 {N} 天","red"],"due_state.MISSING":["Chưa đủ hồ sơ","资料不全","amber"],"due_filter.ALL":["Tất cả","全部"],"due_filter.DUE_SOON":["Sắp tới hạn","即将到期"],"due_filter.DUE_TODAY":["Đến hạn hôm nay","今日到期"],"due_filter.OVERDUE":["Quá hạn","已逾期"],"due_filter.MISSING":["Chưa đủ hồ sơ","资料不全"],"record_status.INCOMPLETE":["Chưa đủ hồ sơ","资料不全","amber"],"record_status.VALID":["Hợp lệ","有效","green"],"record_status.FAILED":["Không đạt","不合格","red"],"record_status.REVOKED":["Đã thu hồi","已撤销","red"],"record_status.SUSPENDED":["Tạm ngưng","暂停","grey"],"inspection_result.PASS":["Đạt","合格","green"],"inspection_result.FAIL":["Không đạt","不合格","red"],"inspection_result.CONDITIONAL_PASS":["Đạt có điều kiện","有条件合格","amber"],"equipment_status.RUNNING":["Đang hoạt động","运行中","green"],"equipment_status.STOPPED":["Dừng máy","停机","red"],"equipment_status.UNDER_REPAIR":["Đang sửa","维修中","amber"],"equipment_status.UNDER_MAINTENANCE":["Đang bảo trì","保养中","amber"],"equipment_status.STANDBY":["Dự phòng","备用","grey"],"equipment_status.RETIRED":["Ngừng sử dụng","停用","grey"],"criticality.HIGH":["Quan trọng cao","关键"],"criticality.MEDIUM":["Quan trọng","重要"],"criticality.LOW":["Thường","一般"],"severity.HIGH":["Cao","高","red"],"severity.MEDIUM":["Trung bình","中","amber"],"severity.LOW":["Thấp","低","grey"],"priority.URGENT":["Khẩn","紧急","red"],"priority.HIGH":["Cao","高","amber"],"priority.NORMAL":["Thường","普通","grey"],"priority.LOW":["Thấp","低","grey"],"check_result.PENDING":["Chưa có kết quả","未填写","grey"],"check_result.PASS":["Đạt","合格","green"],"check_result.FAIL":["Không đạt","不合格","red"],"check_result.NA":["Không áp dụng","不适用","grey"],"overall_result.PASS":["Đạt","合格","green"],"overall_result.FAIL":["Không đạt","不合格","red"],"result_type.PASS_FAIL":["Đạt/Không đạt","合格/不合格"],"result_type.NUMBER":["Số đo","测量值"],"result_type.TEXT":["Ghi nhận","记录"],"acceptance_result.PASS":["Nghiệm thu đạt","验收通过","green"],"acceptance_result.FAIL":["Nghiệm thu không đạt","验收不通过","red"],"material_group.EQUIPMENT_PART":["Linh kiện thiết bị","设备配件"],"material_group.ELECTRICAL":["Vật tư điện","电气物料"],"material_group.WATER":["Vật tư nước","给排水物料"],"material_group.CONSUMABLE":["Vật tư tiêu hao","耗材"],"material_group.TOOL":["Dụng cụ","工具"],"material_group.PPE":["Bảo hộ","劳保用品"],"item_kind.COMPONENT":["Linh kiện","配件"],"item_kind.CONSUMABLE":["Tiêu hao","消耗品"],"item_kind.REUSABLE_TOOL":["Dụng cụ dùng lại","可重复使用工具"],"equipment_component.TRUE":["Gắn máy được","可关联设备","navy"],"equipment_component.FALSE":["Không gắn máy","不关联设备","grey"],"material_active.TRUE":["Đang dùng","在用","green"],"material_active.FALSE":["Ngừng dùng","停用","grey"],"utility_type.ELECTRICITY":["Điện","电"],"utility_type.WATER":["Nước","水"],"cost_source.MANUAL_REFERENCE":["Tham khảo","参考"],"cost_source.WAREHOUSE_POSTED":["Kho đã chốt","仓库已过账"],"part.unconfirmed":["Chưa xác nhận","未确认","amber"],"part.confirmed":["Đã xác nhận","已确认","green"],"part_event.LINKED":["Gắn linh kiện","关联配件"],"part_event.EDITED":["Sửa liên kết","修改关联"],"part_event.UNLINKED":["Gỡ liên kết","解除关联"],"part_event.APPROVED":["Xác nhận liên kết","确认关联"],"part_event.REMOVED":["Tháo","拆下"],"part_event.INSTALLED":["Lắp","安装"],"part_event.REPLACED":["Thay","更换"],"sync.offline":["Ngoại tuyến","离线"],"sync.online":["Trực tuyến","在线"],"sync.local_saved":["Đã lưu trên máy","已保存在本机"],"sync.queued":["Chờ gửi","待同步"],"sync.queued_count":["{N} mục chờ gửi","待同步数据 {N} 条"],"sync.sending":["Đang gửi","同步中"],"sync.committed":["Đã lưu máy chủ","已同步"],"sync.conflict":["Xung đột, cần xử lý","冲突，需处理"],"sync.failed":["Lỗi gửi","同步失败"],"sync.last":["Lần đồng bộ cuối","上次同步"],"sync.offline_data":["Dữ liệu ngoại tuyến, cập nhật lúc {T}","离线数据，更新于 {T}"],"sync.need_network":["Cần kết nối mạng","需要网络连接"],"sync.dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"sync.safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"sync.syncing":["Đang đồng bộ…","正在同步…"],"sync.done":["Đã đồng bộ","同步完成"],"sync.never":["Chưa đồng bộ","尚未同步"],"draft.rejected":["Nháp bị từ chối","被拒草稿"],"draft.old_epoch":["Nháp thế hệ dữ liệu cũ","旧数据草稿"],"draft.other_user":["Máy còn {N} nháp của người dùng khác","本机有 {N} 份其他用户的草稿"],"draft.title":["Nháp chờ đồng bộ","待同步草稿"],"draft.empty":["Không có mục nào","没有项目"],"draft.auto_delete":["Tự xóa sau {N} ngày","{N} 天后自动删除"],"draft.delete_confirm":["Xóa hẳn nháp này? Không lấy lại được.","确定删除此草稿？删除后无法恢复。"],"draft.delete_all_confirm":["Xóa hẳn {N} nháp chưa gửi? Không lấy lại được.","确定删除 {N} 份未同步草稿？删除后无法恢复。"],"draft.photos":["{N} ảnh","{N} 张照片"],"draft.created":["Tạo lúc","创建时间"],"draft.error_code":["Mã lỗi","错误代码"],"draft.size":["Dung lượng","大小"],"action.inspection.submit":["Nộp chứng nhận kiểm định","提交检验证书"],"action.contract.service.record":["Ghi dịch vụ hợp đồng","记录合同服务"],"action.doc.upload":["Tải tài liệu lên","上传文件"],"action.equipment.edit":["Sửa thiết bị","编辑设备"],"action.material.edit":["Sửa vật tư","编辑物料"],"conflict.title":["Xử lý xung đột","处理冲突"],"conflict.mine":["Bản của tôi","我的版本"],"conflict.server":["Bản máy chủ","服务器版本"],"conflict.diff":["Khác nhau","不同"],"conflict.by":["Người sửa","修改人"],"conflict.at":["Lúc","时间"],"conflict.use_server_confirm":["Bỏ thay đổi của bạn và dùng bản máy chủ? Có thể xuất dự phòng trước.","放弃您的修改并采用服务器版本？可先导出备份。"],"conflict.help":["Có người đã sửa hồ sơ này trước bạn. Không có nút ghi đè: chọn dùng bản máy chủ hoặc sửa tiếp trên bản máy chủ.","此记录已被他人先行修改。不提供覆盖：请采用服务器版本，或基于服务器版本继续修改。"],"auth.offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"auth.failed":["Mã nhân viên hoặc PIN không đúng","工号或PIN错误"],"auth.locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"auth.paused":["Đăng nhập đang tạm dừng, thử lại sau {N} phút","登录已暂停，请 {N} 分钟后重试"],"auth.attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"auth.temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"],"auth.revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"auth.session_warn":["Phiên sắp hết hạn — {D}","会话即将到期 — {D}"],"auth.shared_device":["Máy dùng chung","公用设备"],"auth.switch_user":["Đăng nhập người khác","切换用户"],"auth.open_with_pin":["Mở bằng PIN","用PIN打开"],"auth.expired_offline":["Phiên đã hết hạn: chỉ xem nháp và xuất dự phòng","会话已过期：只能查看草稿和导出备份"],"auth.server_slow":["Máy chủ đang phản hồi chậm…","服务器响应较慢…"],"auth.need_online_login":["Cần đăng nhập trực tuyến","需在线登录"],"auth.others_relogin":["Các thiết bị khác phải đăng nhập lại","其他设备需重新登录"],"auth.logout_all_confirm":["Mọi phiên, kể cả máy đang dùng, sẽ hết hiệu lực. Dùng khi mất điện thoại.","所有会话（包括本机）将失效。用于手机丢失时。"],"auth.logout_has_drafts":["Còn {N} mục chưa gửi lên máy chủ. Chọn cách xử lý trước khi đăng xuất.","仍有 {N} 条未同步到服务器。退出前请选择处理方式。"],"level.1":["Tra cứu","查询"],"level.2":["Nhân viên","员工"],"level.3":["Trưởng bộ phận","部门主管"],"level.4":["Quản trị","管理员"],"level.owner":["Chủ hệ thống","系统所有者"],"subrole.KY_THUAT":["Kỹ thuật viên","技术员"],"subrole.DOC_DIEN_NUOC":["Đọc điện nước","抄表员"],"subrole.HD_KD":["Quản lý hợp đồng/kiểm định","合同/检验管理"],"subrole.THU_KHO":["Thủ kho","仓管员"],"subrole.BAO_SU_CO":["Báo sự cố","报修员"],"account.profile":["Hồ sơ","个人资料"],"account.display_name":["Tên hiển thị","显示名称"],"account.level":["Cấp","级别"],"account.subroles":["Vai trò","岗位"],"account.no_subrole":["Chưa được giao vai trò","未分配岗位"],"account.sync":["Đồng bộ","同步"],"account.security":["Bảo mật","安全"],"account.sessions":["Phiên đăng nhập","登录会话"],"account.this_device":["Máy này","本机"],"account.issued":["Đăng nhập lúc","登录时间"],"account.last_seen":["Hoạt động gần nhất","最近活动"],"account.expires":["Hết hạn","到期"],"account.guide":["Hướng dẫn","使用指南"],"account.add_home":["Thêm app vào Màn hình chính: trong Safari bấm Chia sẻ → Thêm vào MH chính","将应用添加到主屏幕：在Safari中点击分享→添加到主屏幕"],"account.info":["Thông tin","信息"],"account.app_version":["Phiên bản app","应用版本"],"account.api_version":["Phiên bản API","API版本"],"account.server_version":["Phiên bản máy chủ","服务器版本"],"account.admin":["Quản trị","管理"],"account.poc":["Bàn thử PoC","PoC测试台"],"admin.users":["Người dùng và PIN tạm","用户与临时PIN"],"admin.permissions":["Phân quyền","权限"],"admin.catalog":["Danh mục chung","基础数据"],"admin.gmail":["Người nhận Gmail và nhật ký gửi","邮件收件人与发送记录"],"admin.backup":["Sao lưu","备份"],"admin.audit":["Nhật ký thao tác","操作日志"],"admin.status":["Trạng thái hệ thống","系统状态"],"admin.system_data":["Dữ liệu hệ thống","系统数据"],"home.week":["Lịch tuần này","本周日程"],"home.deadlines":["Thời hạn quan trọng","重要期限"],"home.due_soon":["Sắp tới hạn","即将到期"],"home.overdue":["Quá hạn","已逾期"],"home.none":["Không có","无"],"home.today_work":["Công việc hôm nay","今日工作"],"home.no_work_today":["Không có việc hôm nay","今天没有任务"],"home.wo_coming":["Phiếu bảo trì/sửa chữa","保养/维修工单"],"home.item_inspection":["Kiểm định","检验"],"home.item_contract":["Hợp đồng","合同"],"home.item_service":["Dịch vụ HĐ","合同服务"],"home.records":["{N} hồ sơ","{N} 条"],"col.type":["Loại","类型"],"col.code":["Mã","编号"],"col.content":["Nội dung","内容"],"col.equipment_location":["Thiết bị/Khu vực","设备/区域"],"col.due":["Hạn","期限"],"col.status":["Trạng thái","状态"],"col.owner":["Phụ trách","负责人"],"col.name":["Tên","名称"],"col.actions":["Thao tác","操作"],"weekday.1":["T2","周一"],"weekday.2":["T3","周二"],"weekday.3":["T4","周三"],"weekday.4":["T5","周四"],"weekday.5":["T6","周五"],"weekday.6":["T7","周六"],"weekday.7":["CN","周日"],"screen.equipment_list":["Thiết bị","设备"],"screen.equipment":["Hồ sơ thiết bị","设备档案"],"screen.equipment_new":["Thêm thiết bị","新增设备"],"screen.equipment_edit":["Sửa thiết bị","编辑设备"],"screen.material":["Hồ sơ vật tư","物料档案"],"screen.material_new":["Thêm vật tư","新增物料"],"screen.material_edit":["Sửa vật tư","编辑物料"],"screen.spec_edit":["Thông số","参数"],"screen.part_link":["Gắn linh kiện","关联配件"],"screen.qr":["Mã QR","二维码"],"screen.labels":["In tem QR","打印二维码标签"],"field.valid_from":["Hiệu lực từ","有效期自"],"field.valid_to":["Hiệu lực đến","有效期至"],"field.end_date":["Ngày hết hạn","到期日"],"field.renewal_notice_date":["Hạn báo gia hạn","续约通知期限"],"field.not_set":["Chưa có","暂无"],"field.equipment_code":["Mã thiết bị","设备编号"],"field.code_auto":["Để trống để máy chủ tự cấp mã","留空则由服务器自动编号"],"field.name":["Tên","名称"],"field.name_vi":["Tên tiếng Việt","越南语名称"],"field.name_zh":["Tên tiếng Trung","中文名称"],"field.one_lang":["Chỉ cần nhập một thứ tiếng, máy chủ tự dịch bên kia","只需填写一种语言，服务器自动翻译另一种"],"field.category":["Loại thiết bị","设备类别"],"field.location":["Khu vực","区域"],"field.vendor":["Nhà cung cấp","供应商"],"field.manufacturer":["Hãng sản xuất","制造商"],"field.model":["Model","型号"],"field.serial":["Số serial","序列号"],"field.manufacture_year":["Năm sản xuất","制造年份"],"field.install_date":["Ngày lắp đặt","安装日期"],"field.warranty_end":["Hết bảo hành","保修到期"],"field.status":["Tình trạng","状态"],"field.criticality":["Mức quan trọng","重要程度"],"field.owner":["Người phụ trách","负责人"],"field.reason":["Lý do","原因"],"field.reason_required":["Bắt buộc nhập lý do","必须填写原因"],"field.choose":["— Chọn —","— 请选择 —"],"field.none":["— Không —","— 无 —"],"field.search_placeholder":["Tìm mã, tên, model, serial","搜索编号、名称、型号、序列号"],"field.include_retired":["Gồm thiết bị ngừng sử dụng","含停用设备"],"field.total":["Tổng {N}","共 {N} 条"],"field.new_status":["Tình trạng khi dùng lại","恢复后的状态"],"field.qr_key":["Mã tem","标签码"],"field.document_title":["Tên tài liệu","文件名称"],"field.document_kind":["Loại tài liệu","文件类型"],"field.document_date":["Ngày tài liệu","文件日期"],"field.file_version":["Phiên bản","版本"],"field.external_url":["Liên kết","链接"],"field.uploaded_by":["Người tải lên","上传人"],"field.material_code":["Mã vật tư","物料编号"],"field.part_number":["Part number","零件号"],"field.specification":["Thông số","规格"],"field.specification_vi":["Thông số tiếng Việt","越南语规格"],"field.specification_zh":["Thông số tiếng Trung","中文规格"],"field.base_unit":["Đơn vị cơ sở","基本单位"],"field.lead_time_days":["Thời gian đặt hàng (ngày)","订货周期（天）"],"field.group":["Nhóm","分组"],"field.item_kind":["Loại","类型"],"field.is_component":["Gắn máy được","可关联设备"],"field.installed_qty":["Lượng lắp","安装数量"],"field.unit":["Đơn vị","单位"],"field.function":["Chức năng","功能"],"field.function_vi":["Chức năng tiếng Việt","越南语功能"],"field.function_zh":["Chức năng tiếng Trung","中文功能"],"field.position":["Vị trí lắp","安装位置"],"field.position_vi":["Vị trí lắp tiếng Việt","越南语安装位置"],"field.position_zh":["Vị trí lắp tiếng Trung","中文安装位置"],"field.alternate":["Thay thế được duyệt","已批准替代件"],"field.compatibility_note":["Ghi chú tương thích","兼容性说明"],"field.effective_from":["Từ ngày","生效日期"],"field.material":["Vật tư","物料"],"field.spec_key":["Thông số","参数"],"field.spec_value":["Giá trị","数值"],"field.spec_text":["Giá trị dạng chữ","文字值"],"field.sort_order":["Thứ tự","排序"],"field.used_on":["Dùng cho thiết bị","适用设备"],"field.stock":["Tồn kho","库存"],"field.usage_history":["Lịch sử dùng","使用记录"],"field.photos":["Ảnh","照片"],"field.event":["Sự kiện","事件"],"field.date":["Ngày","日期"],"field.actor":["Người làm","执行人"],"field.note":["Ghi chú","备注"],"field.inspection_type":["Loại kiểm định","检验类型"],"field.certificate_number":["Số chứng nhận","证书编号"],"field.inspection_date":["Ngày kiểm định","检验日期"],"field.result":["Kết quả","结果"],"field.contract":["Hợp đồng","合同"],"field.service":["Dịch vụ","服务"],"field.number_ambiguous":["Đã hiểu là {A}. Nếu là số hàng nghìn, gõ liền không dấu (vd 12350)","已识别为 {A}；如为千位数，请连续输入（如 12350）"],"field.number_bad_sep":["Không dùng dấu chấm/phẩy để tách hàng nghìn; gõ 1234567","请勿使用千位分隔符，请输入 1234567"],"field.unit_not_allowed":["Đơn vị không thuộc danh sách cho phép","单位不在允许范围内"],"spec.voltage":["Điện áp","电压"],"spec.rated_current":["Dòng điện định mức","额定电流"],"spec.electrical_power":["Công suất điện","电功率"],"spec.frequency":["Tần số","频率"],"spec.working_pressure":["Áp suất làm việc","工作压力"],"spec.flow_rate":["Lưu lượng","流量"],"spec.speed":["Tốc độ","转速"],"spec.dimensions":["Kích thước (D × R × C)","外形尺寸（长×宽×高）"],"spec.weight":["Trọng lượng","重量"],"spec.throughput":["Năng suất","产能"],"spec.rated_capacity_kva":["Dung lượng định mức (MBA)","额定容量"],"lookup_group.EQUIPMENT_CATEGORY":["Loại thiết bị","设备类别"],"lookup_group.UNIT":["Đơn vị tính","计量单位"],"lookup_group.SPEC_KEY":["Mẫu thông số","参数模板"],"lookup_group.CAUSE":["Nguyên nhân","原因"],"history.part_events":["Linh kiện","配件"],"history.contracts":["Hợp đồng","合同"],"history.inspections":["Kiểm định","检验"],"history.created":["Tạo hồ sơ","创建档案"],"history.empty":["Chưa có lịch sử","暂无历史记录"],"tag.machine_translated":["dịch máy","机器翻译"],"tag.no_translation":["Chưa có bản dịch","暂无译文"],"tag.warehouse_not_connected":["Chưa kết nối kho","尚未连接仓库"],"tag.coming_soon":["Sắp có","即将推出"],"tag.coming_soon_hint":["Chức năng sẽ có ở đợt sau","该功能将在后续版本推出"],"tag.pending_code":["Chờ cấp mã","待分配编号"],"tag.sample_data":["Dữ liệu mẫu","示例数据"],"tag.env_test":["THỬ","测试"],"tag.archived":["Đã lưu trữ","已归档","grey"],"feature.not_enabled":["Chức năng chưa bật","功能尚未启用"],"sys.maintenance":["Hệ thống đang bảo trì","系统维护中"],"cost.hidden":["Không có quyền xem giá","无权查看价格"],"qr.foreign":["Mã này không thuộc M&E","此码不属于M&E"],"qr.unavailable":["Không tìm thấy hoặc không có quyền xem","未找到或无权查看"],"qr.inactive":["Hồ sơ đã ngừng sử dụng","记录已停用"],"qr.expired":["Tem đã hết hiệu lực","标签已失效"],"qr.not_in_restored":["Không có mã này trong dữ liệu hiện tại; dữ liệu đã khôi phục về bản sao lưu cũ, tem in sau thời điểm đó cần in lại","当前数据中无此码；数据已恢复至旧备份，此后打印的标签需重新打印"],"qr.scan_hint":["Dùng nút Quét trong app, không dùng app Camera","请使用应用内扫码，不要用相机应用"],"qr.label_small":["Nhỏ 70 × 37 mm (24 tem/A4)","小 70 × 37 mm（每张A4 24枚）"],"qr.label_large":["Lớn 105 × 74 mm (8 tem/A4)","大 105 × 74 mm（每张A4 8枚）"],"qr.offset":["Chỉnh lệch lề (mm)","边距微调（毫米）"],"qr.print_hint":["Dùng In của trình duyệt hoặc Lưu PDF; khổ A4, lề 0","请使用浏览器打印或另存为PDF；A4纸，边距0"],"qr.print_standalone":["Trên app Màn hình chính iPhone không in trực tiếp được: mở bằng Safari hoặc máy tính","iPhone主屏幕应用无法直接打印：请用Safari或电脑打开"],"misc.interim":["Màn đầy đủ đang được làm trong Đợt 1; tạm thời chỉ xem dữ liệu đã tải","完整页面正在第一阶段开发中，暂时只能查看已下载数据"],"qr.test_env_warning":["Môi trường THỬ: không in tem thật","测试环境：请勿打印正式标签"],"qr.entity.EQUIPMENT":["Thiết bị","设备"],"qr.entity.MATERIAL":["Vật tư","物料"],"qr.entity.INSPECTION_REQUIREMENT":["Yêu cầu kiểm định","检验要求"],"qr.entity.CONTRACT":["Hợp đồng thuê ngoài","外包合同"],"qr.entity.INSPECTION":["Lần kiểm định","检验记录"],"i18n.lang_vi":["Tiếng Việt","越南语"],"i18n.lang_zh":["Tiếng Trung","中文"],"i18n.checked":["Đã kiểm tra bản dịch","已核对译文"],"doc.too_large":["Tệp quá lớn để mở trong app","文件过大，无法在应用内打开"],"doc.photo_warning":["Không chụp hợp đồng/chứng nhận vào mục ảnh","请勿将合同或证书作为照片上传"],"doc.upload_too_large_mobile":["Tệp trên {N} MB: hãy tải lên từ máy tính","超过{N} MB的文件请在电脑上上传"],"doc.none":["Chưa có tài liệu","暂无文件"],"doc.uploading":["Đang tải lên…","正在上传…"],"doc.offline_saved":["Đã lưu để xem ngoại tuyến","已保存以便离线查看"],"err.network":["Không kết nối được máy chủ","无法连接服务器"],"err.unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"err.client":["Lỗi trên máy","本机错误"],"err.not_found":["Không tìm thấy","未找到"],"err.forbidden":["Không có quyền","无权限"],"login":["Đăng nhập","登录"],"employee_code":["Mã nhân viên","员工编号"],"pin6":["PIN 6 số","六位数字密码"],"forgot_pin":["Quên PIN","忘记PIN"],"forgot_pin_help":["Liên hệ quản trị để đặt lại PIN","请联系管理员重置密码"],"same_account":["Dùng cùng tài khoản với iPhone","与iPhone使用同一账户"],"shared_device":["Máy dùng chung","公用设备"],"switch_user":["Đăng nhập người khác","切换用户"],"show_pin":["Hiện PIN","显示PIN"],"change_pin":["Đổi PIN","修改PIN"],"temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"current_pin":["PIN hiện tại","当前PIN"],"new_pin":["PIN mới","新PIN"],"new_pin_again":["Nhập lại PIN mới","确认新PIN"],"pin_mismatch":["Hai lần nhập PIN mới không khớp","两次输入的新PIN不一致"],"no_reuse_pin":["Không dùng lại PIN của app khác","请勿重复使用其他应用的PIN"],"pin_weak":["PIN quá dễ đoán, hãy chọn PIN khác","PIN过于简单，请换一个"],"pin_format":["PIN phải gồm đúng 6 chữ số","PIN必须为6位数字"],"offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"open_with_pin":["Mở bằng PIN","用PIN打开"],"attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"session_warn":["Phiên sắp hết hạn","会话即将到期"],"relogin":["Đăng nhập lại","重新登录"],"logout":["Đăng xuất","退出登录"],"offline":["Ngoại tuyến","离线"],"local_saved":["Đã lưu trên máy","已保存在本机"],"queued":["Chờ gửi","待同步"],"sending":["Đang gửi","同步中"],"committed":["Đã lưu máy chủ","已同步"],"conflict":["Xung đột, cần xử lý","冲突，需处理"],"failed":["Lỗi gửi","同步失败"],"last_sync":["Lần đồng bộ cuối","上次同步"],"sync_now":["Đồng bộ ngay","立即同步"],"need_network":["Cần kết nối mạng","需要网络连接"],"safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"maintenance":["Hệ thống đang bảo trì","系统维护中"],"network_error":["Không kết nối được máy chủ","无法连接服务器"],"unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"server_url":["Địa chỉ máy chủ (/exec)","服务器地址 (/exec)"],"server_url_missing":["Chưa có địa chỉ máy chủ","尚未设置服务器地址"],"server_url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式应为 https://script.google.com/macros/s/…/exec"],"save":["Lưu","保存"],"cancel":["Hủy","取消"],"back":["Quay lại","返回"],"download":["Tải về","下载"],"open_save":["Mở / Lưu","打开/保存"],"set_private":["Đặt riêng tư","设为私有"],"export_backup":["Xuất dự phòng","导出备份"],"pending_code":["Chờ cấp mã","待分配编号"],"machine_translated":["dịch máy","机器翻译"],"no_translation":["Chưa có bản dịch","暂无译文"],"sample_data":["Dữ liệu mẫu","示例数据"],"scan":["Quét QR","扫码"],"scan_hint":["Dùng nút Quét trong app, không dùng app Camera","请使用应用内扫码，不要用相机应用"],"open_in_app":["Mở app M&E và dùng nút Quét","请打开M&E应用并使用扫码按钮"],"continue_here":["Tiếp tục trong Safari","在Safari中继续"],"manual_code":["Nhập mã","输入编号"],"qr_foreign":["Mã này không thuộc M&E","此码不属于M&E"],"qr_unavailable":["Không tìm thấy hoặc không có quyền xem","未找到或无权查看"],"qr_inactive":["Hồ sơ đã ngừng sử dụng","记录已停用"],"qr_expired":["Tem đã hết hiệu lực","标签已失效"],"qr_not_in_restored":["Không có mã này trong dữ liệu hiện tại","当前数据中无此码"],"doc_too_large":["Tệp quá lớn để mở trong app","文件过大，无法在应用内打开"],"upload_too_large_mobile":["Tệp trên {N} MB: hãy tải lên từ máy tính","超过{N} MB的文件请在电脑上上传"],"photo_warning":["Không chụp hợp đồng/chứng nhận vào mục ảnh","请勿将合同或证书作为照片上传"],"coming_soon":["Sắp có","即将推出"],"env_test":["THỬ","测试"],"poc_title":["Kiểm thử PoC","PoC测试"],"equipment":["Thiết bị","设备"],"inspections":["Kiểm định","检验"]};
+var LABELS = {"nav.home":["Trang chủ","首页"],"nav.work":["Công việc","工单"],"nav.scan":["Quét QR","扫码"],"nav.alerts":["Nhắc hạn","到期提醒"],"nav.account":["Tài khoản","账户"],"menu.title":["Danh mục","功能菜单"],"module.equipment":["Thiết bị","设备"],"module.maintenance":["Bảo trì","保养"],"module.repairs":["Sửa chữa","维修"],"module.warehouse":["Kho vật tư","物料库"],"module.utilities":["Điện nước","水电"],"module.reports":["Báo cáo","报表"],"module.circuits":["Tra cứu lộ điện","电路查询"],"module.contracts":["Hợp đồng thuê ngoài","外包合同"],"module.inspections":["Kiểm định","检验"],"tab.specs":["Thông số","参数"],"tab.parts":["Linh kiện","配件"],"tab.documents":["Tài liệu","文件"],"tab.history":["Lịch sử","历史记录"],"tab.plans":["Kế hoạch","计划"],"tab.work_orders":["Phiếu thực hiện","执行工单"],"tab.calendar":["Lịch","日程"],"tab.catalog":["Danh mục","物料目录"],"tab.parts_by_equipment":["Vật tư theo máy","设备用料"],"tab.requests":["Đề nghị","物料申请"],"tab.usage":["Lượng dùng","物料用量"],"btn.import_excel":["Nhập Excel","导入Excel"],"btn.export_excel":["Xuất Excel","导出Excel"],"btn.report":["Báo cáo","报表"],"btn.qr":["QR","二维码"],"btn.view_qr":["Xem QR","查看二维码"],"btn.print_qr":["In QR","打印二维码"],"btn.save_draft":["Lưu nháp","保存草稿"],"btn.submit_review":["Gửi duyệt","提交审核"],"btn.submit_acceptance":["Gửi nghiệm thu","提交验收"],"btn.approve":["Duyệt","批准"],"btn.reject":["Từ chối","驳回"],"btn.accept_pass":["Nghiệm thu đạt","验收通过"],"btn.accept_fail":["Không đạt, trả lại","验收不通过"],"btn.add":["Thêm","新增"],"btn.edit":["Sửa","编辑"],"btn.save":["Lưu","保存"],"btn.cancel":["Hủy","取消"],"btn.back":["Quay lại","返回"],"btn.close":["Đóng","关闭"],"btn.ok":["Đồng ý","确定"],"btn.confirm":["Đúng","确认"],"btn.retry":["Thử lại","重试"],"btn.more":["Thêm thao tác","更多操作"],"btn.search":["Tìm","搜索"],"btn.filter":["Lọc","筛选"],"btn.clear_filter":["Bỏ lọc","清除筛选"],"btn.sync_now":["Đồng bộ ngay","立即同步"],"btn.export_backup":["Xuất dự phòng","导出备份"],"btn.keep_drafts":["Giữ nháp trên máy","保留本机草稿"],"btn.delete_drafts":["Xóa nháp","删除草稿"],"btn.delete_draft":["Xóa nháp","删除草稿"],"btn.change_pin":["Đổi PIN","修改PIN"],"btn.logout":["Đăng xuất","退出登录"],"btn.logout_all":["Đăng xuất mọi thiết bị","退出所有设备"],"btn.relogin":["Đăng nhập lại","重新登录"],"btn.download":["Tải về","下载"],"btn.open_save":["Mở / Lưu","打开/保存"],"btn.download_offline":["Tải để xem ngoại tuyến","下载以离线查看"],"btn.set_private":["Đặt riêng tư","设为私有"],"btn.suggest_translation":["Gợi ý dịch","翻译建议"],"btn.retranslate":["Dịch lại","重新翻译"],"btn.backup_now":["Sao lưu ngay","立即备份"],"btn.resend":["Gửi lại","重新发送"],"btn.archive":["Ngừng sử dụng","停用"],"btn.unarchive":["Dùng lại","恢复使用"],"btn.upload":["Tải lên","上传"],"btn.add_link":["Thêm liên kết","添加链接"],"btn.take_photo":["Chụp ảnh","拍照"],"btn.choose_file":["Chọn tệp","选择文件"],"btn.remove":["Bỏ","移除"],"btn.use_server":["Dùng bản máy chủ","采用服务器版本"],"btn.edit_on_server":["Sửa tiếp trên bản máy chủ","基于服务器版本修改"],"btn.copy_to_draft":["Chép thành nháp mới","复制为新草稿"],"btn.view":["Xem","查看"],"btn.open":["Mở","打开"],"btn.revoke":["Thu hồi","撤销"],"btn.replace_part":["Thay linh kiện","更换配件"],"btn.link_part":["Gắn linh kiện có sẵn","关联已有配件"],"btn.new_part":["Thêm linh kiện mới","新增配件"],"btn.edit_unlink":["Sửa/Gỡ liên kết","编辑或解除关联"],"btn.unlink":["Gỡ liên kết","解除关联"],"btn.schedule":["Lịch hẹn","预约"],"btn.month_calendar":["Lịch tháng","月历"],"btn.acknowledge":["Tiếp nhận","受理"],"wo_status.DRAFT":["Nháp","草稿","grey"],"wo_status.ASSIGNED":["Đã giao việc","已分配","navy"],"wo_status.IN_PROGRESS":["Đang làm","进行中","navy"],"wo_status.PENDING_ACCEPTANCE":["Chờ nghiệm thu","待验收","amber"],"wo_status.COMPLETED":["Hoàn thành","已完成","green"],"wo_status.CANCELLED":["Đã hủy","已取消","grey"],"repair_status.REPORTED":["Mới báo","新报告","amber"],"repair_status.ASSIGNED":["Đã phân công","已分配","navy"],"repair_status.IN_PROGRESS":["Đang xử lý","处理中","navy"],"repair_status.PENDING_ACCEPTANCE":["Chờ nghiệm thu","待验收","amber"],"repair_status.COMPLETED":["Hoàn thành","已完成","green"],"repair_status.CANCELLED":["Đã hủy","已取消","grey"],"mreq_status.DRAFT":["Nháp","草稿","grey"],"mreq_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"mreq_status.APPROVED":["Đã duyệt","已批准","green"],"mreq_status.REJECTED":["Bị từ chối","已驳回","red"],"mreq_status.CANCELLED":["Đã hủy","已取消","grey"],"mreq_status.PENDING_WAREHOUSE":["Chờ chuyển kho","待转仓库","amber"],"mreq_status.SENT":["Đã gửi kho","已发送仓库","navy"],"mreq_status.PARTIALLY_ISSUED":["Đã xuất một phần","部分出库","amber"],"mreq_status.FULFILLED":["Đã xuất đủ","已全部出库","green"],"cert_status.DRAFT":["Nháp","草稿","grey"],"cert_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"cert_status.APPROVED":["Đã duyệt","已批准","green"],"cert_status.REJECTED":["Bị từ chối","已驳回","red"],"cert_status.SUPERSEDED":["Đã thay thế","已被取代","grey"],"cert_status.REVOKED":["Đã thu hồi","已撤销","red"],"renewal_status.DRAFT":["Nháp","草稿","grey"],"renewal_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"renewal_status.APPROVED":["Đã duyệt","已批准","green"],"renewal_status.REJECTED":["Bị từ chối","已驳回","red"],"stock_status.DRAFT":["Nháp","草稿","grey"],"stock_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"stock_status.APPROVED":["Đã duyệt","已批准","green"],"stock_status.CANCELLED":["Đã hủy","已取消","grey"],"stock_status.POSTED":["Đã chốt","已过账","green"],"usage_status.DRAFT":["Nháp","草稿","grey"],"usage_status.PENDING_CONFIRMATION":["Chờ xác nhận","待确认","amber"],"usage_status.CONFIRMED":["Đã xác nhận","已确认","green"],"reset_status.PREVIEWED":["Đã xem trước","已预览","grey"],"reset_status.LOCKED":["Đã khóa vận hành","已锁定","amber"],"reset_status.BACKING_UP":["Đang sao lưu","正在备份","navy"],"reset_status.RESETTING":["Đang xóa","正在清除","navy"],"reset_status.VERIFYING":["Đang kiểm tra","正在校验","navy"],"reset_status.COMPLETED":["Hoàn tất","已完成","green"],"reset_status.FAILED_NEEDS_RECOVERY":["Lỗi, cần xử lý tiếp","失败，需恢复","red"],"import_status.VALIDATING":["Đang kiểm tra","校验中","navy"],"import_status.NEEDS_FIX":["Cần sửa lỗi","需修正","red"],"import_status.READY":["Sẵn sàng nhập","可导入","green"],"import_status.PENDING_APPROVAL":["Chờ duyệt","待审核","amber"],"import_status.COMMITTING":["Đang ghi","写入中","navy"],"import_status.COMMITTED":["Đã nhập","已导入","green"],"import_status.PARTIAL":["Nhập dở","部分导入","amber"],"import_status.FAILED":["Thất bại","失败","red"],"op_state.QUEUED":["Chờ gửi","待同步","amber"],"op_state.PREPARED":["Đang gửi","同步中","navy"],"op_state.SENDING":["Đang gửi","同步中","navy"],"op_state.COMMITTED":["Đã lưu máy chủ","已同步","green"],"op_state.FAILED":["Lỗi gửi","同步失败","red"],"op_state.REJECTED":["Bị từ chối","被拒","red"],"op_state.CONFLICT":["Xung đột","冲突","red"],"op_state.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"op_state.UNKNOWN_RESULT":["Chưa rõ kết quả","结果未知","amber"],"email_status.QUEUED":["Chờ gửi","待发送","amber"],"email_status.SENDING":["Đang gửi","发送中","navy"],"email_status.SENT":["Đã gửi","已发送","green"],"email_status.FAILED":["Gửi lỗi","发送失败","red"],"email_status.UNKNOWN":["Chưa rõ kết quả","结果未知","amber"],"email_status.SKIPPED":["Bỏ qua","已跳过","grey"],"contract_lifecycle.ACTIVE":["Đang hiệu lực","生效中","green"],"contract_lifecycle.SUPERSEDED":["Đã thay thế","已被取代","grey"],"contract_lifecycle.ENDED":["Đã kết thúc","已终止","grey"],"contract_lifecycle.NOT_RENEWED":["Không gia hạn","不续约","grey"],"alert_state.OPEN":["Đang nhắc","提醒中","amber"],"alert_state.ACKNOWLEDGED":["Đã tiếp nhận","已受理","navy"],"alert_state.RESOLVED":["Đã đóng","已关闭","grey"],"user_status.ACTIVE":["Đang hoạt động","正常","green"],"user_status.LOCKED":["Tạm khóa","已锁定","red"],"user_status.MUST_CHANGE_PIN":["Phải đổi PIN","需修改PIN","amber"],"user_status.DISABLED":["Ngừng dùng","已停用","grey"],"backup_status.VERIFIED":["Đã kiểm chứng","已校验","green"],"backup_status.INCONSISTENT":["Không nhất quán","不一致","amber"],"backup_status.FAILED":["Thất bại","失败","red"],"doc_kind.PHOTO_EQUIPMENT":["Ảnh thiết bị","设备照片"],"doc_kind.PHOTO_MATERIAL":["Ảnh vật tư","物料照片"],"doc_kind.PHOTO_SITE":["Ảnh hiện trường","现场照片"],"doc_kind.PHOTO_METER":["Ảnh đồng hồ","表计照片"],"doc_kind.CERTIFICATE":["Chứng nhận, biên bản kiểm định","检验证书、报告"],"doc_kind.DRAWING":["Bản vẽ, sơ đồ","图纸、图表"],"doc_kind.MANUAL":["Hướng dẫn, datasheet","说明书、技术资料"],"doc_kind.IMPORT_FILE":["File Excel đã nhập","已导入文件"],"doc_kind.OTHER":["Khác","其他"],"doc_kind.CONTRACT":["Hợp đồng, phụ lục","合同、附件"],"doc_kind.INVOICE":["Hóa đơn, biên bản dịch vụ","发票、服务记录"],"doc_kind.REPORT_FILE":["File báo cáo đã tạo","已生成报表"],"doc_scope.LINK_VIEW":["Ai có link: xem","知道链接者可查看","grey"],"doc_scope.MODULE_VIEW":["Riêng tư","私有","navy"],"doc_scope.COST_VIEW":["Riêng tư, có giá","私有（含价格）","navy"],"sharing.NOT_SHARED":["Chưa chia sẻ","未共享","grey"],"sharing.LINK_SHARED":["Đã chia sẻ link","已共享链接","green"],"sharing.PENDING":["Đang chia sẻ","共享中","amber"],"sharing.FAILED":["Chia sẻ lỗi","共享失败","red"],"sharing.REVOKED":["Đã đưa về riêng tư","已设为私有","grey"],"due_state.NOT_DUE":["Còn hạn","未到期","green"],"due_state.DUE_SOON":["Sắp tới hạn — Còn {N} ngày","即将到期 — 剩余 {N} 天","amber"],"due_state.DUE_TODAY":["Đến hạn hôm nay","今日到期","red"],"due_state.OVERDUE":["Quá hạn {N} ngày","已逾期 {N} 天","red"],"due_state.MISSING":["Chưa đủ hồ sơ","资料不全","amber"],"due_filter.ALL":["Tất cả","全部"],"due_filter.DUE_SOON":["Sắp tới hạn","即将到期"],"due_filter.DUE_TODAY":["Đến hạn hôm nay","今日到期"],"due_filter.OVERDUE":["Quá hạn","已逾期"],"due_filter.MISSING":["Chưa đủ hồ sơ","资料不全"],"record_status.INCOMPLETE":["Chưa đủ hồ sơ","资料不全","amber"],"record_status.VALID":["Hợp lệ","有效","green"],"record_status.FAILED":["Không đạt","不合格","red"],"record_status.REVOKED":["Đã thu hồi","已撤销","red"],"record_status.SUSPENDED":["Tạm ngưng","暂停","grey"],"inspection_result.PASS":["Đạt","合格","green"],"inspection_result.FAIL":["Không đạt","不合格","red"],"inspection_result.CONDITIONAL_PASS":["Đạt có điều kiện","有条件合格","amber"],"equipment_status.RUNNING":["Đang hoạt động","运行中","green"],"equipment_status.STOPPED":["Dừng máy","停机","red"],"equipment_status.UNDER_REPAIR":["Đang sửa","维修中","amber"],"equipment_status.UNDER_MAINTENANCE":["Đang bảo trì","保养中","amber"],"equipment_status.STANDBY":["Dự phòng","备用","grey"],"equipment_status.RETIRED":["Ngừng sử dụng","停用","grey"],"criticality.HIGH":["Quan trọng cao","关键"],"criticality.MEDIUM":["Quan trọng","重要"],"criticality.LOW":["Thường","一般"],"severity.HIGH":["Cao","高","red"],"severity.MEDIUM":["Trung bình","中","amber"],"severity.LOW":["Thấp","低","grey"],"priority.URGENT":["Khẩn","紧急","red"],"priority.HIGH":["Cao","高","amber"],"priority.NORMAL":["Thường","普通","grey"],"priority.LOW":["Thấp","低","grey"],"check_result.PENDING":["Chưa có kết quả","未填写","grey"],"check_result.PASS":["Đạt","合格","green"],"check_result.FAIL":["Không đạt","不合格","red"],"check_result.NA":["Không áp dụng","不适用","grey"],"overall_result.PASS":["Đạt","合格","green"],"overall_result.FAIL":["Không đạt","不合格","red"],"result_type.PASS_FAIL":["Đạt/Không đạt","合格/不合格"],"result_type.NUMBER":["Số đo","测量值"],"result_type.TEXT":["Ghi nhận","记录"],"acceptance_result.PASS":["Nghiệm thu đạt","验收通过","green"],"acceptance_result.FAIL":["Nghiệm thu không đạt","验收不通过","red"],"material_group.EQUIPMENT_PART":["Linh kiện thiết bị","设备配件"],"material_group.ELECTRICAL":["Vật tư điện","电气物料"],"material_group.WATER":["Vật tư nước","给排水物料"],"material_group.CONSUMABLE":["Vật tư tiêu hao","耗材"],"material_group.TOOL":["Dụng cụ","工具"],"material_group.PPE":["Bảo hộ","劳保用品"],"item_kind.COMPONENT":["Linh kiện","配件"],"item_kind.CONSUMABLE":["Tiêu hao","消耗品"],"item_kind.REUSABLE_TOOL":["Dụng cụ dùng lại","可重复使用工具"],"equipment_component.TRUE":["Gắn máy được","可关联设备","navy"],"equipment_component.FALSE":["Không gắn máy","不关联设备","grey"],"material_active.TRUE":["Đang dùng","在用","green"],"material_active.FALSE":["Ngừng dùng","停用","grey"],"utility_type.ELECTRICITY":["Điện","电"],"utility_type.WATER":["Nước","水"],"cost_source.MANUAL_REFERENCE":["Tham khảo","参考"],"cost_source.WAREHOUSE_POSTED":["Kho đã chốt","仓库已过账"],"part.unconfirmed":["Chưa xác nhận","未确认","amber"],"part.confirmed":["Đã xác nhận","已确认","green"],"part_event.LINKED":["Gắn linh kiện","关联配件"],"part_event.EDITED":["Sửa liên kết","修改关联"],"part_event.UNLINKED":["Gỡ liên kết","解除关联"],"part_event.APPROVED":["Xác nhận liên kết","确认关联"],"part_event.REMOVED":["Tháo","拆下"],"part_event.INSTALLED":["Lắp","安装"],"part_event.REPLACED":["Thay","更换"],"sync.offline":["Ngoại tuyến","离线"],"sync.online":["Trực tuyến","在线"],"sync.local_saved":["Đã lưu trên máy","已保存在本机"],"sync.queued":["Chờ gửi","待同步"],"sync.queued_count":["{N} mục chờ gửi","待同步数据 {N} 条"],"sync.sending":["Đang gửi","同步中"],"sync.committed":["Đã lưu máy chủ","已同步"],"sync.conflict":["Xung đột, cần xử lý","冲突，需处理"],"sync.failed":["Lỗi gửi","同步失败"],"sync.last":["Lần đồng bộ cuối","上次同步"],"sync.offline_data":["Dữ liệu ngoại tuyến, cập nhật lúc {T}","离线数据，更新于 {T}"],"sync.need_network":["Cần kết nối mạng","需要网络连接"],"sync.dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"sync.safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"sync.syncing":["Đang đồng bộ…","正在同步…"],"sync.done":["Đã đồng bộ","同步完成"],"sync.never":["Chưa đồng bộ","尚未同步"],"draft.rejected":["Nháp bị từ chối","被拒草稿"],"draft.old_epoch":["Nháp thế hệ dữ liệu cũ","旧数据草稿"],"draft.other_user":["Máy còn {N} nháp của người dùng khác","本机有 {N} 份其他用户的草稿"],"draft.title":["Nháp chờ đồng bộ","待同步草稿"],"draft.empty":["Không có mục nào","没有项目"],"draft.auto_delete":["Tự xóa sau {N} ngày","{N} 天后自动删除"],"draft.delete_confirm":["Xóa hẳn nháp này? Không lấy lại được.","确定删除此草稿？删除后无法恢复。"],"draft.delete_all_confirm":["Xóa hẳn {N} nháp chưa gửi? Không lấy lại được.","确定删除 {N} 份未同步草稿？删除后无法恢复。"],"draft.photos":["{N} ảnh","{N} 张照片"],"draft.created":["Tạo lúc","创建时间"],"draft.error_code":["Mã lỗi","错误代码"],"draft.size":["Dung lượng","大小"],"action.inspection.submit":["Nộp chứng nhận kiểm định","提交检验证书"],"action.contract.service.record":["Ghi dịch vụ hợp đồng","记录合同服务"],"action.doc.upload":["Tải tài liệu lên","上传文件"],"action.equipment.edit":["Sửa thiết bị","编辑设备"],"action.material.edit":["Sửa vật tư","编辑物料"],"conflict.title":["Xử lý xung đột","处理冲突"],"conflict.mine":["Bản của tôi","我的版本"],"conflict.server":["Bản máy chủ","服务器版本"],"conflict.diff":["Khác nhau","不同"],"conflict.by":["Người sửa","修改人"],"conflict.at":["Lúc","时间"],"conflict.use_server_confirm":["Bỏ thay đổi của bạn và dùng bản máy chủ? Có thể xuất dự phòng trước.","放弃您的修改并采用服务器版本？可先导出备份。"],"conflict.help":["Có người đã sửa hồ sơ này trước bạn. Không có nút ghi đè: chọn dùng bản máy chủ hoặc sửa tiếp trên bản máy chủ.","此记录已被他人先行修改。不提供覆盖：请采用服务器版本，或基于服务器版本继续修改。"],"auth.offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"auth.failed":["Mã nhân viên hoặc PIN không đúng","工号或PIN错误"],"auth.locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"auth.paused":["Đăng nhập đang tạm dừng, thử lại sau {N} phút","登录已暂停，请 {N} 分钟后重试"],"auth.attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"auth.temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"auth.reauth":["Nhập lại PIN để tiếp tục","请重新输入PIN以继续"],"auth.revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"auth.session_warn":["Phiên sắp hết hạn — {D}","会话即将到期 — {D}"],"auth.shared_device":["Máy dùng chung","公用设备"],"auth.switch_user":["Đăng nhập người khác","切换用户"],"auth.open_with_pin":["Mở bằng PIN","用PIN打开"],"auth.expired_offline":["Phiên đã hết hạn: chỉ xem nháp và xuất dự phòng","会话已过期：只能查看草稿和导出备份"],"auth.server_slow":["Máy chủ đang phản hồi chậm…","服务器响应较慢…"],"auth.need_online_login":["Cần đăng nhập trực tuyến","需在线登录"],"auth.others_relogin":["Các thiết bị khác phải đăng nhập lại","其他设备需重新登录"],"auth.logout_all_confirm":["Mọi phiên, kể cả máy đang dùng, sẽ hết hiệu lực. Dùng khi mất điện thoại.","所有会话（包括本机）将失效。用于手机丢失时。"],"auth.logout_has_drafts":["Còn {N} mục chưa gửi lên máy chủ. Chọn cách xử lý trước khi đăng xuất.","仍有 {N} 条未同步到服务器。退出前请选择处理方式。"],"level.1":["Tra cứu","查询"],"level.2":["Nhân viên","员工"],"level.3":["Trưởng bộ phận","部门主管"],"level.4":["Quản trị","管理员"],"level.owner":["Chủ hệ thống","系统所有者"],"subrole.KY_THUAT":["Kỹ thuật viên","技术员"],"subrole.DOC_DIEN_NUOC":["Đọc điện nước","抄表员"],"subrole.HD_KD":["Quản lý hợp đồng/kiểm định","合同/检验管理"],"subrole.THU_KHO":["Thủ kho","仓管员"],"subrole.BAO_SU_CO":["Báo sự cố","报修员"],"account.profile":["Hồ sơ","个人资料"],"account.display_name":["Tên hiển thị","显示名称"],"account.level":["Cấp","级别"],"account.subroles":["Vai trò","岗位"],"account.no_subrole":["Chưa được giao vai trò","未分配岗位"],"account.sync":["Đồng bộ","同步"],"account.security":["Bảo mật","安全"],"account.sessions":["Phiên đăng nhập","登录会话"],"account.this_device":["Máy này","本机"],"account.issued":["Đăng nhập lúc","登录时间"],"account.last_seen":["Hoạt động gần nhất","最近活动"],"account.expires":["Hết hạn","到期"],"account.guide":["Hướng dẫn","使用指南"],"account.add_home":["Thêm app vào Màn hình chính: trong Safari bấm Chia sẻ → Thêm vào MH chính","将应用添加到主屏幕：在Safari中点击分享→添加到主屏幕"],"account.info":["Thông tin","信息"],"account.app_version":["Phiên bản app","应用版本"],"account.api_version":["Phiên bản API","API版本"],"account.server_version":["Phiên bản máy chủ","服务器版本"],"account.admin":["Quản trị","管理"],"account.poc":["Bàn thử PoC","PoC测试台"],"admin.users":["Người dùng và PIN tạm","用户与临时PIN"],"admin.permissions":["Phân quyền","权限"],"admin.catalog":["Danh mục chung","基础数据"],"admin.gmail":["Người nhận Gmail và nhật ký gửi","邮件收件人与发送记录"],"admin.backup":["Sao lưu","备份"],"admin.audit":["Nhật ký thao tác","操作日志"],"admin.status":["Trạng thái hệ thống","系统状态"],"admin.system_data":["Dữ liệu hệ thống","系统数据"],"home.week":["Lịch tuần này","本周日程"],"home.deadlines":["Thời hạn quan trọng","重要期限"],"home.due_soon":["Sắp tới hạn","即将到期"],"home.overdue":["Quá hạn","已逾期"],"home.none":["Không có","无"],"home.today_work":["Công việc hôm nay","今日工作"],"home.no_work_today":["Không có việc hôm nay","今天没有任务"],"home.wo_coming":["Phiếu bảo trì/sửa chữa","保养/维修工单"],"home.item_inspection":["Kiểm định","检验"],"home.item_contract":["Hợp đồng","合同"],"home.item_service":["Dịch vụ HĐ","合同服务"],"home.records":["{N} hồ sơ","{N} 条"],"col.type":["Loại","类型"],"col.code":["Mã","编号"],"col.content":["Nội dung","内容"],"col.equipment_location":["Thiết bị/Khu vực","设备/区域"],"col.due":["Hạn","期限"],"col.status":["Trạng thái","状态"],"col.owner":["Phụ trách","负责人"],"col.name":["Tên","名称"],"col.actions":["Thao tác","操作"],"weekday.1":["T2","周一"],"weekday.2":["T3","周二"],"weekday.3":["T4","周三"],"weekday.4":["T5","周四"],"weekday.5":["T6","周五"],"weekday.6":["T7","周六"],"weekday.7":["CN","周日"],"screen.equipment_list":["Thiết bị","设备"],"screen.equipment":["Hồ sơ thiết bị","设备档案"],"screen.equipment_new":["Thêm thiết bị","新增设备"],"screen.equipment_edit":["Sửa thiết bị","编辑设备"],"screen.material":["Hồ sơ vật tư","物料档案"],"screen.material_new":["Thêm vật tư","新增物料"],"screen.material_edit":["Sửa vật tư","编辑物料"],"screen.spec_edit":["Thông số","参数"],"screen.part_link":["Gắn linh kiện","关联配件"],"screen.qr":["Mã QR","二维码"],"screen.labels":["In tem QR","打印二维码标签"],"field.valid_from":["Hiệu lực từ","有效期自"],"field.valid_to":["Hiệu lực đến","有效期至"],"field.end_date":["Ngày hết hạn","到期日"],"field.renewal_notice_date":["Hạn báo gia hạn","续约通知期限"],"field.not_set":["Chưa có","暂无"],"field.equipment_code":["Mã thiết bị","设备编号"],"field.code_auto":["Để trống để máy chủ tự cấp mã","留空则由服务器自动编号"],"field.name":["Tên","名称"],"field.name_vi":["Tên tiếng Việt","越南语名称"],"field.name_zh":["Tên tiếng Trung","中文名称"],"field.one_lang":["Chỉ cần nhập một thứ tiếng, máy chủ tự dịch bên kia","只需填写一种语言，服务器自动翻译另一种"],"field.category":["Loại thiết bị","设备类别"],"field.location":["Khu vực","区域"],"field.vendor":["Nhà cung cấp","供应商"],"field.manufacturer":["Hãng sản xuất","制造商"],"field.model":["Model","型号"],"field.serial":["Số serial","序列号"],"field.manufacture_year":["Năm sản xuất","制造年份"],"field.install_date":["Ngày lắp đặt","安装日期"],"field.warranty_end":["Hết bảo hành","保修到期"],"field.status":["Tình trạng","状态"],"field.criticality":["Mức quan trọng","重要程度"],"field.owner":["Người phụ trách","负责人"],"field.reason":["Lý do","原因"],"field.reason_required":["Bắt buộc nhập lý do","必须填写原因"],"field.choose":["— Chọn —","— 请选择 —"],"field.none":["— Không —","— 无 —"],"field.search_placeholder":["Tìm mã, tên, model, serial","搜索编号、名称、型号、序列号"],"field.include_retired":["Gồm thiết bị ngừng sử dụng","含停用设备"],"field.total":["Tổng {N}","共 {N} 条"],"field.new_status":["Tình trạng khi dùng lại","恢复后的状态"],"field.qr_key":["Mã tem","标签码"],"field.document_title":["Tên tài liệu","文件名称"],"field.document_kind":["Loại tài liệu","文件类型"],"field.document_date":["Ngày tài liệu","文件日期"],"field.file_version":["Phiên bản","版本"],"field.external_url":["Liên kết","链接"],"field.uploaded_by":["Người tải lên","上传人"],"field.material_code":["Mã vật tư","物料编号"],"field.part_number":["Part number","零件号"],"field.specification":["Thông số","规格"],"field.specification_vi":["Thông số tiếng Việt","越南语规格"],"field.specification_zh":["Thông số tiếng Trung","中文规格"],"field.base_unit":["Đơn vị cơ sở","基本单位"],"field.lead_time_days":["Thời gian đặt hàng (ngày)","订货周期（天）"],"field.group":["Nhóm","分组"],"field.item_kind":["Loại","类型"],"field.is_component":["Gắn máy được","可关联设备"],"field.installed_qty":["Lượng lắp","安装数量"],"field.unit":["Đơn vị","单位"],"field.function":["Chức năng","功能"],"field.function_vi":["Chức năng tiếng Việt","越南语功能"],"field.function_zh":["Chức năng tiếng Trung","中文功能"],"field.position":["Vị trí lắp","安装位置"],"field.position_vi":["Vị trí lắp tiếng Việt","越南语安装位置"],"field.position_zh":["Vị trí lắp tiếng Trung","中文安装位置"],"field.alternate":["Thay thế được duyệt","已批准替代件"],"field.compatibility_note":["Ghi chú tương thích","兼容性说明"],"field.effective_from":["Từ ngày","生效日期"],"field.material":["Vật tư","物料"],"field.spec_key":["Thông số","参数"],"field.spec_value":["Giá trị","数值"],"field.spec_text":["Giá trị dạng chữ","文字值"],"field.sort_order":["Thứ tự","排序"],"field.used_on":["Dùng cho thiết bị","适用设备"],"field.stock":["Tồn kho","库存"],"field.usage_history":["Lịch sử dùng","使用记录"],"field.photos":["Ảnh","照片"],"field.event":["Sự kiện","事件"],"field.date":["Ngày","日期"],"field.actor":["Người làm","执行人"],"field.note":["Ghi chú","备注"],"field.inspection_type":["Loại kiểm định","检验类型"],"field.certificate_number":["Số chứng nhận","证书编号"],"field.inspection_date":["Ngày kiểm định","检验日期"],"field.result":["Kết quả","结果"],"field.contract":["Hợp đồng","合同"],"field.service":["Dịch vụ","服务"],"field.required":["Bắt buộc nhập","必填"],"field.invalid":["Giá trị không hợp lệ","值无效"],"field.invalid_date":["Ngày không hợp lệ","日期无效"],"field.year_invalid":["Năm phải từ 1900 đến 2100","年份须在1900至2100之间"],"field.selected":["Đã chọn {N}","已选 {N} 项"],"field.custom_spec":["Thông số khác (danh mục)","其他参数（目录）"],"field.no_records":["Không có hồ sơ phù hợp","没有符合条件的记录"],"field.loading":["Đang tải…","加载中…"],"form.draft_restored":["Đã khôi phục nội dung chưa lưu trên máy","已恢复本机未保存的内容"],"form.discard_draft":["Bỏ nội dung chưa lưu","放弃未保存内容"],"form.saved":["Đã lưu máy chủ","已同步"],"form.my_value":["Bản của tôi","我的版本"],"form.server_loaded":["Đã nạp bản máy chủ. Chép lại thay đổi của bạn rồi Lưu","已载入服务器版本，请重新填写您的修改后保存"],"field.number_ambiguous":["Đã hiểu là {A}. Nếu là số hàng nghìn, gõ liền không dấu (vd 12350)","已识别为 {A}；如为千位数，请连续输入（如 12350）"],"field.number_bad_sep":["Không dùng dấu chấm/phẩy để tách hàng nghìn; gõ 1234567","请勿使用千位分隔符，请输入 1234567"],"field.unit_not_allowed":["Đơn vị không thuộc danh sách cho phép","单位不在允许范围内"],"spec.voltage":["Điện áp","电压"],"spec.rated_current":["Dòng điện định mức","额定电流"],"spec.electrical_power":["Công suất điện","电功率"],"spec.frequency":["Tần số","频率"],"spec.working_pressure":["Áp suất làm việc","工作压力"],"spec.flow_rate":["Lưu lượng","流量"],"spec.speed":["Tốc độ","转速"],"spec.dimensions":["Kích thước (D × R × C)","外形尺寸（长×宽×高）"],"spec.weight":["Trọng lượng","重量"],"spec.throughput":["Năng suất","产能"],"spec.rated_capacity_kva":["Dung lượng định mức (MBA)","额定容量"],"lookup_group.EQUIPMENT_CATEGORY":["Loại thiết bị","设备类别"],"lookup_group.UNIT":["Đơn vị tính","计量单位"],"lookup_group.SPEC_KEY":["Mẫu thông số","参数模板"],"lookup_group.CAUSE":["Nguyên nhân","原因"],"eq.summary":["Thông tin chung","基本信息"],"eq.archive_title":["Ngừng sử dụng thiết bị","停用设备"],"eq.archive_help":["Thiết bị chuyển sang Ngừng sử dụng và ẩn khỏi danh sách; tem QR báo hồ sơ đã ngừng; ảnh đang chia sẻ link được đưa về riêng tư","设备将标为停用并从列表隐藏；二维码提示记录已停用；已共享链接的照片将设为私有"],"eq.unarchive_title":["Dùng lại thiết bị","恢复使用设备"],"eq.no_specs":["Chưa có thông số","暂无参数"],"eq.add_spec":["Thêm thông số","新增参数"],"eq.remove_spec_confirm":["Bỏ dòng thông số này?","移除此参数？"],"eq.upload_photo":["Chụp/chọn ảnh thiết bị","拍摄/选择设备照片"],"eq.upload_file":["Tải tệp lên (PDF, ảnh)","上传文件（PDF、图片）"],"eq.archived_banner":["Thiết bị đã ngừng sử dụng","设备已停用"],"doc.archive_confirm":["Gỡ tài liệu này khỏi hồ sơ? Tệp trên Drive không bị xóa.","从档案中移除此文件？Drive中的文件不会被删除。"],"doc.set_private_confirm":["Đưa ảnh về riêng tư? Không có chiều ngược lại.","将照片设为私有？此操作不可撤销。"],"doc.link_open":["Mở liên kết","打开链接"],"doc.queued_offline":["Đã lưu trên máy, sẽ gửi khi có mạng","已保存在本机，联网后同步"],"mat.list":["Kho vật tư","物料库"],"mat.search_placeholder":["Tìm mã, tên, part number, model","搜索编号、名称、零件号、型号"],"mat.include_inactive":["Gồm vật tư ngừng dùng","含停用物料"],"mat.archive_title":["Ngừng dùng vật tư","停用物料"],"mat.archive_help":["Vật tư chuyển sang Ngừng dùng; máy đang gắn vẫn giữ liên kết và lịch sử","物料标为停用；已关联设备保留关联和历史"],"mat.reactivate":["Dùng lại vật tư","恢复使用物料"],"mat.no_parts":["Chưa gắn linh kiện","暂无配件"],"mat.pick":["Chọn vật tư gắn máy được","选择可关联设备的物料"],"mat.unlink_title":["Gỡ liên kết linh kiện","解除配件关联"],"mat.unlink_help":["Kết thúc liên kết với máy này; vật tư vẫn còn trong danh mục","结束与此设备的关联；物料仍保留在目录中"],"mat.approve_title":["Xác nhận liên kết","确认关联"],"mat.not_used":["Chưa dùng cho thiết bị nào","尚未用于任何设备"],"mat.tab_hint":["Thêm danh mục hoặc gắn linh kiện không tự trừ tồn kho","新增目录或关联配件不会自动扣减库存"],"history.part_events":["Linh kiện","配件"],"history.contracts":["Hợp đồng","合同"],"history.inspections":["Kiểm định","检验"],"history.created":["Tạo hồ sơ","创建档案"],"history.empty":["Chưa có lịch sử","暂无历史记录"],"tag.machine_translated":["dịch máy","机器翻译"],"tag.no_translation":["Chưa có bản dịch","暂无译文"],"tag.warehouse_not_connected":["Chưa kết nối kho","尚未连接仓库"],"tag.coming_soon":["Sắp có","即将推出"],"tag.coming_soon_hint":["Chức năng sẽ có ở đợt sau","该功能将在后续版本推出"],"tag.pending_code":["Chờ cấp mã","待分配编号"],"tag.sample_data":["Dữ liệu mẫu","示例数据"],"tag.env_test":["THỬ","测试"],"tag.archived":["Đã lưu trữ","已归档","grey"],"feature.not_enabled":["Chức năng chưa bật","功能尚未启用"],"sys.maintenance":["Hệ thống đang bảo trì","系统维护中"],"cost.hidden":["Không có quyền xem giá","无权查看价格"],"qr.foreign":["Mã này không thuộc M&E","此码不属于M&E"],"qr.unavailable":["Không tìm thấy hoặc không có quyền xem","未找到或无权查看"],"qr.inactive":["Hồ sơ đã ngừng sử dụng","记录已停用"],"qr.expired":["Tem đã hết hiệu lực","标签已失效"],"qr.not_in_restored":["Không có mã này trong dữ liệu hiện tại; dữ liệu đã khôi phục về bản sao lưu cũ, tem in sau thời điểm đó cần in lại","当前数据中无此码；数据已恢复至旧备份，此后打印的标签需重新打印"],"qr.scan_hint":["Dùng nút Quét trong app, không dùng app Camera","请使用应用内扫码，不要用相机应用"],"qr.label_small":["Nhỏ 70 × 37 mm (24 tem/A4)","小 70 × 37 mm（每张A4 24枚）"],"qr.label_large":["Lớn 105 × 74 mm (8 tem/A4)","大 105 × 74 mm（每张A4 8枚）"],"qr.offset":["Chỉnh lệch lề (mm)","边距微调（毫米）"],"qr.print_hint":["Dùng In của trình duyệt hoặc Lưu PDF; khổ A4, lề 0","请使用浏览器打印或另存为PDF；A4纸，边距0"],"qr.print_standalone":["Trên app Màn hình chính iPhone không in trực tiếp được: mở bằng Safari hoặc máy tính","iPhone主屏幕应用无法直接打印：请用Safari或电脑打开"],"misc.interim":["Màn đầy đủ đang được làm trong Đợt 1; tạm thời chỉ xem dữ liệu đã tải","完整页面正在第一阶段开发中，暂时只能查看已下载数据"],"qr.test_env_warning":["Môi trường THỬ: không in tem thật","测试环境：请勿打印正式标签"],"qr.entity.EQUIPMENT":["Thiết bị","设备"],"qr.entity.MATERIAL":["Vật tư","物料"],"qr.entity.INSPECTION_REQUIREMENT":["Yêu cầu kiểm định","检验要求"],"qr.entity.CONTRACT":["Hợp đồng thuê ngoài","外包合同"],"qr.entity.INSPECTION":["Lần kiểm định","检验记录"],"i18n.lang_vi":["Tiếng Việt","越南语"],"i18n.lang_zh":["Tiếng Trung","中文"],"i18n.checked":["Đã kiểm tra bản dịch","已核对译文"],"doc.too_large":["Tệp quá lớn để mở trong app","文件过大，无法在应用内打开"],"doc.photo_warning":["Không chụp hợp đồng/chứng nhận vào mục ảnh","请勿将合同或证书作为照片上传"],"doc.upload_too_large_mobile":["Tệp trên {N} MB: hãy tải lên từ máy tính","超过{N} MB的文件请在电脑上上传"],"doc.none":["Chưa có tài liệu","暂无文件"],"doc.uploading":["Đang tải lên…","正在上传…"],"doc.offline_saved":["Đã lưu để xem ngoại tuyến","已保存以便离线查看"],"err.network":["Không kết nối được máy chủ","无法连接服务器"],"err.unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"err.client":["Lỗi trên máy","本机错误"],"err.not_found":["Không tìm thấy","未找到"],"err.forbidden":["Không có quyền","无权限"],"login":["Đăng nhập","登录"],"employee_code":["Mã nhân viên","员工编号"],"pin6":["PIN 6 số","六位数字密码"],"forgot_pin":["Quên PIN","忘记PIN"],"forgot_pin_help":["Liên hệ quản trị để đặt lại PIN","请联系管理员重置密码"],"same_account":["Dùng cùng tài khoản với iPhone","与iPhone使用同一账户"],"shared_device":["Máy dùng chung","公用设备"],"switch_user":["Đăng nhập người khác","切换用户"],"show_pin":["Hiện PIN","显示PIN"],"change_pin":["Đổi PIN","修改PIN"],"temp_pin":["Bạn đang dùng PIN tạm, hãy đặt PIN mới","您正在使用临时PIN，请设置新PIN"],"current_pin":["PIN hiện tại","当前PIN"],"new_pin":["PIN mới","新PIN"],"new_pin_again":["Nhập lại PIN mới","确认新PIN"],"pin_mismatch":["Hai lần nhập PIN mới không khớp","两次输入的新PIN不一致"],"no_reuse_pin":["Không dùng lại PIN của app khác","请勿重复使用其他应用的PIN"],"pin_weak":["PIN quá dễ đoán, hãy chọn PIN khác","PIN过于简单，请换一个"],"pin_format":["PIN phải gồm đúng 6 chữ số","PIN必须为6位数字"],"offline_unlock":["Mở khóa ngoại tuyến","离线解锁"],"open_with_pin":["Mở bằng PIN","用PIN打开"],"attempts_left":["Còn {N} lần thử","还可尝试 {N} 次"],"locked":["Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút","因多次输错PIN已暂时锁定，请 {N} 分钟后重试"],"revoked":["Phiên đã bị thu hồi hoặc quyền đã thay đổi","会话已撤销或权限已变更"],"session_warn":["Phiên sắp hết hạn","会话即将到期"],"relogin":["Đăng nhập lại","重新登录"],"logout":["Đăng xuất","退出登录"],"offline":["Ngoại tuyến","离线"],"local_saved":["Đã lưu trên máy","已保存在本机"],"queued":["Chờ gửi","待同步"],"sending":["Đang gửi","同步中"],"committed":["Đã lưu máy chủ","已同步"],"conflict":["Xung đột, cần xử lý","冲突，需处理"],"failed":["Lỗi gửi","同步失败"],"last_sync":["Lần đồng bộ cuối","上次同步"],"sync_now":["Đồng bộ ngay","立即同步"],"need_network":["Cần kết nối mạng","需要网络连接"],"safari_tab":["Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở","在Safari中运行：7天未打开草稿可能被清除"],"dataset_reset":["Dữ liệu đã được đặt lại, cần tải lại","数据已重置，需重新加载"],"maintenance":["Hệ thống đang bảo trì","系统维护中"],"network_error":["Không kết nối được máy chủ","无法连接服务器"],"unknown_result":["Chưa rõ kết quả, đang hỏi lại máy chủ","结果未知，正在向服务器确认"],"server_url":["Địa chỉ máy chủ (/exec)","服务器地址 (/exec)"],"server_url_missing":["Chưa có địa chỉ máy chủ","尚未设置服务器地址"],"server_url_bad":["Link phải có dạng https://script.google.com/macros/s/…/exec","链接格式应为 https://script.google.com/macros/s/…/exec"],"save":["Lưu","保存"],"cancel":["Hủy","取消"],"back":["Quay lại","返回"],"download":["Tải về","下载"],"open_save":["Mở / Lưu","打开/保存"],"set_private":["Đặt riêng tư","设为私有"],"export_backup":["Xuất dự phòng","导出备份"],"pending_code":["Chờ cấp mã","待分配编号"],"machine_translated":["dịch máy","机器翻译"],"no_translation":["Chưa có bản dịch","暂无译文"],"sample_data":["Dữ liệu mẫu","示例数据"],"scan":["Quét QR","扫码"],"scan_hint":["Dùng nút Quét trong app, không dùng app Camera","请使用应用内扫码，不要用相机应用"],"open_in_app":["Mở app M&E và dùng nút Quét","请打开M&E应用并使用扫码按钮"],"continue_here":["Tiếp tục trong Safari","在Safari中继续"],"manual_code":["Nhập mã","输入编号"],"qr_foreign":["Mã này không thuộc M&E","此码不属于M&E"],"qr_unavailable":["Không tìm thấy hoặc không có quyền xem","未找到或无权查看"],"qr_inactive":["Hồ sơ đã ngừng sử dụng","记录已停用"],"qr_expired":["Tem đã hết hiệu lực","标签已失效"],"qr_not_in_restored":["Không có mã này trong dữ liệu hiện tại","当前数据中无此码"],"doc_too_large":["Tệp quá lớn để mở trong app","文件过大，无法在应用内打开"],"upload_too_large_mobile":["Tệp trên {N} MB: hãy tải lên từ máy tính","超过{N} MB的文件请在电脑上上传"],"photo_warning":["Không chụp hợp đồng/chứng nhận vào mục ảnh","请勿将合同或证书作为照片上传"],"coming_soon":["Sắp có","即将推出"],"env_test":["THỬ","测试"],"poc_title":["Kiểm thử PoC","PoC测试"],"equipment":["Thiết bị","设备"],"inspections":["Kiểm định","检验"]};

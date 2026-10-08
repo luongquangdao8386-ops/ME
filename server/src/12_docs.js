@@ -49,6 +49,7 @@ function docUploadCondOk_(ctx, auth, module, kind, entity) {
 
 function docUpload_(ctx) {
   var p = ctx.req.payload;
+  if (p.external_url !== undefined && p.content_b64 === undefined) return docAddLink_(ctx);
   var errs = [];
   if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
   var et = ENTITY_TYPES[p.entity_type];
@@ -229,6 +230,93 @@ function docSetPrivate_(ctx) {
         result: { entity_type: 'DOCUMENT', entity_id: p.document_id, drive_sharing_state: row.drive_sharing_state, record_version: row.record_version, record: projectDoc_(ctx, row) },
         record_version: row.record_version,
         audit: { entity_type: 'DOCUMENT', entity_id: p.document_id, before_json: { drive_sharing_state: cur.drive_sharing_state }, after_json: { drive_sharing_state: row.drive_sharing_state } }
+      };
+    }
+  });
+}
+
+/** doc.upload kèm external_url (không có tệp): liên kết tài liệu ngoài, riêng tư theo loại (EQ-04) */
+function docAddLink_(ctx) {
+  var p = ctx.req.payload;
+  var errs = [];
+  if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
+  var et = ENTITY_TYPES[p.entity_type];
+  if (!et || !et.module) errs.push(fieldError_('entity_type', 'INVALID_VALUE'));
+  if (!isUuidV4_(p.entity_id)) errs.push(fieldError_('entity_id', 'ID_INVALID'));
+  var scope = DOC_KIND_SCOPE[p.kind];
+  if (!scope || scope === 'LINK_VIEW') errs.push(fieldError_('kind', 'INVALID_VALUE'));
+  var url = trimStr_(p.external_url);
+  if (!/^https:\/\/[^\s<>"]{3,2000}$/.test(url)) errs.push(fieldError_('external_url', 'URL_INVALID'));
+  if (p.document_date && !isDateStr_(p.document_date)) errs.push(fieldError_('document_date', 'INVALID_DATE'));
+  requireOneLang_(errs, p, null, 'title');
+  if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  var module = et.module;
+  var auth = authorize_(ctx, 'doc.upload', { module: module });
+  var entity = findOne_(et.sheet, et.key, p.entity_id);
+  if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
+  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity)) throw apiError_('FORBIDDEN');
+  if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  var tr = applyTranslations_('Documents', ['title'], { title_vi: p.title_vi, title_zh: p.title_zh }, null);
+  return executeWrite_(ctx, {
+    entity_type: 'DOCUMENT', entity_id: p.document_id,
+    build: function () {
+      if (findRowNums_('Documents', 'document_id', p.document_id).length) throw validationError_([fieldError_('document_id', 'ID_EXISTS')]);
+      var row = {
+        document_id: p.document_id, entity_type: p.entity_type, entity_id: p.entity_id,
+        title_vi: tr.values.title_vi, title_zh: tr.values.title_zh, i18n_meta: tr.meta,
+        kind: p.kind, drive_file_id: '', external_url: url, mime_type: '', file_version: 1, access_scope: scope,
+        document_date: p.document_date || dateVN_(now_()), active: true, managed_folder_id: '', storage_kind: 'LINK',
+        owned_by_app: false, drive_sharing_state: 'NOT_SHARED', sharing_updated_at: '', sharing_error_code: '', size_bytes: '', thumb_drive_file_id: ''
+      };
+      cNew_(ctx, row);
+      return {
+        writes: [{ sheet: 'Documents', mode: 'insert', row: row }],
+        result: { entity_type: 'DOCUMENT', entity_id: p.document_id, document_id: p.document_id, record_version: 1, record: projectDoc_(ctx, row) },
+        record_version: 1,
+        audit: { entity_type: 'DOCUMENT', entity_id: p.document_id, before_json: null, after_json: { kind: p.kind, entity_type: p.entity_type, entity_id: p.entity_id, external_url: url } }
+      };
+    }
+  });
+}
+
+/** doc.archive: gỡ tài liệu khỏi hồ sơ (không xóa file Drive); ảnh LINK_VIEW đưa về riêng tư (2.6) */
+function docArchive_(ctx) {
+  var p = ctx.req.payload || {};
+  if (!isUuidV4_(p.document_id)) throw validationError_([fieldError_('document_id', 'ID_INVALID')]);
+  var d0 = findOne_('Documents', 'document_id', p.document_id);
+  if (!d0) throw apiError_('NOT_FOUND');
+  var module = docModule_(d0.entity_type);
+  var auth = authorize_(ctx, 'doc.archive', { module: module });
+  if (auth.conds.length && d0.created_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');
+  if (d0.access_scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
+  if (ex) return withWriteLock_(function () { return existingOpResponse_(ctx, ex, payloadHash_(ctx)); });
+  if (!d0.active || d0.archived_at) throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
+  var share = null;
+  if (d0.access_scope === 'LINK_VIEW' && d0.drive_sharing_state === 'LINK_SHARED') {
+    var ok = true, err = '';
+    try {
+      ok = makePrivate_(d0.drive_file_id);
+      if (d0.thumb_drive_file_id) ok = makePrivate_(d0.thumb_drive_file_id) && ok;
+    } catch (e) { ok = false; err = String(e && e.message || e).slice(0, 80); }
+    share = { state: ok ? 'REVOKED' : 'FAILED', err: ok ? '' : (err || 'NOT_PRIVATE') };
+  }
+  return executeWrite_(ctx, {
+    entity_type: 'DOCUMENT', entity_id: p.document_id,
+    build: function () {
+      var cur = findOne_('Documents', 'document_id', p.document_id);
+      assertVersion_(ctx, cur, 'DOCUMENT', 'Documents');
+      var row = clone_(cur);
+      row.active = false;
+      row.archived_at = isoVN_(now_());
+      if (share) { row.drive_sharing_state = share.state; row.sharing_error_code = share.err; row.sharing_updated_at = row.archived_at; }
+      cUpdate_(ctx, row);
+      return {
+        writes: [{ sheet: 'Documents', mode: 'update', row: row }],
+        result: { entity_type: 'DOCUMENT', entity_id: p.document_id, record_version: row.record_version, archived: true },
+        record_version: row.record_version,
+        audit: { entity_type: 'DOCUMENT', entity_id: p.document_id, before_json: { active: true }, after_json: { active: false, drive_sharing_state: row.drive_sharing_state }, reason: trimStr_(p.reason) }
       };
     }
   });
