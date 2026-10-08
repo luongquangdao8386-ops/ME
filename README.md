@@ -11,10 +11,10 @@ Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân vi
 | --- | --- |
 | `index.html`, `config.js`, `sw.js`, `manifest.webmanifest`, `css/`, `js/` | App tĩnh (GitHub Pages, phạm vi `/ME/`) |
 | `assets/` | Logo 57 (SVG, icon 180/192/512), ảnh nền đã thu nhỏ |
-| `vendor/` | Thư viện cố định phiên bản (jsQR, qrcode-generator) — xem `vendor/README.md` |
+| `vendor/` | Thư viện cố định phiên bản (jsQR, qrcode-generator, SheetJS) — xem `vendor/README.md` |
 | `server/src/` | Mã máy chủ theo mô-đun |
 | `apps-script/` | `Code.gs` (tạo bằng `npm run build`) và `appsscript.json` để dán vào Apps Script |
-| `tests/` | Giả lập Apps Script cho Node, test máy chủ, test giao diện Playwright |
+| `tests/` | Giả lập Apps Script cho Node, test máy chủ, test thư viện `vendor/`, test giao diện Playwright |
 | `tools/` | Ghép `Code.gs`, quét bí mật trước khi push |
 
 ## Lệnh
@@ -22,7 +22,7 @@ Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân vi
 ```
 npm install          # chỉ cần cho test giao diện (Playwright)
 npm run build        # ghép server/src → apps-script/Code.gs, kiểm phiên bản khớp
-npm test             # test máy chủ
+npm test             # test máy chủ + thư viện vendor/
 npm run test:ui      # test giao diện 390×844 và 1440×900
 node tools/scan-secrets.mjs
 ```
