@@ -131,11 +131,11 @@ test('mở app khi máy chủ chậm hơn offline_probe_seconds mà vẫn có m�
   try {
     const { page } = app;
     await loginOwnerFirstTime(page);
-    delays['sync.changes'] = 9000; // lâu hơn 8 giây mặc định
+    delays['sync.changes'] = 13000; // lâu hơn offline_probe_seconds = 12 giây (chốt sau PoC)
     await page.reload();
     await page.waitForSelector('.boot', { timeout: 10000 });
-    await page.waitForFunction(() => (document.querySelector('.boot') || {}).textContent?.includes('phản hồi chậm'), null, { timeout: 15000 });
-    await page.waitForSelector('[data-poc="P-01"]', { timeout: 45000 });
+    await page.waitForFunction(() => (document.querySelector('.boot') || {}).textContent?.includes('phản hồi chậm'), null, { timeout: 20000 });
+    await page.waitForSelector('[data-poc="P-01"]', { timeout: 70000 });
     assert.equal(await page.locator('#upin').count(), 0, 'không hiện màn mở khóa ngoại tuyến');
     const cold = await page.evaluate(() => JSON.parse(localStorage.getItem('me.cold_starts') || '[]'));
     assert.ok(cold.length && cold[cold.length - 1].timed_out, JSON.stringify(cold));
@@ -179,6 +179,21 @@ test('tải tài liệu lên khi máy chủ đã ghi nhưng phản hồi mất: 
     assert.equal([...env.drive._files.values()].filter((f) => /\.pdf$/.test(f.name) && !f.trashed).length, 1, 'một tệp trên Drive');
     await page.click('#p07d');
     await page.waitForFunction(() => document.querySelector('[data-poc="P-07"] .poc-out').textContent.includes('doc.download: ✓'), null, { timeout: 30000 });
+  } finally { await app.close(); }
+});
+
+test('iPhone: tải lên tệp trên 5 MB bị chặn ngay trên máy, nhắc tải từ máy tính (P-16, chốt sau PoC)', async () => {
+  const env = freshServer();
+  env.g.pocSeedSampleData();
+  const app = await openApp({ env });
+  try {
+    const { page, calls } = app;
+    await loginOwnerFirstTime(page);
+    await page.click('[data-poc="P-16"] summary');
+    const before = calls.filter((a) => a === 'doc.upload').length;
+    await page.click('#p16u9');
+    await page.waitForFunction(() => document.querySelector('[data-poc="P-16"] .poc-out').textContent.includes('tải lên từ máy tính'), null, { timeout: 30000 });
+    assert.equal(calls.filter((a) => a === 'doc.upload').length, before, 'không gửi lên máy chủ');
   } finally { await app.close(); }
 });
 

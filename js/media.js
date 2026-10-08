@@ -1,5 +1,5 @@
 // Ảnh và tài liệu: thu nhỏ ảnh, tải lên, tải xuống riêng tư, chia sẻ (phụ lục 1.5 mục 2.6, 3.10)
-import { api, session, blobToB64, b64ToBytes, uuid } from './core.js';
+import { api, session, blobToB64, b64ToBytes, uuid, biText } from './core.js';
 
 function canvasToBlob(c, type, q) {
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('toBlob failed'))), type, q));
@@ -47,6 +47,11 @@ export async function processPhoto(file) {
 
 /** doc.upload (thao tác ghi, có operation_id) */
 export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thumb, title_vi, title_zh, document_id }) {
+  // Điện thoại: tệp trên doc_mobile_upload_max_bytes (mặc định 5 MB) tải lên từ máy tính (P-16)
+  const mobileMax = Number(session.settings.doc_mobile_upload_max_bytes || 5242880);
+  if (isTouchMobile() && blob.size > mobileMax) {
+    return { ok: false, code: 'VALIDATION_ERROR', errors: [{ field: 'content_b64', code: 'FILE_TOO_LARGE_MOBILE' }], message: biText('upload_too_large_mobile', { N: Math.round(mobileMax / 1048576) }), upload_ms: 0, retries: 0 };
+  }
   const payload = {
     document_id: document_id || uuid(), entity_type, entity_id, kind, mime_type: mime || blob.type,
     content_b64: await blobToB64(blob), title_vi: title_vi || '', title_zh: title_zh || ''

@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-poc.3
+ * M&E · 机电管理 — Code.gs 1.0.0-poc.4
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-poc.3';
+var SERVER_VERSION = '1.0.0-poc.4';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.0';
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -25,7 +25,7 @@ var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 var SYSTEM_USER = 'SYSTEM';
 
 /**
- * Settings mặc định — 49 khóa (3.14).
+ * Settings mặc định — 50 khóa (3.14; thêm doc_mobile_upload_max_bytes sau PoC).
  * [khóa, kiểu, mặc định, gửi xuống client, đợt, mô tả Việt, mô tả Trung]
  */
 var SETTINGS_DEFAULTS = [
@@ -46,7 +46,7 @@ var SETTINGS_DEFAULTS = [
   ['offline_lock_minutes', 'INT', 15, true, 1, 'Thời gian khóa mở khóa ngoại tuyến (phút)', '离线解锁锁定时长（分钟）'],
   ['offline_max_lockouts', 'INT', 3, true, 1, 'Số lần bị khóa liên tiếp trước khi xóa dữ liệu đăng nhập trên máy', '连续锁定次数上限（超出则清除本机登录数据）'],
   ['offline_pbkdf2_iterations', 'INT', 200000, true, 1, 'Số vòng PBKDF2 cho mở khóa ngoại tuyến', '离线解锁PBKDF2迭代次数'],
-  ['offline_probe_seconds', 'INT', 8, true, 1, 'Thời gian chờ máy chủ khi mở app (giây)', '打开应用时等待服务器时间（秒）'],
+  ['offline_probe_seconds', 'INT', 12, true, 1, 'Thời gian chờ máy chủ khi mở app (giây)', '打开应用时等待服务器时间（秒）'], // P-17: mở app 3–8,4 giây
   ['machine_translation_enabled', 'BOOL', true, false, 1, 'Bật dịch máy', '启用机器翻译'],
   ['mt_chunk_chars', 'INT', 1000, false, 1, 'Độ dài tối đa mỗi đoạn dịch', '每段翻译最大字符数'],
   ['mt_max_fields_per_request', 'INT', 20, false, 1, 'Số trường dịch tối đa mỗi lần lưu', '每次保存最多翻译字段数'],
@@ -65,6 +65,8 @@ var SETTINGS_DEFAULTS = [
   ['list_page_size', 'INT', 50, true, 1, 'Số dòng mỗi trang danh sách', '列表每页行数'],
   ['sync_page_size', 'INT', 500, true, 1, 'Số dòng mỗi trang đồng bộ', '同步每页行数'],
   ['doc_max_bytes', 'INT', 10485760, true, 1, 'Dung lượng tối đa mỗi tệp (byte)', '单个文件最大字节数'],
+  // P-16: tải lên từ điện thoại trên 5 MB dễ quá 55 giây → tệp lớn hơn tải lên từ máy tính (người dùng chốt 08/10/2026)
+  ['doc_mobile_upload_max_bytes', 'INT', 5242880, true, 1, 'Dung lượng tối đa mỗi tệp khi tải lên từ điện thoại (byte)', '手机上传单个文件最大字节数'],
   ['offline_files_max_mb', 'INT', 100, true, 1, 'Dung lượng tệp ngoại tuyến tối đa (MB)', '离线文件最大容量（MB）'],
   ['photo_max_edge_px', 'INT', 1600, true, 1, 'Cạnh dài tối đa của ảnh (px)', '照片最长边（像素）'],
   ['photo_jpeg_quality', 'NUMBER', 0.8, true, 1, 'Chất lượng JPEG của ảnh', '照片JPEG质量'],

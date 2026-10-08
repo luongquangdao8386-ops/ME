@@ -148,6 +148,7 @@ export const L = {
   qr_expired: ['Tem đã hết hiệu lực', '标签已失效'],
   qr_not_in_restored: ['Không có mã này trong dữ liệu hiện tại', '当前数据中无此码'],
   doc_too_large: ['Tệp quá lớn để mở trong app', '文件过大，无法在应用内打开'],
+  upload_too_large_mobile: ['Tệp trên {N} MB: hãy tải lên từ máy tính', '超过{N} MB的文件请在电脑上上传'],
   photo_warning: ['Không chụp hợp đồng/chứng nhận vào mục ảnh', '请勿将合同或证书作为照片上传'],
   coming_soon: ['Sắp có', '即将推出'],
   env_test: ['THỬ', '测试'],
