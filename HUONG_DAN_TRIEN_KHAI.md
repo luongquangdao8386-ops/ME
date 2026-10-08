@@ -31,12 +31,14 @@ Mã Đợt 1 nằm trên nhánh `claude/intelligent-gauss-y0z9b3` (đã gồm to
 
 ## Phần C — Cài đặt lần đầu trong app (owner, trên máy tính)
 
-1. **Tài khoản → Trạng thái hệ thống · 系统状态**, phần **Cấu hình · 系统设置**:
+Các mục quản trị nằm ở trang **Tài khoản**, kéo xuống dưới phần Bảo mật/Phiên đăng nhập và Hướng dẫn, trong thẻ **Quản trị · 管理** (ngay trên thẻ Thông tin).
+
+1. **Tài khoản → Quản trị → Trạng thái hệ thống · 系统状态**, phần **Cấu hình · 系统设置**:
    - `app_base_url` → **Sửa** → `https://luongquangdao8386-ops.github.io/ME/` (có dấu `/` cuối) → nhập lý do → PIN.
    - `offline_probe_seconds` (Thời gian chờ máy chủ khi mở app) → **12**.
-2. **Tài khoản → Sao lưu · 备份** → **Sao lưu ngay · 立即备份** → PIN. Màn tự cập nhật; sau 1–5 phút (Google chạy trigger) có dòng **Đã kiểm chứng · 已校验**.
-3. **Tài khoản → Phân quyền · 权限**: đọc kỹ bảng quyền (bắt buộc duyệt trước khi nhập dữ liệu thật). Muốn đổi ô nào thì báo Claude hoặc tự bật/tắt rồi **Lưu** kèm lý do.
-4. (Khi muốn thử Gmail) **Tài khoản → Người nhận Gmail và nhật ký gửi**: thêm địa chỉ của chính anh/chị → tick **Xác nhận** → PIN → **Bật gửi Gmail** → **Gửi thử**.
+2. **Tài khoản → Quản trị → Sao lưu · 备份** → **Sao lưu ngay · 立即备份** → PIN. Màn tự cập nhật; sau 1–5 phút (Google chạy trigger) có dòng **Đã kiểm chứng · 已校验**.
+3. **Tài khoản → Quản trị → Phân quyền · 权限**: đọc kỹ bảng quyền (bắt buộc duyệt trước khi nhập dữ liệu thật). Muốn đổi ô nào thì báo Claude hoặc tự bật/tắt rồi **Lưu** kèm lý do.
+4. (Khi muốn thử Gmail) **Tài khoản → Quản trị → Người nhận Gmail và nhật ký gửi**: thêm địa chỉ của chính anh/chị → tick **Xác nhận** → PIN → **Bật gửi Gmail** → **Gửi thử**.
 5. Chạy lại **Trạng thái hệ thống**: các dòng nên là **Đạt · 正常** (trừ "Thư nhắc hạn gửi gần nhất" khi chưa có thư).
 
 ## Phần D — Thử nhanh các phần mới của Đợt 1
