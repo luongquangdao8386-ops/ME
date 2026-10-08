@@ -64,12 +64,12 @@ export async function renderAccount(view, { shell }) {
   const needNet = online ? '' : 'disabled';
   const admin = [];
   if (await can('user.view')) admin.push(['admin.users', '/admin/users']);
-  if (lvl === 4) admin.push(['admin.permissions', '/admin/permissions']);
-  if (lvl >= 3) admin.push(['admin.catalog', '/admin/catalog']);
+  if (await can('permission.view')) admin.push(['admin.permissions', '/admin/permissions']);
+  if (await can('location.edit') || await can('vendor.edit') || await can('lookup.edit') || await can('glossary.edit')) admin.push(['admin.catalog', '/admin/catalog']);
   if (await can('notify.log.view')) admin.push(['admin.gmail', '/admin/gmail']);
   if (await can('backup.view')) admin.push(['admin.backup', '/admin/backup']);
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
-  if (lvl === 4) admin.push(['admin.status', '/admin/status']);
+  if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
   view.innerHTML = `
   <section class="card"><h2>${bi('account.profile')}</h2>
     ${row(bi('account.display_name'), esc(u.display_name || ''))}

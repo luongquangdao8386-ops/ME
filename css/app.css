@@ -547,3 +547,18 @@ details.more summary { cursor: pointer; min-height: 40px; display: flex; align-i
 div.rec-card.click { cursor: pointer; }
 div.rec-card.click:active { background: #EEF2F6; }
 .rec-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+/* Quản trị */
+.lbl { display: block; margin: 10px 0 4px; font-size: 14px; color: var(--graphite); }
+.temp-pin { font-size: 40px; font-weight: 800; letter-spacing: 0.25em; text-align: center; color: var(--navy); margin: 8px 0 12px; font-variant-numeric: tabular-nums; }
+.tbl.perm th[scope="row"] { white-space: nowrap; font-weight: 600; }
+.tbl.perm td { min-width: 150px; }
+.pf { min-width: 30px; min-height: 30px; margin: 2px; padding: 2px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--graphite); font-weight: 700; cursor: pointer; }
+.pf.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.pf.lock { opacity: 0.45; cursor: not-allowed; }
+.pf.lock.on { background: #5B6B7C; border-color: #5B6B7C; }
+details.rec-card > summary { list-style: none; cursor: pointer; }
+details.rec-card > summary::-webkit-details-marker { display: none; }
+details.rec-card[open] .kv-grid { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; word-break: break-word; }
+.cards.audit code, .tbl.settings code { font-size: 12px; }
+.tbl.settings td:first-child { min-width: 220px; }

@@ -140,6 +140,12 @@ function registerRoutes() {
   route('/contracts/:id/edit', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
   route('/contracts/:id/renew', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
   route('/admin/gmail', lazy('./pages/gmail.js', 'renderGmail'), { nav: 'account' });
+  route('/admin/users', lazy('./pages/admin.js', 'renderUsers'), { nav: 'account' });
+  route('/admin/permissions', lazy('./pages/admin.js', 'renderPermissions'), { nav: 'account' });
+  route('/admin/backup', lazy('./pages/admin.js', 'renderBackup'), { nav: 'account' });
+  route('/admin/audit', lazy('./pages/admin.js', 'renderAudit'), { nav: 'account' });
+  route('/admin/status', lazy('./pages/admin.js', 'renderStatus'), { nav: 'account' });
+  route('/admin/catalog', lazy('./pages/catalog.js', 'renderCatalog'), { nav: 'account' });
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
