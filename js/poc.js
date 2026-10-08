@@ -278,7 +278,11 @@ async function p04render() {
 }
 async function p04draft() {
   const reqs = await getRecords('INSPECTION_REQUIREMENT');
-  if (!reqs.length) { toast('Chưa có yêu cầu kiểm định mẫu (chạy pocSeedSampleData) · 无示例检验要求', 'err'); return; }
+  if (!reqs.length) {
+    toast('Chưa có yêu cầu kiểm định mẫu (chạy pocSeedSampleData) · 无示例检验要求', 'err');
+    out('P-04', 'Máy này chưa có dữ liệu yêu cầu kiểm định: khi có mạng bấm Đồng bộ ngay ở đầu trang rồi làm lại · 本机尚无检验要求数据，请联网后先同步');
+    return;
+  }
   const today = todayVN();
   const next = new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
   const op = await enqueue('inspection.submit', {
@@ -293,6 +297,7 @@ async function p04draft() {
 }
 async function p04flush() {
   if (!navigator.onLine) { toast(bi('need_network'), 'err'); return; }
+  if (!(await queueItems()).length) out('P-04', 'Máy này không có nháp nào đang chờ gửi (nháp nằm trên máy đã tạo ra nó) · 本机没有待同步草稿');
   const r = await flushQueue(() => p04render());
   out('P-04', `${bi('sync_now')}: gửi ${r.sent}, đã lưu ${r.committed}${r.stopped_code ? ' · dừng: ' + esc(r.stopped_code) : ''}`);
   await p04render();
