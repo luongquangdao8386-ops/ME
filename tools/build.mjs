@@ -15,7 +15,23 @@ const header = `/**
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
  */
 `;
-const body = files.map((f) => `\n// ===== ${f} =====\n` + fs.readFileSync(path.join(srcDir, f), 'utf8')).join('');
+// Từ điển nhãn (phụ lục 1.5 mục 5.3): một nguồn i18n/labels.json → js/dict.js (app) và LABELS trong Code.gs (email, Excel)
+const labels = JSON.parse(fs.readFileSync(path.join(root, 'i18n', 'labels.json'), 'utf8'));
+delete labels._comment;
+const TONES = ['green', 'amber', 'red', 'navy', 'grey'];
+for (const [k, v] of Object.entries(labels)) {
+  if (!Array.isArray(v) || v.length < 2 || v.length > 3 || typeof v[0] !== 'string' || typeof v[1] !== 'string' || !v[0].trim() || !v[1].trim()) {
+    console.error(`Nhãn thiếu một thứ tiếng: ${k}`); process.exit(1);
+  }
+  if (v[2] && !TONES.includes(v[2])) { console.error(`Màu nhãn lạ: ${k} = ${v[2]}`); process.exit(1); }
+  if (/mạch điện|Kho linh kiện|备件库/.test(v[0] + v[1])) { console.error(`Chữ bị cấm theo C1: ${k}`); process.exit(1); }
+}
+const dictSrc = `// TỆP TẠO TỰ ĐỘNG từ i18n/labels.json bằng "npm run build". Không sửa tay.\n` +
+  `// Mỗi khóa: [Việt, 中文, màu?] (phụ lục 1.5 mục 5.3)\nexport const DICT = ${JSON.stringify(labels, null, 0).replace(/\],"/g, '],\n"')};\n`;
+const dictPath = path.join(root, 'js', 'dict.js');
+if (!fs.existsSync(dictPath) || fs.readFileSync(dictPath, 'utf8') !== dictSrc) fs.writeFileSync(dictPath, dictSrc);
+const body = files.map((f) => `\n// ===== ${f} =====\n` + fs.readFileSync(path.join(srcDir, f), 'utf8')).join('') +
+  `\n// ===== i18n/labels.json =====\n/** Bản chép từ điển nhãn của app (5.3) cho email, Excel, lời báo */\nvar LABELS = ${JSON.stringify(labels)};\n`;
 const out = header + body;
 fs.writeFileSync(path.join(root, 'apps-script', 'Code.gs'), out);
 

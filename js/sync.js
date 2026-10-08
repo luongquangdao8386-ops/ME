@@ -144,12 +144,27 @@ export async function flushQueue(onProgress) {
     }
     op.state = res.code === 'VERSION_CONFLICT' ? 'CONFLICT' : 'REJECTED';
     op.errors = res.errors || [];
+    if (res.code === 'VERSION_CONFLICT') op.conflict = res.data || null; // bản máy chủ để màn Xử lý xung đột so sánh
+    op.rejected_at = isoNowVN();
     await idb.put('me_data', 'queue', op.operation_id, op);
   }
   return { sent, committed, stopped_code: null };
 }
 
 /** Xuất dự phòng: nháp + hàng chờ ra file JSON */
+/** Xóa một nháp khỏi hàng chờ (người dùng xác nhận hai lần ở CM-04) */
+export async function deleteQueued(operationId) {
+  await idb.del('me_data', 'queue', operationId);
+}
+
+/** Đặt lại một mục Lỗi gửi để gửi lại ở lần đồng bộ tới */
+export async function requeue(operationId) {
+  const op = await idb.get('me_data', 'queue', operationId);
+  if (!op) return;
+  op.state = op.last_code === 'UNKNOWN_RESULT' ? 'UNKNOWN' : 'QUEUED';
+  await idb.put('me_data', 'queue', operationId, op);
+}
+
 export async function exportBackup() {
   const data = { app: 'M&E', exported_at: isoNowVN(), queue: await queueItems(), done: await doneItems() };
   return new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });

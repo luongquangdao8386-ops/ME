@@ -1,6 +1,8 @@
 // Lõi phía app: cấu hình, UUID, định dạng, nhãn song ngữ, IndexedDB, gọi máy chủ.
 // Mọi tên lưu trữ có tiền tố me (phụ lục 1.5 mục 2.1): IndexedDB me_*, Cache me-*, localStorage me.*
 
+import { DICT } from './dict.js';
+
 const CFG = window.ME_CONFIG || {};
 export const APP_BASE_URL = CFG.APP_BASE_URL || (location.origin + location.pathname.replace(/[^/]*$/, ''));
 export const BUILD_VERSION = CFG.BUILD_VERSION || '0.0.0';
@@ -80,96 +82,59 @@ export function todayVN() {
 }
 
 /* ---------------- Nhãn song ngữ (5.3) ---------------- */
-export const L = {
-  app_sub: ['', '机电管理'],
-  login: ['Đăng nhập', '登录'],
-  employee_code: ['Mã nhân viên', '员工编号'],
-  pin6: ['PIN 6 số', '六位数字密码'],
-  forgot_pin: ['Quên PIN', '忘记PIN'],
-  forgot_pin_help: ['Liên hệ quản trị để đặt lại PIN', '请联系管理员重置密码'],
-  same_account: ['Dùng cùng tài khoản với iPhone', '与iPhone使用同一账户'],
-  shared_device: ['Máy dùng chung', '公用设备'],
-  switch_user: ['Đăng nhập người khác', '切换用户'],
-  show_pin: ['Hiện PIN', '显示PIN'],
-  change_pin: ['Đổi PIN', '修改PIN'],
-  temp_pin: ['Bạn đang dùng PIN tạm, hãy đặt PIN mới', '您正在使用临时PIN，请设置新PIN'],
-  current_pin: ['PIN hiện tại', '当前PIN'],
-  new_pin: ['PIN mới', '新PIN'],
-  new_pin_again: ['Nhập lại PIN mới', '再次输入新PIN'],
-  pin_mismatch: ['Hai lần nhập PIN mới không khớp', '两次输入的新PIN不一致'],
-  no_reuse_pin: ['Không dùng lại PIN của app khác', '请勿重复使用其他应用的PIN'],
-  pin_weak: ['PIN quá dễ đoán, hãy chọn PIN khác', 'PIN过于简单，请换一个'],
-  pin_format: ['PIN phải gồm đúng 6 chữ số', 'PIN必须为6位数字'],
-  offline_unlock: ['Mở khóa ngoại tuyến', '离线解锁'],
-  open_with_pin: ['Mở bằng PIN', '用PIN打开'],
-  attempts_left: ['Còn {N} lần thử', '还可尝试 {N} 次'],
-  locked: ['Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút', '因多次输错PIN已暂时锁定，请 {N} 分钟后重试'],
-  revoked: ['Phiên đã bị thu hồi hoặc quyền đã thay đổi', '会话已撤销或权限已变更'],
-  session_warn: ['Phiên sắp hết hạn', '会话即将到期'],
-  relogin: ['Đăng nhập lại', '重新登录'],
-  logout: ['Đăng xuất', '退出登录'],
-  offline: ['Ngoại tuyến', '离线'],
-  local_saved: ['Đã lưu trên máy', '已保存在本机'],
-  queued: ['Chờ gửi', '待同步'],
-  sending: ['Đang gửi', '同步中'],
-  committed: ['Đã lưu máy chủ', '已同步'],
-  conflict: ['Xung đột, cần xử lý', '冲突，需处理'],
-  failed: ['Lỗi gửi', '同步失败'],
-  last_sync: ['Lần đồng bộ cuối', '上次同步'],
-  sync_now: ['Đồng bộ ngay', '立即同步'],
-  need_network: ['Cần kết nối mạng', '需要网络连接'],
-  safari_tab: ['Đang chạy trong Safari: nháp có thể bị xóa sau 7 ngày không mở', '在Safari中运行：7天未打开草稿可能被清除'],
-  dataset_reset: ['Dữ liệu đã được đặt lại, cần tải lại', '数据已重置，需重新加载'],
-  maintenance: ['Hệ thống đang bảo trì', '系统维护中'],
-  network_error: ['Không kết nối được máy chủ', '无法连接服务器'],
-  unknown_result: ['Chưa rõ kết quả, đang hỏi lại máy chủ', '结果未知，正在向服务器确认'],
-  server_url: ['Địa chỉ máy chủ (/exec)', '服务器地址 (/exec)'],
-  server_url_missing: ['Chưa có địa chỉ máy chủ', '尚未设置服务器地址'],
-  server_url_bad: ['Link phải có dạng https://script.google.com/macros/s/…/exec', '链接格式应为 https://script.google.com/macros/s/…/exec'],
-  save: ['Lưu', '保存'],
-  cancel: ['Hủy', '取消'],
-  back: ['Quay lại', '返回'],
-  download: ['Tải về', '下载'],
-  open_save: ['Mở / Lưu', '打开/保存'],
-  set_private: ['Đặt riêng tư', '设为私有'],
-  export_backup: ['Xuất dự phòng', '导出备份'],
-  pending_code: ['Chờ cấp mã', '待分配编号'],
-  machine_translated: ['dịch máy', '机器翻译'],
-  no_translation: ['Chưa có bản dịch', '暂无译文'],
-  sample_data: ['Dữ liệu mẫu', '示例数据'],
-  scan: ['Quét QR', '扫码'],
-  scan_hint: ['Dùng nút Quét trong app, không dùng app Camera', '请使用应用内扫码，不要用相机应用'],
-  open_in_app: ['Mở app M&E và dùng nút Quét', '请打开M&E应用并使用扫码按钮'],
-  continue_here: ['Tiếp tục trong Safari', '在Safari中继续'],
-  manual_code: ['Nhập mã', '输入编号'],
-  qr_foreign: ['Mã này không thuộc M&E', '此码不属于M&E'],
-  qr_unavailable: ['Không tìm thấy hoặc không có quyền xem', '未找到或无权查看'],
-  qr_inactive: ['Hồ sơ đã ngừng sử dụng', '记录已停用'],
-  qr_expired: ['Tem đã hết hiệu lực', '标签已失效'],
-  qr_not_in_restored: ['Không có mã này trong dữ liệu hiện tại', '当前数据中无此码'],
-  doc_too_large: ['Tệp quá lớn để mở trong app', '文件过大，无法在应用内打开'],
-  upload_too_large_mobile: ['Tệp trên {N} MB: hãy tải lên từ máy tính', '超过{N} MB的文件请在电脑上上传'],
-  photo_warning: ['Không chụp hợp đồng/chứng nhận vào mục ảnh', '请勿将合同或证书作为照片上传'],
-  coming_soon: ['Sắp có', '即将推出'],
-  env_test: ['THỬ', '测试'],
-  poc_title: ['Kiểm thử PoC', 'PoC测试'],
-  equipment: ['Thiết bị', '设备'],
-  inspections: ['Kiểm định', '检验']
-};
+// Nguồn duy nhất: i18n/labels.json → js/dict.js (npm run build). Không viết cứng chữ trong màn hình.
+export const L = DICT;
+
+function pairOf(keyOrPair) {
+  if (Array.isArray(keyOrPair)) return keyOrPair;
+  return L[keyOrPair] || [keyOrPair, keyOrPair];
+}
+function fill(s, vars) {
+  if (!vars) return s;
+  for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+/** Màu của nhãn trạng thái (green · amber · red · navy · grey) */
+export function toneOf(key) {
+  const p = L[key];
+  return (p && p[2]) || 'grey';
+}
+/** Nhãn trạng thái kèm màu, luôn có chữ (1.4 §3.3) */
+export function badge(key, vars, extraClass = '') {
+  return `<span class="badge t-${toneOf(key)}${extraClass ? ' ' + extraClass : ''}">${bi(key, vars)}</span>`;
+}
+/** Tên song ngữ của một bản ghi (name_vi/name_zh) kèm nhãn dịch máy / chưa có bản dịch (2.3) */
+export function biName(rec, f = 'name') {
+  if (!rec) return '';
+  const vi = rec[f + '_vi'] || '', zh = rec[f + '_zh'] || '';
+  const meta = rec.i18n_meta && rec.i18n_meta[f];
+  const mt = meta && meta.state === 'MACHINE';
+  const missing = meta && (meta.state === 'PENDING' || meta.state === 'MANUAL_REQUIRED');
+  const tagMt = ` <span class="tag mt">${bi('tag.machine_translated')}</span>`;
+  const none = `<span class="tag none">${bi('tag.no_translation')}</span>`;
+  const viH = vi ? `<span class="vi">${esc(vi)}</span>${mt && meta.src === 'zh' ? tagMt : ''}` : (missing || zh ? none : '');
+  const zhH = zh ? `<span class="zh">${esc(zh)}</span>${mt && meta.src === 'vi' ? tagMt : ''}` : (missing || vi ? none : '');
+  if (!viH && !zhH) return '';
+  return `${viH}<span class="sep"> · </span>${zhH}`;
+}
+/** Tên một dòng: chữ thuần "Việt · 中文" */
+export function nameText(rec, f = 'name') {
+  if (!rec) return '';
+  const vi = rec[f + '_vi'] || '', zh = rec[f + '_zh'] || '';
+  return vi && zh ? `${vi} · ${zh}` : (vi || zh);
+}
 
 /** HTML song ngữ "Việt · 中文" (đã thoát ký tự) */
 export function bi(keyOrPair, vars) {
-  const pair = Array.isArray(keyOrPair) ? keyOrPair : (L[keyOrPair] || [keyOrPair, keyOrPair]);
-  let [vi, zh] = pair;
-  if (vars) for (const k of Object.keys(vars)) { vi = vi.split('{' + k + '}').join(vars[k]); zh = zh.split('{' + k + '}').join(vars[k]); }
+  const pair = pairOf(keyOrPair);
+  const vi = fill(pair[0], vars), zh = fill(pair[1], vars);
   if (!zh) return `<span class="vi">${esc(vi)}</span>`;
   if (!vi) return `<span class="zh">${esc(zh)}</span>`;
   return `<span class="vi">${esc(vi)}</span><span class="sep"> · </span><span class="zh">${esc(zh)}</span>`;
 }
 export function biText(keyOrPair, vars) {
-  const pair = Array.isArray(keyOrPair) ? keyOrPair : (L[keyOrPair] || [keyOrPair, keyOrPair]);
-  let [vi, zh] = pair;
-  if (vars) for (const k of Object.keys(vars)) { vi = vi.split('{' + k + '}').join(vars[k]); zh = zh.split('{' + k + '}').join(vars[k]); }
+  const pair = pairOf(keyOrPair);
+  const vi = fill(pair[0], vars), zh = fill(pair[1], vars);
   return zh ? `${vi} · ${zh}` : vi;
 }
 export function esc(s) {

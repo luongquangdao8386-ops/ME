@@ -363,7 +363,7 @@ function projectRow_(ctx, row, sheet) {
       out.meta = { cost_hidden: true };
     }
   }
-  return out;
+  return annotateNames_(out);
 }
 
 /** Trường giá trong payload ghi của người không có quyền giá → COST_FIELD_FORBIDDEN */

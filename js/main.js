@@ -1,22 +1,23 @@
-// Khởi động app M&E (PoC): Service Worker, phiên, mở offline, định tuyến
-import { api, session, ls, bi, biText, esc, execUrl, resMsg, isoNowVN } from './core.js';
+// Khởi động app M&E: Service Worker, phiên, mở offline (2.5), đăng nhập, vào khung app
+import { api, session, ls, ss, bi, biText, esc, execUrl, resMsg, isoNowVN } from './core.js';
 import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData } from './auth.js';
-import { bootstrap, pullChanges, getMeta, queueItems, exportBackup } from './sync.js';
+import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
-import { renderLogin, renderChangePin, renderUnlock, shell, toast, dialog, setOfflineStrip, $ } from './ui.js';
-import { renderPoc, renderLabels } from './poc.js';
-import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
+import { renderLogin, renderChangePin, renderUnlock, toast, dialog, $ } from './ui.js';
+import { app, enterApp, syncNow } from './app.js';
+import { stopRouter } from './router.js';
+import { invalidate } from './data.js';
 
 const root = document.getElementById('app');
 
-// Ghi lại vi phạm CSP cho P-15
+// Ghi lại vi phạm CSP (NT1-08, P-15)
 window.__meCsp = [];
 document.addEventListener('securitypolicyviolation', (e) => {
   window.__meCsp.push({ directive: e.violatedDirective, blocked: e.blockedURI, at: isoNowVN() });
 });
 
 if ('serviceWorker' in navigator) {
-  // Bản mới của app được kích hoạt → tải lại một lần để không chạy lẫn mã cũ và mới
+  // Bản mới của app được kích hoạt → tải lại một lần để không chạy lẫn mã cũ và mới (nháp ở IndexedDB giữ nguyên)
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -27,7 +28,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => { /* tab riêng tư có thể chặn */ });
 }
 
-/** Lưu mẫu đo thời gian mở app (P-17): giữ 5 lần gần nhất, có đánh dấu hết thời gian chờ */
+/** Lưu mẫu đo thời gian mở app (P-17): giữ 5 lần gần nhất */
 function noteColdStart(ms, timedOut) {
   let list = [];
   try { list = JSON.parse(ls.get('cold_starts') || '[]'); } catch (e) { list = []; }
@@ -35,14 +36,25 @@ function noteColdStart(ms, timedOut) {
   ls.set('cold_starts', JSON.stringify(list.slice(-5)));
 }
 
+/** Đích đến tạm khi mở link QR mà chưa đăng nhập (1.4 §4.2) */
+function rememberTarget() {
+  const h = location.hash || '';
+  if (h.startsWith('#/r/') || /^#\/(equipment|materials|inspections|contracts)\//.test(h)) ss.set('pending_route', h);
+}
+function takeTarget() {
+  const h = ss.get('pending_route');
+  ss.del('pending_route');
+  return h;
+}
+
 /** Phiên đã hết hạn mà đang offline: chỉ cho xem nháp và xuất dự phòng (2.5 mục 3) */
 async function renderDraftsOnly() {
   const q = await queueItems();
   root.innerHTML = `<div class="page narrow">
-    <header class="bar"><h1>${bi(['Nháp chờ đồng bộ', '待同步草稿'])}</h1></header>
-    <div class="card"><p class="banner warn">${bi(['Phiên đã hết hạn: chỉ xem nháp và xuất dự phòng', '会话已过期：只能查看草稿和导出备份'])}</p>
-    <ul class="list">${q.map((o) => `<li>${esc(o.action)} · ${esc(o.local_created_at || '')}</li>`).join('') || '<li class="muted">—</li>'}</ul>
-    <div class="row"><button type="button" class="btn small primary" id="dr-backup">${bi('export_backup')}</button>
+    <header class="bar"><h1>${bi('draft.title')}</h1></header>
+    <div class="card"><p class="banner warn">${bi('auth.expired_offline')}</p>
+    <ul class="list">${q.map((o) => `<li>${esc(o.action)} · ${esc(o.local_created_at || '')}</li>`).join('') || `<li class="muted">${bi('draft.empty')}</li>`}</ul>
+    <div class="row"><button type="button" class="btn small primary" id="dr-backup">${bi('btn.export_backup')}</button>
     <button type="button" class="btn small" id="dr-login">${bi('login')}</button></div></div></div>`;
   $('#dr-backup', root).addEventListener('click', async () => {
     const b = await exportBackup();
@@ -51,122 +63,138 @@ async function renderDraftsOnly() {
   $('#dr-login', root).addEventListener('click', () => showLogin());
 }
 
-let offlineMode = false;
-
-async function loadBootMeta() {
-  const boot = await getMeta('bootstrap');
-  if (boot) { session.settings = boot.settings || {}; if (!session.user) session.user = boot.user; }
-  return boot;
+async function goApp(offline = false) {
+  const target = takeTarget();
+  if (target) history.replaceState(null, '', target);
+  await enterApp(root, { offline });
 }
 
-async function goHome() {
-  const boot = await loadBootMeta();
-  const last = await getMeta('last_sync');
-  const main = shell(root, {
-    titleKey: 'poc_title', env: boot ? boot.env : null, offline: offlineMode, lastSync: last,
-    onLogout: doLogout, onScan: scanFromHeader
-  });
-  await renderPoc(main, { isOwner: !!(session.user && Number(session.user.role_level) === 4), offline: offlineMode });
-}
-
+/**
+ * Đăng xuất (2.5): còn nháp chưa gửi → hộp thoại 4 lựa chọn
+ * (Đồng bộ ngay / Xuất dự phòng / Giữ nháp trên máy / Xóa nháp, hỏi lại lần hai)
+ */
 async function doLogout() {
-  const q = await queueItems();
-  if (q.length) {
-    const ok = await dialog({
-      title: bi('logout'),
-      body: `<p>${bi(['Còn {N} mục chờ gửi trên máy. Nháp được giữ lại cho lần đăng nhập sau.', '本机仍有 {N} 条待同步数据，草稿会保留到下次登录。'], { N: q.length })}</p>`,
-      actions: [{ label: bi('cancel'), value: false }, { label: bi('logout'), kind: 'primary', value: true }]
-    });
-    if (!ok) return;
+  const uid = session.user && session.user.user_id;
+  const mine = (await queueItems()).filter((o) => o.user_id === uid);
+  if (mine.length) {
+    for (;;) {
+      const online = navigator.onLine;
+      const choice = await dialog({
+        title: bi('btn.logout'),
+        body: `<p>${bi('auth.logout_has_drafts', { N: mine.length })}</p>`,
+        actions: [
+          { label: bi('btn.cancel'), value: null },
+          ...(online ? [{ label: bi('btn.sync_now'), value: 'sync' }] : []),
+          { label: bi('btn.export_backup'), value: 'backup' },
+          { label: bi('btn.delete_drafts'), kind: 'danger', value: 'delete' },
+          { label: bi('btn.keep_drafts'), kind: 'primary', value: 'keep' }
+        ]
+      });
+      if (!choice) return;
+      if (choice === 'sync') { await syncNow(); const left = (await queueItems()).filter((o) => o.user_id === uid); if (!left.length) break; mine.splice(0, mine.length, ...left); continue; }
+      if (choice === 'backup') { const b = await exportBackup(); shareFileNow(new File([b], `me-du-phong-${Date.now()}.json`, { type: 'application/json' })); continue; }
+      if (choice === 'delete') {
+        const sure = await dialog({ title: bi('btn.delete_drafts'), body: `<p><strong>${bi('draft.delete_all_confirm', { N: mine.length })}</strong></p>`, actions: [{ label: bi('btn.cancel'), kind: 'primary', value: false }, { label: bi('btn.delete_drafts'), kind: 'danger', value: true }] });
+        if (!sure) continue;
+        for (const o of mine) await deleteQueued(o.operation_id);
+      }
+      break;
+    }
   }
   await logout();
-  offlineMode = false;
+  leaveApp();
   showLogin();
 }
 
+function leaveApp() {
+  stopRouter();
+  app.shell = null;
+  invalidate();
+  history.replaceState(null, '', '#/');
+}
+
 function showLogin(reason) {
+  leaveApp();
   renderLogin(root, {
     reason,
     onLoggedIn: async () => {
-      offlineMode = false;
       const b = await bootstrap();
       if (!b.ok) toast(esc(resMsg(b)), 'err');
-      goHome();
+      goApp(false);
     },
     onMustChange: (tempPin) => {
       renderChangePin(root, {
         tempPin, forced: true,
-        onDone: async () => { toast(bi('committed'), 'ok'); await bootstrap(); goHome(); },
+        onDone: async () => { toast(bi('sync.committed'), 'ok'); await bootstrap(); goApp(false); },
         onCancel: async () => { await logout(); showLogin(); }
       });
     }
   });
 }
 
-function scanFromHeader() {
-  openScanner({
-    onResult: async (raw, info) => {
-      const p = parseScan(raw, info.manual);
-      const r = await resolveScan(p);
-      if (r.qr_state === 'OK') toast(`✓ ${esc(r.code)} · ${esc(r.entity_type)}${r.offline ? ' · ' + bi('offline') : ''}`, 'ok');
-      else toast(`${bi(qrStateText(r.qr_state))}${r.raw ? ' — ' + esc(r.raw.slice(0, 60)) : ''}`, 'err');
-    }
-  });
-}
-
-/** Xử lý lỗi phiên/epoch chung (2.5, 2.8) */
+/** Xử lý lỗi phiên/epoch chung (2.5, 2.8). Trả true nếu đã chuyển màn */
 async function handleSessionError(r) {
+  if (!r) return false;
   if (r.code === 'AUTH_REQUIRED' && r.data && (r.data.reason === 'REVOKED' || r.data.reason === 'AUTH_VERSION')) {
     await handleRevoked();
-    showLogin(bi('revoked'));
+    showLogin(bi('auth.revoked'));
     return true;
   }
-  if (r.code === 'AUTH_REQUIRED' || r.code === 'SESSION_EXPIRED') { showLogin(bi('relogin')); return true; }
-  if (r.code === 'DATASET_RESET') { await handleRevoked(); showLogin(bi('dataset_reset')); return true; }
+  if (r.code === 'AUTH_REQUIRED' || r.code === 'SESSION_EXPIRED') { showLogin(bi('btn.relogin')); return true; }
+  if (r.code === 'DATASET_RESET') { await handleRevoked(); showLogin(bi('sync.dataset_reset')); return true; }
   if (r.code === 'MUST_CHANGE_PIN') {
-    renderChangePin(root, { forced: true, onDone: async () => { await bootstrap(); goHome(); }, onCancel: async () => { await logout(); showLogin(); } });
+    renderChangePin(root, { forced: true, onDone: async () => { await bootstrap(); goApp(false); }, onCancel: async () => { await logout(); showLogin(); } });
     return true;
   }
   return false;
 }
 
-/** Tuyến #/r/<qr_key>: trong tab Safari iOS nhắc mở app trên Màn hình chính (3.4) */
-async function qrRoute(key) {
-  if (isIosSafariTab()) {
-    const go = await dialog({
-      title: bi('scan'),
-      body: `<p>${bi('open_in_app')}</p>`,
-      actions: [{ label: bi('continue_here'), kind: 'primary', value: true }]
-    });
-    if (!go) return;
+app.onLogout = doLogout;
+app.onSessionError = handleSessionError;
+app.onRevoked = async () => { await handleRevoked(); showLogin(bi('auth.revoked')); };
+app.onRelogin = async () => { await logout(); showLogin(bi('btn.relogin')); };
+app.onChangePin = () => {
+  leaveApp();
+  renderChangePin(root, {
+    forced: false,
+    onDone: async () => { toast(bi('auth.others_relogin'), 'ok'); await pullChanges(); goApp(false); },
+    onCancel: () => { history.replaceState(null, '', '#/account'); goApp(false); }
+  });
+};
+
+// Lỗi phiên từ bất kỳ request nào khi đang ở trong app
+let handlingAuth = false;
+import('./core.js').then(({ onApiEvent }) => onApiEvent(async (r) => {
+  if (!app.shell || handlingAuth) return;
+  if (['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'MUST_CHANGE_PIN'].includes(r.code) && r.request && r.request.action !== 'auth.login') {
+    handlingAuth = true;
+    try { await handleSessionError(r); } finally { handlingAuth = false; }
   }
-  const r = await resolveScan({ kind: 'qr', key });
-  toast(r.qr_state === 'OK' ? `✓ ${esc(r.code)}` : bi(qrStateText(r.qr_state)), r.qr_state === 'OK' ? 'ok' : 'err');
-  history.replaceState(null, '', '#/');
-}
+}));
 
 async function start() {
   const hash = location.hash || '';
-  if (hash.startsWith('#/labels')) { await loadSession(); return renderLabels(root); }
+  if (hash.startsWith('#/labels')) { await loadSession(); const { renderLabels } = await import('./poc.js'); return renderLabels(root); }
   await loadSession();
-  await loadBootMeta();
+  const boot = await getMeta('bootstrap');
+  if (boot) { session.settings = boot.settings || {}; if (!session.user) session.user = boot.user; }
   // Máy dùng chung mà không còn phiên: xóa cache nghiệp vụ của người trước (2.5)
   if (isSharedDevice() && !session.token) await clearUserData();
+  rememberTarget();
   if (!execUrl() || !session.token) return showLogin();
   if (session.kind === 'CHANGE_PIN') return showLogin();
 
   // Mở app: có mạng thì hỏi máy chủ (tối đa offline_probe_seconds); không thì mở khóa ngoại tuyến (2.5)
-  const probeSec = Number(session.settings.offline_probe_seconds || 8);
+  const probeSec = Number(session.settings.offline_probe_seconds || 12);
   const tryOffline = async () => {
-    offlineMode = true;
     const v = await getVerifier();
-    if (!v) return showLogin(bi('need_network'));
+    if (!v) return showLogin(bi('sync.need_network'));
     renderUnlock(root, {
       onUnlocked: async ({ expired, ms }) => {
         ls.set('p04_offline_open', isoNowVN());
         ls.set('offline_unlock_ms', String(ms));
         if (expired) return renderDraftsOnly();
-        goHome();
+        goApp(true);
       },
       onLogin: () => showLogin()
     });
@@ -175,7 +203,7 @@ async function start() {
 
   const wait = document.createElement('div');
   wait.className = 'boot';
-  wait.innerHTML = `<div class="spinner" aria-hidden="true"></div><button type="button" class="btn small" id="open-pin">${bi('open_with_pin')}</button>`;
+  wait.innerHTML = `<div class="spinner" aria-hidden="true"></div><button type="button" class="btn small" id="open-pin">${bi('auth.open_with_pin')}</button>`;
   root.replaceChildren(wait);
   let decided = false;
   $('#open-pin', wait).addEventListener('click', () => { if (!decided) { decided = true; tryOffline(); } });
@@ -186,11 +214,10 @@ async function start() {
   const timedOut = r.code === 'NETWORK_ERROR' && r.transport === 'TIMEOUT';
   noteColdStart(Math.round(performance.now() - t0), timedOut);
   if (r.code === 'NETWORK_ERROR' && navigator.onLine && (timedOut || !(await getVerifier()))) {
-    // Còn mạng mà máy chủ chậm (PoC: mở app 4–8 giây trở lên), hoặc không có verifier (tab Safari, máy dùng chung):
-    // chờ thêm thay vì chuyển sang mở khóa ngoại tuyến; nút "Mở bằng PIN" vẫn bấm được
+    // Còn mạng mà máy chủ chậm, hoặc không có verifier (tab Safari, máy dùng chung): chờ tiếp tới 30 giây
     const hint = document.createElement('p');
     hint.className = 'muted';
-    hint.textContent = biText(['Máy chủ đang phản hồi chậm…', '服务器响应较慢…']);
+    hint.textContent = biText('auth.server_slow');
     wait.appendChild(hint);
     r = await api('sync.changes', { cursor: cursor0, limit: 1 }, { timeoutMs: 30000, retry: true });
     if (decided) return;
@@ -198,20 +225,17 @@ async function start() {
   decided = true;
   if (r.code === 'NETWORK_ERROR') return tryOffline();
   if (await handleSessionError(r)) return;
-  if (r.code === 'SYSTEM_MAINTENANCE') { toast(bi('maintenance'), 'err'); return tryOffline(); }
+  if (r.code === 'SYSTEM_MAINTENANCE') { toast(bi('sys.maintenance'), 'err'); return tryOffline(); }
   flushPendingLogout();
   const cur = await getMeta('cursor');
   if (cur === null || cur === undefined) await bootstrap(); else await pullChanges();
-  goHome();
-  if (hash.startsWith('#/r/')) qrRoute(hash.slice(4));
+  await goApp(false);
+  // Có mạng: gửi hàng chờ còn lại ở nền
+  if ((await queueItems()).length) syncNow({ quiet: true });
 }
 
-window.addEventListener('online', () => { setOfflineStrip(false); });
-window.addEventListener('offline', async () => { setOfflineStrip(true, await getMeta('last_sync')); });
 window.addEventListener('hashchange', () => {
-  if (location.hash.startsWith('#/labels')) renderLabels(root);
-  else if (location.hash === '#/' && document.querySelector('.labels-screen')) start();
-  else if (location.hash.startsWith('#/r/') && session.token) qrRoute(location.hash.slice(4));
+  if (location.hash.startsWith('#/labels') && !app.shell) import('./poc.js').then((m) => m.renderLabels(root));
 });
 
 start().catch((e) => {

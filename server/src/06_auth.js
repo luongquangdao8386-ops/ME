@@ -506,3 +506,82 @@ function accountView_(ctx) {
     last_login_at: u.last_login_at, pin_changed_at: u.pin_changed_at
   };
 }
+
+/* ---------------- Phiên của chính mình (4.4.14) ---------------- */
+
+/** session.listOwn: các phiên FULL còn hiệu lực của người gọi; không trả token_hash */
+function sessionListOwn_(ctx) {
+  var t = now_().getTime();
+  var items = findAll_('Sessions', 'user_id', ctx.user.user_id).filter(function (s) {
+    return s.session_kind === 'FULL' && isSessionActive_(s, t);
+  }).map(function (s) {
+    return {
+      session_id: s.session_id, device_label: s.device_label, issued_at: s.issued_at, last_seen_at: s.last_seen_at,
+      expires_at: s.expires_at, current: s.session_id === ctx.sid
+    };
+  });
+  items.sort(function (a, b) { return String(b.issued_at).localeCompare(String(a.issued_at)); });
+  return { items: items };
+}
+
+/** session.revokeOwn {session_id}: thu hồi một phiên khác của chính mình (máy này dùng Đăng xuất) */
+function sessionRevokeOwn_(ctx) {
+  var id = (ctx.req.payload || {}).session_id;
+  if (!isUuidV4_(id)) throw validationError_([fieldError_('session_id', 'ID_INVALID')]);
+  return withWriteLock_(function () {
+    var s = findOne_('Sessions', 'session_id', id);
+    if (!s || s.user_id !== ctx.user.user_id) throw apiError_('NOT_FOUND');
+    if (!s.revoked_at) {
+      revokeSessionRow_(s, 'LOGOUT');
+      writeAudit_({
+        user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'session.revokeOwn', entity_type: 'SESSION', entity_id: id,
+        before_json: null, after_json: { revoked: true }, operation_id: '', auth_basis: 'ROLE_LEVEL'
+      });
+    }
+    return { revoked: true, session_id: id };
+  });
+}
+
+/* ---------------- Danh sách người (chọn người phụ trách, hiện tên) ---------------- */
+
+/** Bản đồ user_id → {employee_code, display_name, active} qua cache 10 phút (không có PIN, email).
+ *  Thao tác sửa người dùng phải remove('users:dir'). */
+function userDirectory_() {
+  if (DB_.userDir) return DB_.userDir;
+  var c = cache_().get('users:dir');
+  var m;
+  if (c) {
+    m = JSON.parse(c);
+  } else {
+    m = {};
+    readRows_('Users').forEach(function (u) { m[u.user_id] = { employee_code: u.employee_code, display_name: u.display_name, active: !!u.active }; });
+    try { cache_().put('users:dir', JSON.stringify(m), 600); } catch (e) { /* quá cỡ cache: đọc lại lần sau */ }
+  }
+  DB_.userDir = m;
+  return m;
+}
+
+var NAME_FIELDS_ = { owner_user_id: 'owner_name', updated_by: 'updated_by_name', submitted_by: 'submitted_by_name', approved_by: 'approved_by_name', created_by: 'created_by_name' };
+
+/** Tên hiển thị của người phụ trách/người sửa gắn vào bản ghi gửi client */
+function annotateNames_(o) {
+  if (!o) return o;
+  var dir = null;
+  Object.keys(NAME_FIELDS_).forEach(function (f) {
+    if (!o[f] || o[f] === SYSTEM_USER) return;
+    if (!dir) dir = userDirectory_();
+    var u = dir[o[f]];
+    if (u) o[NAME_FIELDS_[f]] = u.display_name;
+  });
+  return o;
+}
+
+/** user.pickList: chỉ user_id, mã, tên hiển thị của người đang hoạt động */
+function userPickList_() {
+  var dir = userDirectory_();
+  var items = Object.keys(dir).filter(function (id) { return dir[id].active; }).map(function (id) {
+    return { user_id: id, employee_code: dir[id].employee_code, display_name: dir[id].display_name };
+  });
+  items.sort(function (a, b) { return String(a.employee_code).localeCompare(String(b.employee_code)); });
+  return { items: items };
+}
