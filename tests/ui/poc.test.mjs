@@ -159,6 +159,26 @@ test('P-10: một máy gửi lần lượt 20 lệnh, SERVER_BUSY thì gửi l�
   } finally { await app.close(); }
 });
 
+test('tải tài liệu lên khi máy chủ đã ghi nhưng phản hồi mất: hỏi trạng thái, không tạo trùng (P-06/P-07 iPhone)', async () => {
+  const env = freshServer();
+  env.g.pocSeedSampleData();
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false, fault: (req, n) => (req.action === 'doc.upload' && n === 1 ? 'EXEC_THEN_AS_GET' : null) });
+  try {
+    const { page } = app;
+    await loginOwnerFirstTime(page);
+    await page.click('[data-poc="P-07"] summary');
+    await page.click('#p07t');
+    await page.waitForFunction(() => document.querySelector('[data-poc="P-07"] .poc-out').textContent.includes('doc.upload CERTIFICATE'), null, { timeout: 30000 });
+    const out = await page.textContent('[data-poc="P-07"] .poc-out');
+    assert.ok(out.includes('doc.upload CERTIFICATE: DUPLICATE_OPERATION'), out);
+    const docs = env.rows('Documents').filter((d) => d.kind === 'CERTIFICATE');
+    assert.equal(docs.length, 1, 'một dòng tài liệu');
+    assert.equal([...env.drive._files.values()].filter((f) => /\.pdf$/.test(f.name) && !f.trashed).length, 1, 'một tệp trên Drive');
+    await page.click('#p07d');
+    await page.waitForFunction(() => document.querySelector('[data-poc="P-07"] .poc-out').textContent.includes('doc.download: ✓'), null, { timeout: 30000 });
+  } finally { await app.close(); }
+});
+
 test('P-04: nháp kiểm định tạo khi offline được gửi đúng một lần khi có mạng lại', async () => {
   const env = freshServer();
   env.g.pocSeedSampleData();

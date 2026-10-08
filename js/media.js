@@ -53,9 +53,24 @@ export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thum
   };
   if (thumb) payload.thumb_b64 = await blobToB64(thumb);
   const t0 = performance.now();
-  const r = await api('doc.upload', payload, { write: true, expected_version: 0 });
+  const operation_id = uuid();
+  let r, retries = 0;
+  // Phản hồi có thể mất ở chặng chuyển hướng của Google dù máy chủ đã ghi xong (PoC iPhone):
+  // hỏi trạng thái thao tác, chưa COMMITTED thì gửi lại đúng operation_id và nội dung cũ (máy chủ không tạo trùng)
+  for (const wait of [3000, 8000, 0]) {
+    r = await api('doc.upload', payload, { write: true, expected_version: 0, operation_id });
+    if (r.ok || !['UNKNOWN_RESULT', 'NETWORK_ERROR', 'SERVER_BUSY'].includes(r.code) || !wait) break;
+    retries++;
+    await new Promise((res) => setTimeout(res, wait));
+    const st = await api('sync.getOperationStatus', { operation_id }, { retry: true });
+    if (st.ok && st.data.state === 'COMMITTED' && st.data.result) {
+      r = { ...st, ok: true, code: 'DUPLICATE_OPERATION', state: 'COMMITTED', data: st.data.result, record_version: st.data.record_version };
+      break;
+    }
+  }
   r.upload_ms = Math.round(performance.now() - t0);
   r.document_id = payload.document_id;
+  r.retries = retries;
   return r;
 }
 
@@ -64,8 +79,8 @@ export async function downloadDoc(documentId) {
   const t0 = performance.now();
   let r = await api('doc.download', { document_id: documentId });
   let retried = null;
-  // Lỗi đường truyền không phải hết giờ (vd. POST bị đổi thành GET): đọc lại một lần
-  if (r.code === 'NETWORK_ERROR' && r.transport !== 'TIMEOUT') {
+  // Lỗi đường truyền (POST bị đổi thành GET, hoặc hết giờ vì phản hồi mất ở chặng chuyển hướng): đọc lại một lần
+  if (r.code === 'NETWORK_ERROR') {
     retried = r.transport || r.code;
     await new Promise((res) => setTimeout(res, 2000));
     r = await api('doc.download', { document_id: documentId });

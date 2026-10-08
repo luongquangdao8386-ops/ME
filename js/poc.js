@@ -340,8 +340,8 @@ async function p06file(file) {
   const eq = (await getRecords('EQUIPMENT'))[0];
   if (!eq) { out('P-06', '✗ Chưa có thiết bị mẫu'); return; }
   const up = await uploadDoc({ entity_type: 'EQUIPMENT', entity_id: eq.equipment_id, kind: 'PHOTO_EQUIPMENT', blob: ph.main, mime: 'image/jpeg', thumb: ph.thumb, title_vi: 'Ảnh thử P-06', title_zh: 'P-06测试照片' });
-  out('P-06', `doc.upload: ${code(up)} ${ms(up.upload_ms)} · ${esc(up.data && up.data.record ? up.data.record.drive_sharing_state : '')}`);
-  if (!up.ok) { await rec('P-06', 'fail', 'Tải ảnh lên lỗi ' + up.code, {}); return; }
+  out('P-06', `doc.upload: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''} ${ms(up.upload_ms)}${typeof up.server_ms === 'number' ? ' (máy chủ ' + ms(up.server_ms) + ')' : ''}${up.retries ? ' · gửi lại ' + up.retries : ''} · ${esc(up.data && up.data.record ? up.data.record.drive_sharing_state : '')}`);
+  if (!up.ok) { await rec('P-06', 'fail', `Tải ảnh lên lỗi ${up.code}${up.transport ? '/' + up.transport : ''} sau ${up.retries || 0} lần gửi lại`, { upload_code: up.code, transport: up.transport || '', retries: up.retries || 0 }); return; }
   const rec0 = up.data.record;
   await upsertLocal('DOCUMENT', rec0);
   lastPhoto = rec0;
@@ -353,7 +353,7 @@ async function p06file(file) {
   const t = await probeImg(urls.thumbnail), l = await probeImg(urls.lh3);
   const ct = await probeCors(urls.thumbnail), cl = await probeCors(urls.lh3);
   out('P-06', `&lt;img&gt; thumbnail ${t.ok ? '✓' : '✗'} · lh3 ${l.ok ? '✓' : '✗'} · CORS thumbnail ${ct.ok ? '✓' : '✗ ' + esc(ct.error || ct.status)} · CORS lh3 ${cl.ok ? '✓' : '✗ ' + esc(cl.error || cl.status)}`);
-  const m = { src: `${ph.src_w}x${ph.src_h}`, in_type: ph.in_type, process_ms: ph.ms, upload_ms: up.upload_ms, img_thumbnail: t.ok, img_lh3: l.ok, cors_thumbnail: ct.ok, cors_lh3: cl.ok };
+  const m = { src: `${ph.src_w}x${ph.src_h}`, in_type: ph.in_type, process_ms: ph.ms, upload_ms: up.upload_ms, upload_server_ms: up.server_ms, upload_retries: up.retries || 0, img_thumbnail: t.ok, img_lh3: l.ok, cors_thumbnail: ct.ok, cors_lh3: cl.ok };
   await rec('P-06', t.ok || l.ok ? 'info' : 'fail', `${m.src} ${ms(ph.ms)}; thumbnail ${t.ok ? '✓' : '✗'}, lh3 ${l.ok ? '✓' : '✗'}, CORS ${ct.ok || cl.ok ? '✓' : '✗'} — còn bước Đặt riêng tư`, m);
 }
 async function p06private() {
@@ -630,7 +630,7 @@ async function p16upload(mb = 1.5) {
   if (!eq) return;
   const blob = makeTestPdf([`M&E PoC P-16 upload ${mb} MB`], Math.round(mb * 1048576));
   const up = await uploadDoc({ entity_type: 'EQUIPMENT', entity_id: eq.equipment_id, kind: 'OTHER', blob, mime: 'application/pdf', title_vi: `Tệp thử ${mb} MB`, title_zh: `${mb} MB测试文件` });
-  out('P-16', `Tải lên ${mb} MB: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''} ${up.upload_ms ? ms(up.upload_ms) : ''}`);
+  out('P-16', `Tải lên ${mb} MB: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''} ${up.upload_ms ? ms(up.upload_ms) : ''}${typeof up.server_ms === 'number' ? ' (máy chủ ' + ms(up.server_ms) + ')' : ''}${up.retries ? ' · gửi lại ' + up.retries : ''}`);
   if (!up.ok) await p16diag(up);
   const prev = results['P-16'] ? results['P-16'].metrics : {};
   const upload_ms = { ...(prev.upload_ms || {}), [mb + 'MB']: up.ok ? up.upload_ms : up.code + '/' + (up.transport || '') };
@@ -657,7 +657,7 @@ async function p16download() {
     const d = await downloadDoc(f.document_id);
     m.download_ms[f.size_mb + 'MB'] = d.ok ? d.ms : d.res.code + '/' + (d.res.transport || '');
     if (d.retried) m.download_retried = { ...(m.download_retried || {}), [f.size_mb + 'MB']: d.retried };
-    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) : code(d.res) + (d.res.transport ? ' · ' + esc(d.res.transport) : '')}${d.retried ? ' (gửi lại sau lỗi ' + esc(d.retried) + ')' : ''}`);
+    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) + (typeof d.server_ms === 'number' ? ' (máy chủ ' + ms(d.server_ms) + ')' : '') : code(d.res) + (d.res.transport ? ' · ' + esc(d.res.transport) : '')}${d.retried ? ' (gửi lại sau lỗi ' + esc(d.retried) + ')' : ''}`);
     if (!d.ok) await p16diag(d.res);
     if (d.ok) URL.revokeObjectURL(d.url);
   }

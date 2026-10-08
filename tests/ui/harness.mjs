@@ -31,6 +31,7 @@ export function startStatic() {
 /** Mở trình duyệt; mọi POST tới EXEC đi vào máy chủ giả lập `env` */
 /**
  * fault(req, n): trả 'AS_GET' để giả lập POST bị chuyển thành GET trên đường đi (máy chủ chạy doGet, không chạy doPost);
+ * 'EXEC_THEN_AS_GET': máy chủ đã chạy doPost nhưng phản hồi mất ở chặng chuyển hướng;
  * n là số thứ tự request của action đó (bắt đầu từ 1).
  */
 export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, delays = {}, sw = false, fault = null } = {}) {
@@ -53,7 +54,9 @@ export async function openApp({ env = freshServer(), viewport = { width: 390, he
       calls.push(parsed.action);
       const n = calls.filter((a) => a === parsed.action).length;
       env.g.dbReset_();
-      if (fault && fault(parsed, n) === 'AS_GET') body = JSON.stringify(env.get({}));
+      const f = fault ? fault(parsed, n) : null;
+      if (f === 'AS_GET') body = JSON.stringify(env.get({}));
+      else if (f === 'EXEC_THEN_AS_GET') { env.post(parsed); body = JSON.stringify(env.get({})); } // máy chủ đã chạy, phản hồi mất
       else body = JSON.stringify(env.post(parsed));
       if (delays[parsed.action]) await new Promise((r) => setTimeout(r, delays[parsed.action]));
     }
