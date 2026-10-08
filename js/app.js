@@ -37,6 +37,9 @@ async function renderRoute() {
   shell.setBackHandler((target) => back(target || '/'));
   const view = shell.view;
   view.className = 'view';
+  // Không để nội dung màn trước (vd cụm logo trang chủ) còn hiện trong lúc màn mới đang tải
+  if (!view.querySelector('.pane') || !path.startsWith(view.dataset.path || '\u0000')) view.innerHTML = '<div class="loading"><div class="spinner small" aria-hidden="true"></div></div>';
+  view.dataset.path = path.split('/').slice(0, 2).join('/');
   try {
     await m.route.handler(view, { params: m.params, query: queryParams(), shell, app, seq, isCurrent: () => seq === renderSeq });
   } catch (e) {
@@ -132,6 +135,7 @@ function registerRoutes() {
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
+  route('/labels', async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }, { nav: 'account' });
   for (const m of MODULES) if (m.dot > 1) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
   route('/r/:key', async (view, ctx) => {
     const r = await resolveScan({ kind: 'qr', key: ctx.params.key });

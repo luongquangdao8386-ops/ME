@@ -16,11 +16,14 @@ async function loginOwnerFirstTime(page) {
   await page.fill('#new1', OWNER_PIN);
   await page.fill('#new2', OWNER_PIN);
   await page.click('#cp-btn');
+  await page.waitForSelector('.grid9', { timeout: 15000 });
+  // Bàn thử PoC là trang ẩn của owner (Tài khoản → Bàn thử PoC)
+  await page.evaluate(() => { location.hash = '#/poc'; });
   await page.waitForSelector('[data-poc="P-01"]', { timeout: 15000 });
 }
 
 for (const [name, viewport, mobile] of [['iphone', { width: 390, height: 844 }, true], ['web', { width: 1440, height: 900 }, false]]) {
-  test(`đăng nhập ${name}: song ngữ, logo 57 chỉ ở màn đăng nhập, không tràn ngang`, async () => {
+  test(`đăng nhập ${name}: song ngữ, logo 57 chỉ ở đăng nhập và trang chủ, không tràn ngang`, async () => {
     const app = await openApp({ viewport, mobile });
     try {
       const { page } = app;
@@ -56,10 +59,13 @@ for (const [name, viewport, mobile] of [['iphone', { width: 390, height: 844 }, 
       await page.fill('#new1', OWNER_PIN);
       await page.fill('#new2', OWNER_PIN);
       await page.click('#cp-btn');
+      await page.waitForSelector('.grid9', { timeout: 15000 });
+      assert.equal(await page.locator('img.brand-logo').count(), 1, 'trang chủ có cụm logo 57');
+      await page.evaluate(() => { location.hash = '#/poc'; });
       await page.waitForSelector('[data-poc="P-01"]', { timeout: 15000 });
       assert.equal(await page.locator('img.brand-logo').count(), 0, 'trang nghiệp vụ không có logo');
-      const header = await page.textContent('.bar.main');
-      assert.ok(header.includes('Kiểm thử PoC') && header.includes('PoC测试') && header.includes('THỬ'));
+      const header = await page.textContent('.hdr');
+      assert.ok(header.includes('Bàn thử PoC') && header.includes('PoC测试台') && header.includes('THỬ'), header);
       assert.ok(await noHorizontalOverflow(page));
       await page.screenshot({ path: path.join(SHOTS, `poc-${name}.png`), fullPage: true });
       assert.deepEqual(await page.evaluate(() => window.__meCsp), [], 'không vi phạm CSP');
@@ -242,7 +248,7 @@ test('mở lại khi mất mạng → màn Mở khóa ngoại tuyến bằng PIN
     await page.fill('#upin', OWNER_PIN);
     await page.click('#u-btn');
     await page.waitForSelector('[data-poc="P-04"][open]', { timeout: 15000 });
-    assert.ok(await page.isVisible('#sh-offline'));
+    assert.ok(await page.isVisible('#st-offline'));
   } finally { await app.close(); }
 });
 
@@ -272,16 +278,18 @@ test('quét: nhập tay mã TB-0001 tìm thấy; chuỗi lạ báo "Mã này kh�
   try {
     const { page } = app;
     await loginOwnerFirstTime(page);
-    await page.click('#sh-scan');
+    await page.click('#bnav-scan');
     await page.waitForSelector('.scanner');
     await page.screenshot({ path: path.join(SHOTS, 'scan-iphone.png') });
     await page.fill('#sc-input', 'tb-0001');
     await page.click('#sc-form button');
-    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('TB-0001'));
-    await page.click('#sh-scan');
+    // Mã thiết bị → mở thẳng hồ sơ
+    await page.waitForFunction(() => (document.querySelector('.code.big') || {}).textContent === 'TB-0001', null, { timeout: 15000 });
+    await page.click('#bnav-scan');
     await page.fill('#sc-input', 'https://luongquangdao8386-ops.github.io/Codien/#/x/123');
     await page.click('#sc-form button');
-    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('不属于M&E'));
+    await page.waitForFunction(() => (document.querySelector('.modal') || {}).textContent?.includes('不属于M&E'));
+    assert.ok((await page.textContent('.modal')).includes('Codien'), 'hiện chuỗi thô, không tự mở');
   } finally { await app.close(); }
 });
 
