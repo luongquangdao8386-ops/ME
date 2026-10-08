@@ -7,11 +7,15 @@ import { enqueue } from '../sync.js';
 import { processPhoto, uploadDoc, downloadDoc, shareFileNow, isTouchMobile } from '../media.js';
 import { writeOnline, busy } from '../form.js';
 
-const FILE_KINDS = ['MANUAL', 'DRAWING', 'CERTIFICATE', 'OTHER'];
-const PHOTO_KIND = { EQUIPMENT: 'PHOTO_EQUIPMENT', MATERIAL: 'PHOTO_MATERIAL' };
-const MODULE_OF = { EQUIPMENT: 'equipment', MATERIAL: 'warehouse' };
+const FILE_KINDS = {
+  EQUIPMENT: ['MANUAL', 'DRAWING', 'CERTIFICATE', 'OTHER'], MATERIAL: ['MANUAL', 'DRAWING', 'OTHER'],
+  INSPECTION: ['CERTIFICATE', 'OTHER', 'INVOICE'], INSPECTION_REQUIREMENT: ['CERTIFICATE', 'OTHER'], CONTRACT: ['CONTRACT', 'INVOICE', 'OTHER']
+};
+const PHOTO_KIND = { EQUIPMENT: 'PHOTO_EQUIPMENT', MATERIAL: 'PHOTO_MATERIAL', INSPECTION: 'PHOTO_EQUIPMENT', INSPECTION_REQUIREMENT: 'PHOTO_EQUIPMENT', CONTRACT: 'PHOTO_SITE' };
+const MODULE_OF = { EQUIPMENT: 'equipment', MATERIAL: 'warehouse', INSPECTION: 'inspections', INSPECTION_REQUIREMENT: 'inspections', CONTRACT: 'contracts' };
+const KEY_OF = { EQUIPMENT: 'equipment_id', MATERIAL: 'material_id', INSPECTION: 'inspection_id', INSPECTION_REQUIREMENT: 'requirement_id', CONTRACT: 'contract_id' };
 
-function keyOf(type) { return type === 'EQUIPMENT' ? 'equipment_id' : 'material_id'; }
+function keyOf(type) { return KEY_OF[type]; }
 
 /** URL ảnh nhỏ: lh3 đọc được bằng CORS (quyết định sau PoC) */
 export function photoSrc(d, w = 400) {
@@ -62,10 +66,12 @@ export async function docsTabHtml(type, rec) {
 }
 
 /** Hỏi tên và loại tài liệu trước khi tải lên */
-async function askMeta({ link = false, kindDefault = 'MANUAL' } = {}) {
+async function askMeta({ link = false, type = 'EQUIPMENT' } = {}) {
+  const kinds = FILE_KINDS[type] || FILE_KINDS.EQUIPMENT;
+  const kindDefault = kinds[0];
   return dialog({
     title: bi(link ? 'btn.add_link' : 'btn.upload'),
-    body: `<label for="dm-kind">${bi('field.document_kind')}</label><select id="dm-kind" class="inp sel">${FILE_KINDS.map((k) => `<option value="${k}"${k === kindDefault ? ' selected' : ''}>${bi('doc_kind.' + k)}</option>`).join('')}</select>
+    body: `<label for="dm-kind">${bi('field.document_kind')}</label><select id="dm-kind" class="inp sel">${kinds.map((k) => `<option value="${k}"${k === kindDefault ? ' selected' : ''}>${bi('doc_kind.' + k)}</option>`).join('')}</select>
       <label for="dm-title">${bi('field.document_title')}</label><input id="dm-title" type="text" maxlength="200">
       <p class="muted small">${bi('field.one_lang')}</p>
       ${link ? `<label for="dm-url">${bi('field.external_url')}</label><input id="dm-url" type="url" inputmode="url" placeholder="https://…">` : ''}`,
@@ -91,7 +97,7 @@ export function wireDocsTab(tb, type, rec, repaint) {
       const ph = await processPhoto(f);
       payload = { entity_type: type, entity_id: id, kind: PHOTO_KIND[type], blob: ph.main, mime: 'image/jpeg', thumb: ph.thumb, ...titlePayload(f.name.replace(/\.[^.]+$/, '')) };
     } else {
-      const meta = await askMeta();
+      const meta = await askMeta({ type });
       if (!meta) return;
       if (!meta.title) { toast(bi('field.one_lang'), 'err'); return; }
       const mime = f.type === 'image/jpg' ? 'image/jpeg' : f.type;
@@ -114,7 +120,7 @@ export function wireDocsTab(tb, type, rec, repaint) {
   }));
   const lk = $('[data-link]', tb);
   if (lk) lk.addEventListener('click', async () => {
-    const meta = await askMeta({ link: true });
+    const meta = await askMeta({ link: true, type });
     if (!meta) return;
     if (!meta.title || !/^https:\/\//.test(meta.url)) { toast(bi(!meta.title ? 'field.one_lang' : 'field.invalid'), 'err'); return; }
     const r = await writeOnline('doc.upload', { document_id: uuid(), entity_type: type, entity_id: id, kind: meta.kind, external_url: meta.url, ...titlePayload(meta.title) });

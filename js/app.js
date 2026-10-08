@@ -127,9 +127,13 @@ function registerRoutes() {
   route('/materials/new', lazy('./pages/materials.js', 'renderMaterialForm'), { nav: 'warehouse' });
   route('/materials/:id', lazy('./pages/materials.js', 'renderMaterial'), { nav: 'warehouse' });
   route('/materials/:id/edit', lazy('./pages/materials.js', 'renderMaterialForm'), { nav: 'warehouse' });
-  route('/inspections', lazy('./pages/misc.js', 'renderInspectionsInterim'), { nav: 'inspections' });
-  route('/inspections/:id', lazy('./pages/misc.js', 'renderInspectionsInterim'), { nav: 'inspections' });
-  route('/inspections/record/:id', lazy('./pages/misc.js', 'renderInspectionsInterim'), { nav: 'inspections' });
+  route('/inspections', lazy('./pages/inspections.js', 'renderInspectionList'), { nav: 'inspections' });
+  route('/inspections/types', lazy('./pages/inspections.js', 'renderTypes'), { nav: 'inspections' });
+  route('/inspections/new', lazy('./pages/inspections.js', 'renderRequirementForm'), { nav: 'inspections' });
+  route('/inspections/record/:id', lazy('./pages/inspections.js', 'renderInspectionRecord'), { nav: 'inspections' });
+  route('/inspections/:id', lazy('./pages/inspections.js', 'renderRequirement'), { nav: 'inspections' });
+  route('/inspections/:id/edit', lazy('./pages/inspections.js', 'renderRequirementForm'), { nav: 'inspections' });
+  route('/inspections/:id/submit', lazy('./pages/inspections.js', 'renderSubmitForm'), { nav: 'inspections' });
   route('/contracts', lazy('./pages/misc.js', 'renderContractsInterim'), { nav: 'contracts' });
   route('/contracts/:id', lazy('./pages/misc.js', 'renderContractsInterim'), { nav: 'contracts' });
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });

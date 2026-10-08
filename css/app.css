@@ -529,3 +529,9 @@ details.more summary { cursor: pointer; min-height: 40px; display: flex; align-i
   .bnav-item .soon .sep { display: none; }
 }
 @media (min-width: 900px) { details.more summary { display: none; } }
+.tag, .badge.t-navy, .pill { flex: none; }
+.tag.env { white-space: nowrap; }
+@media (min-width: 900px) {
+  .hdr-title { flex: 0 1 auto; min-width: 0; }
+  .hdr-status { flex: 0 1 auto; min-width: 0; }
+}

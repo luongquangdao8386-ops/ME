@@ -228,7 +228,7 @@ test('inspection.submit: kiểm dữ liệu; cấp 2 KT không được nộp; n
   const c = ownerClient(env);
   env.g.pocSeedSampleData();
   const reqId = env.rows('InspectionRequirements')[0].requirement_id;
-  const base = { requirement_id: reqId, inspection_date: '2026-10-05', valid_to: '2027-10-04', result: 'PASS' };
+  const base = { requirement_id: reqId, inspection_date: '2026-10-05', valid_from: '2026-10-05', valid_to: '2027-10-04', result: 'PASS' };
   const bad = c.write('inspection.submit', { ...base, inspection_id: uuid(), result: 'CONDITIONAL_PASS' });
   assert.equal(bad.errors[0].code, 'RESTRICTION_REQUIRED');
   const bad2 = c.write('inspection.submit', { ...base, inspection_id: uuid(), valid_from: '2028-01-01' });

@@ -2,7 +2,7 @@
 import { bi, biText, esc, fmtDate, badge, biName, nameText, session, ls, L } from '../core.js';
 import { ICON, toast } from '../ui.js';
 import { MODULES } from '../shell.js';
-import { recs, byId, mapOf, can, isOwner, roleLevel, dueInfo, requirementRecordStatus, boot } from '../data.js';
+import { recs, byId, can, isOwner, roleLevel, boot } from '../data.js';
 import { currentPath, navigate } from '../router.js';
 import { app } from '../app.js';
 
@@ -24,47 +24,6 @@ export async function renderPocPage(view, { shell }) {
 /* ---------------- Kiểm định, Hợp đồng: bản xem tạm (màn đầy đủ làm ở phần sau của Đợt 1) ---------------- */
 
 const interimNote = () => `<p class="banner info">${bi('misc.interim')}</p>`;
-
-export async function renderInspectionsInterim(view, { shell, params }) {
-  const reqs = await recs('INSPECTION_REQUIREMENT');
-  const insp = await recs('INSPECTION');
-  const types = await mapOf('INSPECTION_TYPE');
-  const eqs = await mapOf('EQUIPMENT');
-  if (params.id && currentPath().startsWith('/inspections/record/')) {
-    const i = insp.find((x) => x.inspection_id === params.id);
-    shell.setScreen({ title: 'module.inspections', back: '/inspections' });
-    view.innerHTML = interimNote() + (i ? `<div class="card"><h2>${esc(i.inspection_code || biText('tag.pending_code'))}</h2>
-      <div class="kv"><span>${bi('field.inspection_date')}</span><strong>${esc(fmtDate(i.inspection_date))}</strong></div>
-      <div class="kv"><span>${bi('field.result')}</span>${badge('inspection_result.' + i.result)}</div>
-      <div class="kv"><span>${bi('col.status')}</span>${badge('cert_status.' + i.status)}</div>
-      <div class="kv"><span>${bi('field.valid_to')}</span><strong>${esc(fmtDate(i.valid_to))}</strong></div></div>` : `<div class="card">${bi('err.not_found')}</div>`);
-    return;
-  }
-  if (params.id) {
-    const r = reqs.find((x) => x.requirement_id === params.id);
-    shell.setScreen({ title: 'module.inspections', back: '/inspections' });
-    if (!r) { view.innerHTML = `<div class="card">${bi('err.not_found')}</div>`; return; }
-    const t = types.get(r.inspection_type_id), e = eqs.get(r.equipment_id);
-    const due = dueInfo(r.current_due_date);
-    const rs = requirementRecordStatus(r, insp);
-    view.innerHTML = interimNote() + `<div class="card"><h2>${esc(r.requirement_code)}</h2>
-      <div class="kv"><span>${bi('field.inspection_type')}</span><strong>${t ? biName(t) : ''}</strong></div>
-      <div class="kv"><span>${bi('module.equipment')}</span><strong>${e ? `<a href="#/equipment/${esc(e.equipment_id)}">${esc(e.equipment_code)}</a> ${biName(e)}` : ''}</strong></div>
-      <div class="kv"><span>${bi('field.valid_to')}</span><strong>${esc(fmtDate(r.current_due_date) || biText('field.not_set'))}</strong></div>
-      <div class="kv"><span>${bi('col.status')}</span><span>${badge(due.key, due.vars)} ${badge('record_status.' + rs)}</span></div>
-      ${r.qr_key ? `<div class="row"><a class="btn small" href="#/qr/INSPECTION_REQUIREMENT/${esc(r.requirement_id)}">${ICON.qr}<span>${bi('btn.view_qr')}</span></a></div>` : ''}</div>
-      <div class="card"><h3>${bi('tab.history')}</h3><ul class="list">${insp.filter((i) => i.requirement_id === r.requirement_id).map((i) =>
-        `<li><a href="#/inspections/record/${esc(i.inspection_id)}">${esc(i.inspection_code)}</a> · ${esc(fmtDate(i.inspection_date))} · ${badge('inspection_result.' + i.result)} ${badge('cert_status.' + i.status)}</li>`).join('') || `<li class="muted">${bi('history.empty')}</li>`}</ul></div>`;
-    return;
-  }
-  shell.setScreen({ title: 'module.inspections', back: '/' });
-  view.innerHTML = interimNote() + `<div class="cards">${reqs.map((r) => {
-    const t = types.get(r.inspection_type_id), e = eqs.get(r.equipment_id);
-    const due = dueInfo(r.current_due_date);
-    return `<a class="card rec-card" href="#/inspections/${esc(r.requirement_id)}"><div class="rec-top"><span class="code">${esc(r.requirement_code)}</span>${badge(due.key, due.vars)}</div>
-      <div class="rec-name">${t ? biName(t) : ''}</div><div class="muted">${e ? esc(e.equipment_code + ' · ' + nameText(e)) : ''}</div></a>`;
-  }).join('') || `<p class="muted">${bi('draft.empty')}</p>`}</div>`;
-}
 
 export async function renderAdminInterim(view, { shell, params }) {
   shell.setScreen({ title: 'admin.' + params.page, back: '/account' });

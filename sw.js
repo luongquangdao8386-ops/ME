@@ -1,12 +1,12 @@
 // Service Worker của M&E — phạm vi /ME/; chỉ quản lý cache tên me-shell-* (phụ lục 1.5 mục 2.1)
 const VERSION = '1.0.0-poc.4';
-const BUILD_HASH = '3cfe3f4ae063'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const BUILD_HASH = 'eb72352974f4'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const SHELL = 'me-shell-' + VERSION + '-' + BUILD_HASH;
 const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/core.js', 'js/dict.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/poc.js', 'js/scan.js', 'js/media.js', 'js/labels.js', 'js/qr-worker.js',
   'js/router.js', 'js/data.js', 'js/shell.js', 'js/app.js', 'js/form.js',
-  'js/pages/home.js', 'js/pages/alerts.js', 'js/pages/account.js', 'js/pages/drafts.js', 'js/pages/misc.js', 'js/pages/equipment.js', 'js/pages/materials.js', 'js/pages/docs.js',
+  'js/pages/home.js', 'js/pages/alerts.js', 'js/pages/account.js', 'js/pages/drafts.js', 'js/pages/misc.js', 'js/pages/equipment.js', 'js/pages/materials.js', 'js/pages/docs.js', 'js/pages/inspections.js',
   'vendor/jsQR-1.4.0.js', 'vendor/qrcode-generator-2.0.4.mjs',
   'assets/brand/logo57-tile.svg', 'assets/bg/factory.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
 ];
