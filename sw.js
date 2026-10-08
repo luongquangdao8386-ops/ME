@@ -1,6 +1,7 @@
 // Service Worker của M&E — phạm vi /ME/; chỉ quản lý cache tên me-shell-* (phụ lục 1.5 mục 2.1)
-const VERSION = '1.0.0-poc.2';
-const SHELL = 'me-shell-' + VERSION;
+const VERSION = '1.0.0-poc.3';
+const BUILD_HASH = '0191b887523e'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const SHELL = 'me-shell-' + VERSION + '-' + BUILD_HASH;
 const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/core.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/poc.js', 'js/scan.js', 'js/media.js', 'js/labels.js', 'js/qr-worker.js',

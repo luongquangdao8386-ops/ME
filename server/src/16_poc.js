@@ -35,6 +35,39 @@ function pocComputeVectors_() {
   return { got: got, expect: v.expect, pass: pass, all_pass: Object.keys(pass).every(function (k) { return pass[k]; }) };
 }
 
+/**
+ * P-01: ghi lại các request system.getPublicState thật sự chạy doPost (theo probe_run/probe_seq)
+ * và các lần doGet bị gọi không có action (POST bị chuyển thành GET trên đường đi).
+ */
+function pocProbe_(p) {
+  var run = String(p.probe_run || '');
+  if (!/^[A-Za-z0-9_-]{4,40}$/.test(run)) return null;
+  var c = cache_();
+  var key = 'diag:probe:' + run;
+  if (p.probe_read) {
+    var gets = c.get('diag:gets');
+    return { run: run, seen: JSON.parse(c.get(key) || '[]'), gets_without_action: gets ? JSON.parse(gets) : [] };
+  }
+  var seq = Number(p.probe_seq);
+  if (seq >= 0 && seq < 1000) {
+    var seen = JSON.parse(c.get(key) || '[]');
+    seen.push(seq);
+    c.put(key, JSON.stringify(seen.slice(-200)), 3600);
+  }
+  return null;
+}
+
+/** Ghi thời điểm doGet bị gọi không có action (giữ 50 lần gần nhất, 6 giờ) */
+function pocNoteGet_() {
+  if (!isTestEnv_()) return;
+  try {
+    var c = cache_();
+    var list = JSON.parse(c.get('diag:gets') || '[]');
+    list.push(isoVN_(now_()));
+    c.put('diag:gets', JSON.stringify(list.slice(-50)), 21600);
+  } catch (e) { /* bỏ qua */ }
+}
+
 function pocVectors_() {
   return pocComputeVectors_();
 }
@@ -287,7 +320,7 @@ function pocSeedSampleData() {
       return c({
         requirement_id: uuid_(), requirement_code: allocCode_(st, su, 'INSPECTION_REQUIREMENT', null, null), equipment_id: eqs[x[0]].equipment_id,
         location_id: '', inspection_type_id: types[x[1]].inspection_type_id, owner_user_id: by, current_inspection_id: '',
-        current_due_date: '', operational_status: 'ACTIVE', obligation_status: 'REQUIRED', active: true, due_revision: 1
+        current_due_date: '', operational_status: 'ACTIVE', obligation_status: 'REQUIRED', active: true, due_revision: ''
       });
     });
     insertRows_('Locations', locs); insertRows_('Vendors', vends); insertRows_('LookupValues', cats);

@@ -8,7 +8,7 @@ var HANDLERS_ = {
   'auth.logoutAll': function (ctx) { return authLogoutAll_(ctx); },
   'pin.change': function (ctx) { return pinChange_(ctx); },
   'account.view': function (ctx) { return accountView_(ctx); },
-  'system.getPublicState': function () { return publicState_(); },
+  'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
@@ -46,6 +46,7 @@ var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth
 function doPost(e) {
   var t0 = Date.now();
   var res;
+  propsReset_(true);
   try {
     var body = e && e.postData ? e.postData.contents : '';
     var req;
@@ -57,6 +58,8 @@ function doPost(e) {
     }
   } catch (err2) {
     res = internalError_({}, err2);
+  } finally {
+    propsReset_(false);
   }
   res.server_ms = Date.now() - t0;
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
@@ -68,18 +71,26 @@ function doGet(e) {
   if (p.action === 'system.health') {
     out = { ok: true, code: 'OK', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
   } else {
-    out = { ok: false, code: 'NOT_FOUND', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
+    // via:'GET' giúp app nhận ra một POST đã bị chuyển thành GET trên đường đi (P-01)
+    if (!p.action) pocNoteGet_();
+    out = { ok: false, code: 'NOT_FOUND', via: 'GET', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function publicState_() {
+function publicState_(req) {
   var props = sysProps_();
-  return {
+  var out = {
     app_id: APP_ID, api_contract_version: API_CONTRACT_VERSION, server_version: SERVER_VERSION,
     maintenance_mode: props.maintenance_mode, env: props.env, min_client_version: setting_('min_client_version'),
     ready: !!prop_('BUSINESS_SPREADSHEET_ID')
   };
+  var p = (req && req.payload) || {};
+  if (p.probe_run && isTestEnv_()) {
+    var d = pocProbe_(p);
+    if (d) out.probe = d;
+  }
+  return out;
 }
 
 /** Phong bì phản hồi chuẩn (3.15) */

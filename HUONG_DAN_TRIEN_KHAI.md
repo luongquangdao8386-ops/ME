@@ -40,7 +40,7 @@ Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và 
     Thấy dòng có `"ok":true` và `"app_id":"ME"` là đạt.
 12. **Gửi link `/exec` cho Claude** (chỉ link, không gửi PIN hay mật khẩu).
 
-> Sửa mã về sau: dán `Code.gs` mới → Lưu → **Triển khai** → **Quản lý bản triển khai** → bút chì **Chỉnh sửa** → Phiên bản: **Phiên bản mới** → **Triển khai**. Làm như vậy link `/exec` giữ nguyên.
+> Sửa mã về sau: dán `Code.gs` mới → Lưu → chạy `migrateSchema` (an toàn khi chạy nhiều lần) → **Triển khai** → **Quản lý bản triển khai** → bút chì **Chỉnh sửa** → Phiên bản: **Phiên bản mới** → **Triển khai**. Làm như vậy link `/exec` giữ nguyên. Kiểm lại: báo cáo PoC ghi đúng số **Máy chủ** mới.
 
 ## Phần B — Bật GitHub Pages
 

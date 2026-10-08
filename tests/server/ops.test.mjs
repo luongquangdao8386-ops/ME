@@ -275,10 +275,22 @@ test('doc.upload ảnh LINK_VIEW → chia sẻ "ai có link: xem"; doc.download 
   const dl = c.call('doc.download', { document_id: docId });
   assert.equal(dl.ok, true);
   assert.equal(dl.data.content_b64, jpg);
-  const sp = c.write('doc.setPrivate', { document_id: docId }, { expected_version: 1 });
+  // bản cũ → VERSION_CONFLICT, bản máy chủ trả về không lộ thư mục quản lý
+  const conf = c.write('doc.setPrivate', { document_id: docId }, { expected_version: 7 });
+  assert.equal(conf.code, 'VERSION_CONFLICT');
+  assert.equal(conf.data.server.managed_folder_id, undefined);
+  const opSp = uuid();
+  const sp = c.write('doc.setPrivate', { document_id: docId }, { expected_version: 1, operation_id: opSp });
   assert.equal(sp.ok, true, JSON.stringify(sp));
   assert.equal(sp.data.drive_sharing_state, 'REVOKED');
   assert.equal(f.access, 'PRIVATE');
+  assert.equal(env.rows('Documents')[0].access_scope, 'LINK_VIEW', 'giữ phạm vi, chỉ đổi trạng thái chia sẻ');
+  // mất phản hồi rồi gửi lại cùng operation_id → DUPLICATE_OPERATION (không báo lỗi điều kiện)
+  const again = c.write('doc.setPrivate', { document_id: docId }, { expected_version: 1, operation_id: opSp });
+  assert.equal(again.code, 'DUPLICATE_OPERATION', JSON.stringify(again));
+  assert.equal(again.data.drive_sharing_state, 'REVOKED');
+  // thao tác mới trên tài liệu đã REVOKED → VALIDATION_ERROR
+  assert.equal(c.write('doc.setPrivate', { document_id: docId }, { expected_version: 2 }).code, 'VALIDATION_ERROR');
   const view = c.call('doc.view', { entity_type: 'EQUIPMENT', entity_id: id });
   assert.equal(view.data.items[0].drive_file_id, undefined, 'tài liệu riêng tư không lộ ID Drive');
 });

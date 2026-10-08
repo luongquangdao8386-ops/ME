@@ -5,6 +5,7 @@ var DB_ = { books: {}, sheets: {}, headers: {}, settings: null };
 /** Xóa bộ nhớ đệm trong một lần chạy (dùng trong test và sau setup) */
 function dbReset_() {
   DB_ = { books: {}, sheets: {}, headers: {}, settings: null };
+  if (PROPS_MEMO_ON_) propsReset_(true);
 }
 
 function book_(b) {

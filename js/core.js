@@ -23,7 +23,7 @@ export function execUrl() {
   return CFG.EXEC_URL || ls.get('exec_url') || '';
 }
 export function isValidExecUrl(u) {
-  return /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(String(u || '').trim());
+  return /^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(String(u || '').trim());
 }
 
 /* ---------------- UUID (3.3) ---------------- */
@@ -102,8 +102,8 @@ export const L = {
   pin_format: ['PIN phải gồm đúng 6 chữ số', 'PIN必须为6位数字'],
   offline_unlock: ['Mở khóa ngoại tuyến', '离线解锁'],
   open_with_pin: ['Mở bằng PIN', '用PIN打开'],
-  attempts_left: ['Còn N lần thử', '还可尝试 N 次'],
-  locked: ['Tạm khóa do nhập sai PIN nhiều lần, thử lại sau N phút', '因多次输错PIN已暂时锁定，请 N 分钟后重试'],
+  attempts_left: ['Còn {N} lần thử', '还可尝试 {N} 次'],
+  locked: ['Tạm khóa do nhập sai PIN nhiều lần, thử lại sau {N} phút', '因多次输错PIN已暂时锁定，请 {N} 分钟后重试'],
   revoked: ['Phiên đã bị thu hồi hoặc quyền đã thay đổi', '会话已撤销或权限已变更'],
   session_warn: ['Phiên sắp hết hạn', '会话即将到期'],
   relogin: ['Đăng nhập lại', '重新登录'],
@@ -160,7 +160,7 @@ export const L = {
 export function bi(keyOrPair, vars) {
   const pair = Array.isArray(keyOrPair) ? keyOrPair : (L[keyOrPair] || [keyOrPair, keyOrPair]);
   let [vi, zh] = pair;
-  if (vars) for (const k of Object.keys(vars)) { vi = vi.replace(k, vars[k]); zh = zh.replace(k, vars[k]); }
+  if (vars) for (const k of Object.keys(vars)) { vi = vi.split('{' + k + '}').join(vars[k]); zh = zh.split('{' + k + '}').join(vars[k]); }
   if (!zh) return `<span class="vi">${esc(vi)}</span>`;
   if (!vi) return `<span class="zh">${esc(zh)}</span>`;
   return `<span class="vi">${esc(vi)}</span><span class="sep"> · </span><span class="zh">${esc(zh)}</span>`;
@@ -168,7 +168,7 @@ export function bi(keyOrPair, vars) {
 export function biText(keyOrPair, vars) {
   const pair = Array.isArray(keyOrPair) ? keyOrPair : (L[keyOrPair] || [keyOrPair, keyOrPair]);
   let [vi, zh] = pair;
-  if (vars) for (const k of Object.keys(vars)) { vi = vi.replace(k, vars[k]); zh = zh.replace(k, vars[k]); }
+  if (vars) for (const k of Object.keys(vars)) { vi = vi.split('{' + k + '}').join(vars[k]); zh = zh.split('{' + k + '}').join(vars[k]); }
   return zh ? `${vi} · ${zh}` : vi;
 }
 export function esc(s) {
@@ -193,19 +193,39 @@ const DBS = {
 const dbCache = {};
 function openDb(name) {
   if (dbCache[name]) return dbCache[name];
-  dbCache[name] = new Promise((resolve, reject) => {
+  const p = new Promise((resolve, reject) => {
     const req = indexedDB.open(name, DBS[name].v);
     req.onupgradeneeded = () => {
       const db = req.result;
       DBS[name].stores.forEach((s) => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s); });
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      // iOS có thể cắt kết nối IndexedDB khi app nằm nền lâu: bỏ kết nối cũ để lần sau mở lại
+      db.onclose = () => { delete dbCache[name]; };
+      db.onversionchange = () => { db.close(); delete dbCache[name]; };
+      resolve(db);
+    };
+    req.onerror = () => { delete dbCache[name]; reject(req.error); };
+    req.onblocked = () => { delete dbCache[name]; reject(new Error('IndexedDB blocked')); };
   });
-  return dbCache[name];
+  dbCache[name] = p;
+  return p;
+}
+/** Chạy thao tác IndexedDB; kết nối hỏng (InvalidStateError/UnknownError) thì mở lại và thử một lần nữa */
+async function withDb(name, fn) {
+  try {
+    return await fn(await openDb(name));
+  } catch (e) {
+    if (e && (e.name === 'InvalidStateError' || e.name === 'UnknownError' || /connection|closing/i.test(e.message || ''))) {
+      delete dbCache[name];
+      return fn(await openDb(name));
+    }
+    throw e;
+  }
 }
 function tx(dbName, store, mode, fn) {
-  return openDb(dbName).then((db) => new Promise((resolve, reject) => {
+  return withDb(dbName, (db) => new Promise((resolve, reject) => {
     const t = db.transaction(store, mode);
     const s = t.objectStore(store);
     let out;
@@ -217,11 +237,11 @@ function tx(dbName, store, mode, fn) {
 }
 const wrap = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
 export const idb = {
-  get: (db, store, key) => openDb(db).then((d) => wrap(d.transaction(store).objectStore(store).get(key))),
+  get: (db, store, key) => withDb(db, (d) => wrap(d.transaction(store).objectStore(store).get(key))),
   put: (db, store, key, val) => tx(db, store, 'readwrite', (s) => { s.put(val, key); }),
   del: (db, store, key) => tx(db, store, 'readwrite', (s) => { s.delete(key); }),
   clear: (db, store) => tx(db, store, 'readwrite', (s) => { s.clear(); }),
-  all: (db, store) => openDb(db).then((d) => new Promise((res, rej) => {
+  all: (db, store) => withDb(db, (d) => new Promise((res, rej) => {
     const out = [];
     const req = d.transaction(store).objectStore(store).openCursor();
     req.onsuccess = () => { const c = req.result; if (c) { out.push({ key: c.key, value: c.value }); c.continue(); } else res(out); };
@@ -258,6 +278,10 @@ export async function rawPost(req, { timeoutMs, write = false, bypassLimit = fal
     const ms = Math.round(performance.now() - t0);
     if (!res.ok || !json || typeof json !== 'object') {
       return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'NON_JSON', http: res.status, client_ms: ms, operation_id: req.operation_id || null };
+    }
+    // POST bị chuyển thành GET trên đường đi: máy chủ chạy doGet (via:'GET') thay vì doPost → coi như mất phản hồi
+    if (json.via === 'GET' || (json.code === 'NOT_FOUND' && json.message_vi === undefined)) {
+      return { ok: false, code: write ? 'UNKNOWN_RESULT' : 'NETWORK_ERROR', transport: 'REDIRECTED_AS_GET', client_ms: ms, operation_id: req.operation_id || null };
     }
     json.client_ms = ms;
     return json;
@@ -341,9 +365,13 @@ export function deviceInfo() {
   else if (/Chrome\//.test(ua)) browser = 'Chrome';
   else if (/Firefox\//.test(ua)) browser = 'Firefox';
   else if (/Safari\//.test(ua)) browser = 'Safari';
+  const safariVer = /Version\/(\d+(?:\.\d+)*)/.exec(ua);
+  const manualIos = ls.get('ios_manual');
   return {
+    safari_version: safariVer ? safariVer[1] : null,
+    ios_manual: manualIos || null,
     platform: ios ? ios[1] : (/Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'Mac' : /Android/.test(ua) ? 'Android' : /Linux/.test(ua) ? 'Linux' : 'khác'),
-    ios_version: ios ? `${ios[2]}.${ios[3]}${ios[4] ? '.' + ios[4] : ''}` : null,
+    ios_version: ios ? (manualIos || `${ios[2]}.${ios[3]}${ios[4] ? '.' + ios[4] : ''}${ios[2] === '18' && ios[3] === '6' ? ' (UA)' : ''}`) : null,
     browser, standalone, screen: `${screen.width}×${screen.height}@${window.devicePixelRatio}`,
     user_agent: ua
   };

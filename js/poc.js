@@ -45,6 +45,27 @@ const ms = (n) => `${fmtNumber(n)} ms`;
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : null; };
 const sleep = (t) => new Promise((r) => setTimeout(r, t));
 const code = (r) => `<code>${esc(r.code)}</code>`;
+/** Lỗi đường truyền/bận: chưa biết kết quả, không phải lỗi nghiệp vụ */
+const TRANSIENT = new Set(['UNKNOWN_RESULT', 'NETWORK_ERROR', 'SERVER_BUSY']);
+const transient = (r) => !r || TRANSIENT.has(r.code);
+
+/** Ghi có thử lại khi lỗi đường truyền hoặc SERVER_BUSY: giữ nguyên operation_id để máy chủ không ghi trùng (3.3) */
+async function writeSure(action, payload, opts = {}, log) {
+  const operation_id = opts.operation_id || uuid();
+  let r, retries = 0;
+  for (const wait of [2000, 5000, 10000, 0]) {
+    r = await api(action, payload, { ...opts, write: true, operation_id });
+    if (!transient(r) || !wait) break;
+    retries++;
+    if (log) log(`&nbsp;&nbsp;${code(r)}${r.transport ? ' · ' + esc(r.transport) : ''} → gửi lại cùng operation_id`);
+    await sleep(wait);
+  }
+  r.retries = retries;
+  return r;
+}
+/** Kết luận một mục kiểm: null = chưa kết luận được vì lỗi đường truyền */
+const verdict = (cond, ...rs) => (rs.some(transient) ? null : !!cond);
+const mark = (v) => (v ? '✓' : v === null ? '?' : '✗');
 
 function card(codeId, title, goal, body) {
   return `<details class="poc-card card" data-poc="${codeId}">
@@ -61,13 +82,15 @@ const btn = (id, label, kind = '') => `<button type="button" class="btn small ${
 
 async function p01() {
   clearOut('P-01');
-  const times = [];
+  const run = 'p01' + uuid().slice(0, 8);
+  const times = [], serverMs = [];
   let ok = 0;
-  const errs = {};
+  const errs = {}, failed = [];
   for (let i = 0; i < 20; i++) {
-    const r = await rawPost(envelope('system.getPublicState', {}, { token: null, epoch: null }), { timeoutMs: 30000 });
-    if (r.ok) { ok++; times.push(r.client_ms); } else errs[r.code + (r.transport ? '/' + r.transport : '')] = (errs[r.code] || 0) + 1;
-    out('P-01', `#${i + 1}: ${r.ok ? '✓' : '✗ ' + esc(r.code)} ${r.client_ms ? ms(r.client_ms) : ''}`);
+    const r = await rawPost(envelope('system.getPublicState', { probe_run: run, probe_seq: i }, { token: null, epoch: null }), { timeoutMs: 30000 });
+    if (r.ok) { ok++; times.push(r.client_ms); if (typeof r.server_ms === 'number') serverMs.push(r.server_ms); }
+    else { const k = r.code + (r.transport ? '/' + r.transport : ''); errs[k] = (errs[k] || 0) + 1; failed.push(i); }
+    out('P-01', `#${i + 1}: ${r.ok ? '✓' : '✗ ' + esc(r.code) + (r.transport ? ' ' + esc(r.transport) : '')} ${r.client_ms ? ms(r.client_ms) : ''}${typeof r.server_ms === 'number' ? ' (máy chủ ' + ms(r.server_ms) + ')' : ''}`);
   }
   let getOk = false, getMs = null;
   try {
@@ -78,8 +101,18 @@ async function p01() {
     getMs = Math.round(performance.now() - t0);
   } catch (e) { getOk = false; }
   out('P-01', `GET system.health: ${getOk ? '✓' : '✗'} ${getMs ? ms(getMs) : ''}`);
-  const m = { ok, total: 20, median_ms: median(times), max_ms: Math.max(...times, 0), get_health: getOk, errors: errs };
-  await rec('P-01', ok === 20 && getOk ? 'pass' : 'fail', `${ok}/20, trung vị ${ms(m.median_ms || 0)}, chậm nhất ${ms(m.max_ms)}`, m);
+  // Chẩn đoán: request lỗi có chạy doPost trên máy chủ không? (mất phản hồi hay bị đổi thành GET trước khi chạy)
+  let diag = null;
+  if (failed.length) {
+    const d = await rawPost(envelope('system.getPublicState', { probe_run: run, probe_read: true }, { token: null, epoch: null }), { timeoutMs: 30000 });
+    if (d.ok && d.data && d.data.probe) {
+      const seen = d.data.probe.seen || [];
+      diag = { failed, executed_on_server: failed.filter((i) => seen.includes(i)), gets_without_action: (d.data.probe.gets_without_action || []).length };
+      out('P-01', `Chẩn đoán: ${failed.length} request lỗi; máy chủ đã chạy doPost cho ${diag.executed_on_server.length} request trong số đó (${esc(diag.executed_on_server.map((i) => '#' + (i + 1)).join(', ') || '—')}); số lần doGet không có action gần đây: ${diag.gets_without_action}`);
+    }
+  }
+  const m = { ok, total: 20, median_ms: median(times), max_ms: Math.max(...times, 0), server_median_ms: median(serverMs), get_health: getOk, errors: errs, diag };
+  await rec('P-01', ok === 20 && getOk ? 'pass' : 'fail', `${ok}/20, trung vị ${ms(m.median_ms || 0)} (máy chủ ${ms(m.server_median_ms || 0)}), chậm nhất ${ms(m.max_ms)}${failed.length ? ', lỗi: ' + Object.entries(errs).map(([k, v]) => k + '×' + v).join(' ') : ''}`, m);
 }
 
 const VEC = {
@@ -120,25 +153,48 @@ async function p02weak() {
   if (!pin) return;
   const codes = [];
   for (const weak of ['012345', '000000']) {
-    const r = await api('pin.change', { current_pin: pin, new_pin: weak });
+    // PIN yếu không bao giờ được ghi nên gửi lại khi lỗi đường truyền là an toàn
+    const r = await api('pin.change', { current_pin: pin, new_pin: weak }, { retry: true });
     const sub = r.errors && r.errors[0] ? r.errors[0].code : '';
     codes.push(sub || r.code);
     out('P-02', `pin.change → ${esc(weak)}: ${code(r)} ${esc(sub)}`);
     if (r.ok) { toast('PIN đã bị đổi! · PIN已被修改', 'err'); break; }
+    if (r.code === 'AUTH_FAILED') { out('P-02', 'PIN hiện tại sai — chưa kết luận · 当前PIN错误，无法判断'); return; }
+    if (transient(r)) { out('P-02', 'Lỗi đường truyền — chưa kết luận, bấm thử lại · 网络错误，请重试'); return; }
   }
   const prev = results['P-02'] ? results['P-02'].metrics : {};
   const m = { ...prev, weak: codes.every((c) => c === 'PIN_WEAK'), login_ok: true };
   await rec('P-02', p02status(m), p02summary(m), m);
 }
 async function p02lock() {
+  // Lần sai thứ 5 phải trả PIN_LOCKED. Request lỗi đường truyền có thể đã chạy hoặc chưa,
+  // nên chỉ đòi: số AUTH_FAILED trước lần khóa ≤ 4 và cộng cả request lỗi thì ≥ 4; sau đó vẫn PIN_LOCKED.
   const seq = [];
-  for (let i = 0; i < 6; i++) {
+  let locked = 0;
+  for (let i = 0; i < 9 && locked < 2; i++) {
     const wrong = String(100000 + Math.floor(Math.random() * 899999));
     const r = await rawPost(envelope('auth.login', { employee_code: 'MAU-KHOA', pin: wrong, device_label: 'PoC P-02' }, { token: null, epoch: null }), { timeoutMs: 30000 });
-    seq.push(r.code);
-    out('P-02', `MAU-KHOA lần ${i + 1}: ${code(r)}${r.data && r.data.retry_after_seconds ? ' · ' + r.data.retry_after_seconds + ' s' : ''}`);
+    const c = r.code === 'NETWORK_ERROR' && r.transport ? 'NETWORK_ERROR:' + r.transport : r.code;
+    seq.push(c);
+    out('P-02', `MAU-KHOA lần ${i + 1}: ${code(r)}${r.transport ? ' · ' + esc(r.transport) : ''}${r.data && r.data.retry_after_seconds ? ' · ' + r.data.retry_after_seconds + ' s' : ''}`);
+    if (i === 0 && r.code === 'PIN_LOCKED') {
+      out('P-02', 'MAU-KHOA đang bị khóa từ lần thử trước: chờ hết thời gian khóa (hoặc chạy pocResetPin) rồi thử lại · MAU-KHOA仍处于锁定状态');
+      return;
+    }
+    if (r.code === 'PIN_LOCKED') locked++;
   }
-  const lockOk = seq.slice(0, 4).every((c) => c === 'AUTH_FAILED') && seq[4] === 'PIN_LOCKED' && seq[5] === 'PIN_LOCKED';
+  const first = seq.findIndex((c) => c === 'PIN_LOCKED');
+  const before = first < 0 ? seq : seq.slice(0, first);
+  const af = before.filter((c) => c === 'AUTH_FAILED').length;
+  const unk = before.filter((c) => c.startsWith('NETWORK_ERROR')).length;
+  const other = before.length - af - unk;
+  let lockOk;
+  if (other) lockOk = null; // vd. LOGIN_PAUSED
+  else if (first < 0) lockOk = af >= 5 ? false : null;
+  else if (af > 4 || af + unk < 4) lockOk = false;
+  else lockOk = locked >= 2 ? true : null;
+  if (lockOk && unk) out('P-02', `(có ${unk} request lỗi đường truyền trước khi khóa — máy chủ vẫn đếm đúng)`);
+  if (lockOk === null) { out('P-02', 'Lỗi đường truyền nhiều — chưa kết luận · 网络错误过多，无法判断'); return; }
   const prev = results['P-02'] ? results['P-02'].metrics : {};
   const m = { ...prev, lockout: lockOk, lock_sequence: seq };
   await rec('P-02', p02status(m), p02summary(m), m);
@@ -146,43 +202,47 @@ async function p02lock() {
 
 async function p03() {
   clearOut('P-03');
+  const log = (t) => out('P-03', t);
   const id = uuid();
   const payload = { equipment_id: id, name_vi: 'P03 thử ghi ' + fmtDateTime(new Date()) };
   const opId = uuid();
   const checks = {};
-  const r1 = await api('equipment.create', payload, { write: true, operation_id: opId, expected_version: 0 });
-  checks.committed = r1.ok && r1.state === 'COMMITTED' && r1.record_version === 1 && r1.dataset_epoch === session.epoch;
-  out('P-03', `1. Tạo: ${code(r1)} ${esc(r1.state || '')} v${r1.record_version} ${esc(r1.data ? r1.data.display_code : '')} ${r1.client_ms ? ms(r1.client_ms) : ''}`);
-  const r2 = await api('equipment.create', payload, { write: true, operation_id: opId, expected_version: 0 });
-  checks.duplicate = r2.code === 'DUPLICATE_OPERATION' && r2.data && r1.data && r2.data.display_code === r1.data.display_code;
-  out('P-03', `2. Gửi lại cùng operation_id: ${code(r2)}`);
-  const r3 = await api('equipment.create', { ...payload, name_vi: payload.name_vi + ' (khác)' }, { write: true, operation_id: opId, expected_version: 0 });
-  checks.reused = r3.code === 'OPERATION_ID_REUSED';
-  out('P-03', `3. Cùng operation_id, khác nội dung: ${code(r3)}`);
-  const r4 = await api('equipment.edit', { equipment_id: id, model: 'P03-A' }, { write: true, expected_version: 1 });
-  const r5 = await api('equipment.edit', { equipment_id: id, model: 'P03-B' }, { write: true, expected_version: 1 });
-  checks.conflict = r4.ok && r5.code === 'VERSION_CONFLICT';
-  out('P-03', `4. Sửa v1 → ${code(r4)} v${r4.record_version}; sửa lại với v1 → ${code(r5)}`);
+  const r1 = await writeSure('equipment.create', payload, { operation_id: opId, expected_version: 0 }, log);
+  checks.committed = verdict(r1.ok && r1.state === 'COMMITTED' && r1.record_version === 1 && r1.dataset_epoch === session.epoch, r1);
+  log(`1. Tạo: ${code(r1)} ${esc(r1.state || '')} v${r1.record_version} ${esc(r1.data ? r1.data.display_code : '')} ${r1.client_ms ? ms(r1.client_ms) : ''}`);
+  const r2 = await writeSure('equipment.create', payload, { operation_id: opId, expected_version: 0 }, log);
+  checks.duplicate = verdict(r2.code === 'DUPLICATE_OPERATION' && r2.data && r1.data && r2.data.display_code === r1.data.display_code, r1, r2);
+  log(`2. Gửi lại cùng operation_id: ${code(r2)}`);
+  const r3 = await writeSure('equipment.create', { ...payload, name_vi: payload.name_vi + ' (khác)' }, { operation_id: opId, expected_version: 0 }, log);
+  checks.reused = verdict(r3.code === 'OPERATION_ID_REUSED', r3);
+  log(`3. Cùng operation_id, khác nội dung: ${code(r3)}`);
+  const r4 = await writeSure('equipment.edit', { equipment_id: id, model: 'P03-A' }, { expected_version: 1 }, log);
+  const r5 = await writeSure('equipment.edit', { equipment_id: id, model: 'P03-B' }, { expected_version: 1 }, log);
+  checks.conflict = verdict(r4.ok && r5.code === 'VERSION_CONFLICT', r1, r4, r5);
+  log(`4. Sửa v1 → ${code(r4)} v${r4.record_version}; sửa lại với v1 → ${code(r5)}`);
   // 5. Mất phản hồi: cắt request sau 300 ms → UNKNOWN_RESULT → hỏi trạng thái → gửi lại cùng operation_id
   const id6 = uuid(), op6 = uuid();
   const p6 = { equipment_id: id6, name_vi: 'P03 mất phản hồi' };
   const r6 = await api('equipment.create', p6, { write: true, operation_id: op6, expected_version: 0, timeoutMs: 300 });
-  out('P-03', `5. Cắt request sau 300 ms: ${code(r6)}`);
+  log(`5. Cắt request sau 300 ms: ${code(r6)}`);
   let st = null;
   for (let i = 0; i < 8; i++) {
     await sleep(2500);
-    st = await api('sync.getOperationStatus', { operation_id: op6 });
-    out('P-03', `&nbsp;&nbsp;getOperationStatus: ${esc(st.ok ? st.data.state : st.code)}`);
+    st = await api('sync.getOperationStatus', { operation_id: op6 }, { retry: true });
+    log(`&nbsp;&nbsp;getOperationStatus: ${esc(st.ok ? st.data.state : st.code)}`);
     if (st.ok && st.data.state === 'COMMITTED') break;
   }
   if (!(st && st.ok && st.data.state === 'COMMITTED')) {
-    const r7 = await api('equipment.create', p6, { write: true, operation_id: op6, expected_version: 0 });
-    out('P-03', `&nbsp;&nbsp;Gửi lại cùng operation_id: ${code(r7)}`);
+    const r7 = await writeSure('equipment.create', p6, { operation_id: op6, expected_version: 0 }, log);
+    log(`&nbsp;&nbsp;Gửi lại cùng operation_id: ${code(r7)}`);
   }
-  const r8 = await api('sync.getOperationStatus', { operation_id: op6 });
-  checks.unknown = r6.code === 'UNKNOWN_RESULT' && r8.ok && r8.data.state === 'COMMITTED';
-  const all = Object.values(checks).every(Boolean);
-  await rec('P-03', all ? 'pass' : 'fail', Object.entries(checks).map(([k, v]) => `${k} ${v ? '✓' : '✗'}`).join(', '), { ...checks, create_ms: r1.client_ms });
+  const r8 = await api('sync.getOperationStatus', { operation_id: op6 }, { retry: true });
+  checks.unknown = verdict(r6.code === 'UNKNOWN_RESULT' && r8.ok && r8.data.state === 'COMMITTED', r8);
+  const vals = Object.values(checks);
+  const status = vals.includes(false) ? 'fail' : vals.includes(null) ? 'info' : 'pass';
+  const retries = [r1, r2, r3, r4, r5].reduce((n, r) => n + (r.retries || 0), 0);
+  if (retries) log(`(đã gửi lại ${retries} lần do lỗi đường truyền/bận)`);
+  await rec('P-03', status, Object.entries(checks).map(([k, v]) => `${k} ${mark(v)}`).join(', ') + (retries ? `, gửi lại ${retries}` : ''), { ...checks, create_ms: r1.client_ms, retries });
   pullChanges();
 }
 
@@ -241,7 +301,8 @@ async function p05scan() {
       const prev = results['P-05'] ? results['P-05'].metrics : {};
       const m = { ...prev, method: info.manual ? prev.method : info.method };
       if (!info.manual && res.qr_state === 'OK') {
-        const small = JSON.parse(ls.get('p05_small') || '[]'), large = JSON.parse(ls.get('p05_large') || '[]');
+        const sets = labelSets(await getRecords('EQUIPMENT'));
+        const small = sets.small.map((e) => e.equipment_code), large = sets.large.map((e) => e.equipment_code);
         if (small.includes(res.code)) m.small_ok = true;
         if (large.includes(res.code)) m.large_ok = true;
         m.scans = (m.scans || 0) + 1;
@@ -395,18 +456,20 @@ async function p09sync() {
 async function p10run() {
   const tag = ($('#p10-tag').value || 'X').replace(/[^A-Za-z0-9]/g, '').slice(0, 6) || 'X';
   ls.set('p10_tag', tag);
-  const counts = { ok: 0, busy: 0, other: 0 };
+  const counts = { ok: 0, busy: 0, retries: 0, other: 0 };
   const times = [];
   let i = 0;
   const worker = async () => {
     while (i < 20) {
       const n = i++;
-      const r = await api('equipment.create', { equipment_id: uuid(), name_vi: `P10-${tag}-${n}` }, { write: true, expected_version: 0 });
+      // SERVER_BUSY hoặc lỗi đường truyền → chờ rồi gửi lại cùng operation_id (không tạo trùng)
+      const r = await writeSure('equipment.create', { equipment_id: uuid(), name_vi: `P10-${tag}-${n}` }, { expected_version: 0 });
+      counts.retries += r.retries;
       if (r.ok) { counts.ok++; times.push(r.client_ms); } else if (r.code === 'SERVER_BUSY') counts.busy++; else counts.other++;
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  out('P-10', `Máy ${esc(tag)}: thành công ${counts.ok}/20 · SERVER_BUSY ${counts.busy} · lỗi khác ${counts.other} · trung vị ${ms(median(times) || 0)}`);
+  out('P-10', `Máy ${esc(tag)}: thành công ${counts.ok}/20 · gửi lại ${counts.retries} · vẫn SERVER_BUSY ${counts.busy} · lỗi khác ${counts.other} · trung vị ${ms(median(times) || 0)}`);
   await p10check(counts);
 }
 async function p10check(counts) {
@@ -569,11 +632,14 @@ async function p17long() {
   await p17rec(m);
 }
 async function p17rec(m) {
-  m.cold_start_ms = Number(ls.get('cold_start_ms')) || null;
+  let cs = [];
+  try { cs = JSON.parse(ls.get('cold_starts') || '[]'); } catch (e) { cs = []; }
+  m.cold_starts = cs;
+  m.cold_start_ms = cs.length ? cs[cs.length - 1].ms : null;
   const longOk = m.long_code === 'UNKNOWN_RESULT' && m.long_cut_s <= 57 && m.long_then === 'COMMITTED';
   const bursts = ['burst_10', 'burst_20', 'burst_40'].filter((k) => m[k]);
   await rec('P-17', longOk && bursts.length === 3 ? 'info' : (m.long_code && !longOk ? 'fail' : 'info'),
-    `mở app lần đầu ${m.cold_start_ms ? ms(m.cold_start_ms) : '—'}; ${bursts.map((k) => k.slice(6) + ': ' + m[k].ok + '/' + k.slice(6)).join(', ') || 'chưa thử đồng thời'}; request dài ${m.long_code ? (longOk ? '✓ cắt ở ' + m.long_cut_s + ' s → COMMITTED' : '✗ ' + m.long_code) : '—'}`, m);
+    `mở app: ${cs.length ? cs.map((c) => (c.timed_out ? '>' : '') + ms(c.ms)).join(', ') : '—'}; ${bursts.map((k) => k.slice(6) + ': ' + m[k].ok + '/' + k.slice(6)).join(', ') || 'chưa thử đồng thời'}; request dài ${m.long_code ? (longOk ? '✓ cắt ở ' + m.long_cut_s + ' s → COMMITTED' : '✗ ' + m.long_code) : '—'}`, m);
 }
 
 async function p18ok(good) {
@@ -583,6 +649,8 @@ async function p18ok(good) {
 
 async function p19() {
   clearOut('P-19');
+  const iosIn = ($('#p19-ios') && $('#p19-ios').value.trim()) || '';
+  if (/^\d{2}(\.\d+){0,2}$/.test(iosIn)) ls.set('ios_manual', iosIn); else if (!iosIn) ls.del('ios_manual');
   const d = deviceInfo();
   let fmts = null;
   if ('BarcodeDetector' in window) { try { fmts = await window.BarcodeDetector.getSupportedFormats(); } catch (e) { fmts = []; } }
@@ -592,7 +660,7 @@ async function p19() {
     randomUUID: !!crypto.randomUUID, getRandomValues: !!crypto.getRandomValues, subtle: !!(crypto.subtle && crypto.subtle.deriveBits),
     indexedDB: !!window.indexedDB, serviceWorker: 'serviceWorker' in navigator, sw_controlled: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
     canShareFiles, barcodeDetectorQr: !!(fmts && fmts.includes('qr_code')), storagePersist: !!(navigator.storage && navigator.storage.persist),
-    createImageBitmap: 'createImageBitmap' in window, standalone: d.standalone, ios: d.ios_version
+    createImageBitmap: 'createImageBitmap' in window, standalone: d.standalone, ios: d.ios_version, safari_version: d.safari_version
   };
   Object.entries(cap).forEach(([k, v]) => out('P-19', `${v === true ? '✓' : v === false ? '✗' : '·'} ${esc(k)}${typeof v === 'string' ? ': ' + esc(v) : ''}`));
   const must = cap.getRandomValues && cap.subtle && cap.indexedDB && cap.serviceWorker;
@@ -666,7 +734,8 @@ export async function renderPoc(main, { isOwner, offline }) {
   ${card('P-18', bi(['Ký tự, định dạng', '字符与格式']), 'U+202F, U+00A0, ×, ², ³ hiện đúng; ô ngày dùng được.',
     `<div class="chars"><div>12 350 · 1 250 000 VND · -12 350.5</div><div>130 kWh · 4 × 6 mm² · 25 m³/h · 92.5%</div><div>07/10/2026 08:05 · 01/10/2026 – 05/10/2026 · T2 · 周一</div><div>Máy nén khí · 螺杆空压机 · Đạt có điều kiện · 有条件合格</div></div>
      <label>${bi(['Ô ngày', '日期'])} <input type="date" id="p18-date"></label>${btn('p18y', bi(['Hiện đúng', '显示正确']), 'primary')}${btn('p18n', bi(['Bị lỗi', '显示错误']))}`)}
-  ${card('P-19', bi(['Khả năng trình duyệt', '浏览器能力']), 'randomUUID/getRandomValues, chia sẻ tệp, BarcodeDetector, lưu bền; chốt iOS tối thiểu.', btn('p19', bi(['Kiểm tra', '检查']), 'primary'))}
+  ${card('P-19', bi(['Khả năng trình duyệt', '浏览器能力']), 'randomUUID/getRandomValues, chia sẻ tệp, BarcodeDetector, lưu bền; chốt iOS tối thiểu. iPhone: gõ phiên bản iOS thật (Cài đặt → Cài đặt chung → Giới thiệu).',
+    `<input id="p19-ios" class="tiny-input" style="width:96px" inputmode="decimal" placeholder="iOS" value="${esc(ls.get('ios_manual') || '')}">` + btn('p19', bi(['Kiểm tra', '检查']), 'primary'))}
   `;
   POC_ORDER.forEach(paintStatus);
   const on = (id, fn) => { const el = $('#' + id, main); if (el) el.addEventListener('click', async () => { el.disabled = true; try { await fn(); } catch (e) { toast(esc(e.message), 'err'); } finally { el.disabled = false; } }); };
@@ -691,16 +760,21 @@ export async function renderPoc(main, { isOwner, offline }) {
   if (offline) { const det = document.querySelector('[data-poc="P-04"]'); if (det) det.open = true; }
 }
 
+/** Chọn thiết bị in tem thử — dùng chung cho trang in (máy tính) và P-05 (iPhone): 3 đầu cỡ nhỏ, 2 sau cỡ lớn */
+export function labelSets(eqs) {
+  const list = eqs.filter((e) => e.qr_key).sort((a, b) => String(a.equipment_code).localeCompare(String(b.equipment_code)));
+  return { small: list.slice(0, 3), large: list.slice(3, 5) };
+}
+
 /** Trang tem thử (máy tính): 3 thiết bị cỡ nhỏ, 2 thiết bị cỡ lớn */
 export async function renderLabels(root) {
   const { labelSheetHtml } = await import('./labels.js');
-  const eqs = (await getRecords('EQUIPMENT')).filter((e) => e.qr_key);
+  const sets = labelSets(await getRecords('EQUIPMENT'));
   const locs = await getRecords('LOCATION');
   const locCode = (id) => (locs.find((l) => l.location_id === id) || {}).location_code || '';
-  const items = eqs.map((e) => ({ entity_type: 'EQUIPMENT', code: e.equipment_code, qr_key: e.qr_key, name_vi: e.name_vi, name_zh: e.name_zh, location_code: locCode(e.location_id) }));
-  const small = items.slice(0, 3), large = items.slice(3, 5);
-  ls.set('p05_small', JSON.stringify(small.map((i) => i.code)));
-  ls.set('p05_large', JSON.stringify(large.map((i) => i.code)));
+  const toItem = (e) => ({ entity_type: 'EQUIPMENT', code: e.equipment_code, qr_key: e.qr_key, name_vi: e.name_vi, name_zh: e.name_zh, location_code: locCode(e.location_id) });
+  const small = sets.small.map(toItem), large = sets.large.map(toItem);
+  const items = small.concat(large);
   const smallSheet = small.concat(Array.from({ length: Math.max(0, 24 - small.length) }, (_, k) => small[k % Math.max(1, small.length)])).filter(Boolean);
   root.innerHTML = `<div class="labels-screen">
     <div class="no-print bar"><a class="btn small" href="#/">${bi('back')}</a><h1>${bi(['In tem thử', '打印测试标签'])}</h1>

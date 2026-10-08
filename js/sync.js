@@ -1,7 +1,9 @@
 // Đồng bộ: bootstrap, changes, hàng chờ offline (phụ lục 1.5 mục 3.15, 1.4 §14)
 import { api, session, idb, uuid, isoNowVN } from './core.js';
 
-const STOP_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'SYSTEM_MAINTENANCE', 'MUST_CHANGE_PIN']);
+const STOP_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'SYSTEM_MAINTENANCE', 'MUST_CHANGE_PIN', 'CLIENT_UPDATE_REQUIRED', 'QUOTA_EXCEEDED']);
+/** Không biết thao tác đã ghi hay chưa */
+const UNSURE_CODES = new Set(['UNKNOWN_RESULT', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED']);
 
 export async function getMeta(k) { return idb.get('me_data', 'meta', k).catch(() => null); }
 export async function setMeta(k, v) { return idb.put('me_data', 'meta', k, v); }
@@ -111,19 +113,27 @@ export async function flushQueue(onProgress) {
   const items = (await queueItems()).filter((o) => o.state !== 'REJECTED' && o.user_id === (session.user && session.user.user_id) && o.dataset_epoch === session.epoch);
   let sent = 0, committed = 0;
   for (const op of items) {
+    const wasUnknown = op.state === 'UNKNOWN' || op.last_code === 'UNKNOWN_RESULT';
     op.state = 'SENDING'; op.attempts++;
     await idb.put('me_data', 'queue', op.operation_id, op);
     if (onProgress) onProgress(op);
-    if (op.last_code === 'UNKNOWN_RESULT') {
-      const st = await api('sync.getOperationStatus', { operation_id: op.operation_id });
+    if (wasUnknown) {
+      // Chưa rõ lần trước đã ghi chưa: hỏi máy chủ trước, gửi lại cùng mã thao tác nếu chưa COMMITTED
+      const st = await api('sync.getOperationStatus', { operation_id: op.operation_id }, { retry: true });
       if (st.ok && st.data.state === 'COMMITTED') { await markDone(op, { code: 'DUPLICATE_OPERATION', data: st.data.result }); committed++; continue; }
+      if (!st.ok && (st.code === 'NETWORK_ERROR' || st.code === 'SERVER_BUSY')) {
+        op.state = 'UNKNOWN';
+        await idb.put('me_data', 'queue', op.operation_id, op);
+        return { sent, committed, stopped_code: st.code };
+      }
     }
     const res = await api('sync.push', { op: { action: op.action, operation_id: op.operation_id, entity_type: op.entity_type, entity_id: op.entity_id, expected_version: op.expected_version, payload: op.payload, local_created_at: op.local_created_at } }, { timeoutMs: 55000, write: true, operation_id: op.operation_id, expected_version: op.expected_version });
     sent++;
     if (res.ok && res.state === 'COMMITTED') { await markDone(op, res); committed++; continue; }
     op.last_code = res.code;
-    if (res.code === 'UNKNOWN_RESULT' || res.code === 'NETWORK_ERROR' || res.code === 'SERVER_BUSY') {
-      op.state = res.code === 'UNKNOWN_RESULT' ? 'UNKNOWN' : 'QUEUED';
+    if (UNSURE_CODES.has(res.code) || res.code === 'NETWORK_ERROR' || res.code === 'SERVER_BUSY') {
+      // Lỗi máy chủ giữa chừng cũng có thể đã ghi: giữ UNKNOWN, lần sau hỏi trạng thái trước (3.3)
+      op.state = res.code === 'NETWORK_ERROR' || res.code === 'SERVER_BUSY' ? (wasUnknown ? 'UNKNOWN' : 'QUEUED') : 'UNKNOWN';
       await idb.put('me_data', 'queue', op.operation_id, op);
       return { sent, committed, stopped_code: res.code };
     }

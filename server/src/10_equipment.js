@@ -88,7 +88,7 @@ function equipmentEdit_(ctx) {
     entity_type: 'EQUIPMENT', entity_id: p.equipment_id,
     build: function (st) {
       var cur = findOne_('Equipment', 'equipment_id', p.equipment_id);
-      assertVersion_(ctx, cur, 'EQUIPMENT');
+      assertVersion_(ctx, cur, 'EQUIPMENT', 'Equipment');
       var e2 = [];
       assertRefs_(p, e2);
       if (e2.length) throw validationError_(e2);

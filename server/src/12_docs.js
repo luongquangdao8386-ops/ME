@@ -205,7 +205,10 @@ function docSetPrivate_(ctx) {
   var module = docModule_(d0.entity_type);
   var auth = authorize_(ctx, 'doc.setPrivate', { module: module });
   if (auth.conds.length && d0.created_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');
-  if (d0.access_scope !== 'LINK_VIEW') throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
+  // Gửi lại cùng mã thao tác (sau khi đã REVOKED) → trả kết quả cũ trước khi kiểm điều kiện
+  var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
+  if (ex) return withWriteLock_(function () { return existingOpResponse_(ctx, ex, payloadHash_(ctx)); });
+  if (d0.access_scope !== 'LINK_VIEW' || d0.drive_sharing_state === 'REVOKED') throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
   var ok = true, errCode = '';
   try {
     ok = makePrivate_(d0.drive_file_id);
@@ -215,9 +218,8 @@ function docSetPrivate_(ctx) {
     entity_type: 'DOCUMENT', entity_id: p.document_id,
     build: function () {
       var cur = findOne_('Documents', 'document_id', p.document_id);
-      assertVersion_(ctx, cur, 'DOCUMENT');
+      assertVersion_(ctx, cur, 'DOCUMENT', 'Documents');
       var row = clone_(cur);
-      row.access_scope = ok ? 'MODULE_VIEW' : cur.access_scope;
       row.drive_sharing_state = ok ? 'REVOKED' : 'FAILED';
       row.sharing_updated_at = isoVN_(now_());
       row.sharing_error_code = ok ? '' : (errCode || 'NOT_PRIVATE');

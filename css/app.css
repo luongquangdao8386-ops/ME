@@ -98,7 +98,7 @@ label { display: block; font-size: 14px; color: var(--graphite); margin: 14px 0 
 .foot { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
 .server-url { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 10px; font-size: 14px; }
 .server-url summary { cursor: pointer; color: var(--graphite); min-height: 32px; }
-.server-url input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 14px; }
+.server-url input { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 8px 0; font-size: 16px; }
 @media (min-width: 900px) {
   .login-screen { position: relative; min-height: 100vh; }
   .login-hero { position: absolute; inset: 0; height: auto; max-height: none; padding: 48px 56px; background-position: center; }

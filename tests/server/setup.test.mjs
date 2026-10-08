@@ -114,3 +114,12 @@ test('pocResetPin cấp PIN tạm mới, thu hồi phiên cũ, mở khóa', asyn
   assert.equal(makeClient(env).login(OWNER_CODE, OWNER_PIN).code, 'AUTH_FAILED');
   assert.equal(makeClient(env).login(OWNER_CODE, '739154').code, 'MUST_CHANGE_PIN');
 });
+
+test('due_revision là chuỗi (vd. VALID_TO:ngày:id), ô định dạng Văn bản', () => {
+  const env = freshServer();
+  const g = env.g;
+  const dr = 'VALID_TO:2026-10-07:' + '0'.repeat(8) + '-0000-4000-8000-' + '0'.repeat(12);
+  g.insertRows_('Alerts', [{ alert_id: g.uuid_(), entity_type: 'INSPECTION_REQUIREMENT', entity_id: g.uuid_(), due_revision: dr, due_date: '2026-10-07', days_remaining: 30, alert_state: 'OPEN' }]);
+  assert.equal(env.rows('Alerts')[0].due_revision, dr);
+  assert.equal(g.colType_('due_revision'), 'STRING');
+});

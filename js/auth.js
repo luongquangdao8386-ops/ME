@@ -119,20 +119,29 @@ export async function offlineUnlock(pin) {
 /* ---------------- Đăng nhập, đổi PIN, hỏi lại PIN, đăng xuất ---------------- */
 
 /** Dữ liệu nghiệp vụ của người dùng cũ bị xóa khi người khác đăng nhập (2.5); nháp giữ lại */
-async function clearUserData() {
+export async function clearUserData() {
   await idb.clear('me_data', 'records').catch(() => {});
   await idb.clear('me_data', 'meta').catch(() => {});
   await idb.clear('me_files', 'files').catch(() => {});
 }
 
 export async function login(code, pin, shared) {
-  if (shared) ls.set('shared_device', '1'); else ls.del('shared_device');
   const r = await api('auth.login', { employee_code: code, pin, device_label: deviceLabel() }, { token: null, epoch: null });
   if (r.ok || r.code === 'MUST_CHANGE_PIN') {
+    // Chỉ đổi cờ "Máy dùng chung" khi đăng nhập thành công (2.5)
+    if (shared) ls.set('shared_device', '1'); else ls.del('shared_device');
     const prev = await getVerifier();
     const prevSession = await idb.get('me_auth', 'kv', 'session').catch(() => null);
     const prevUser = (prev && prev.user_id) || (prevSession && prevSession.user && prevSession.user.user_id);
-    if (prevUser && prevUser !== r.data.user.user_id) { await clearUserData(); await clearVerifier(); }
+    if (prevUser && prevUser !== r.data.user.user_id) {
+      // Người khác đăng nhập: thu hồi và xóa token, verifier, cache của người trước; nháp giữ riêng
+      if (prevSession && prevSession.token && navigator.onLine) {
+        api('auth.logout', {}, { token: prevSession.token, epoch: prevSession.epoch }).catch(() => {});
+      }
+      await idb.del('me_auth', 'kv', 'session').catch(() => {});
+      await clearUserData(); await clearVerifier();
+    }
+    if (shared) await idb.del('me_auth', 'kv', 'session').catch(() => {});
     await saveSession(r.data, r.dataset_epoch);
     if (r.ok) {
       try { await createVerifier(pin, r.data.user, r.data.expires_at); } catch (e) { /* không chặn đăng nhập */ }

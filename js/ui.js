@@ -125,6 +125,8 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
     toast(bi('save') + ' ✓', 'ok');
     renderLogin(root, { onLoggedIn, onMustChange });
   });
+  // Enter trong ô link /exec = Lưu (không gửi form đăng nhập)
+  $('#exec-url', el).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#save-url', el).click(); } });
   const pinInp = $('#pin', el);
   pinInp.addEventListener('input', () => { pinInp.value = pinInp.value.replace(/\D/g, '').slice(0, 6); });
   $('form', el).addEventListener('submit', async (ev) => {
@@ -133,13 +135,22 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
     err.textContent = '';
     const code = $('#emp', el).value.trim().toUpperCase();
     const pin = pinInp.value;
+    // Đã dán link /exec mà quên bấm Lưu: lưu luôn
+    const typed = $('#exec-url', el) ? $('#exec-url', el).value.trim() : '';
+    if (typed && typed !== execUrl() && isValidExecUrl(typed)) ls.set('exec_url', typed);
     if (!execUrl()) { err.innerHTML = bi('server_url_missing'); return; }
     if (!code) { $('#emp', el).focus(); return; }
     if (!/^\d{6}$/.test(pin)) { err.innerHTML = bi('pin_format'); return; }
     const btn = $('#login-btn', el);
     btn.disabled = true; btn.classList.add('busy');
-    const r = await login(code, pin, $('#shared', el).checked);
-    btn.disabled = false; btn.classList.remove('busy');
+    let r;
+    try {
+      r = await login(code, pin, $('#shared', el).checked);
+    } catch (e) {
+      r = { ok: false, code: 'CLIENT_ERROR', message_vi: 'Lỗi trên máy: ' + (e && e.message), message_zh: '本机错误' };
+    } finally {
+      btn.disabled = false; btn.classList.remove('busy');
+    }
     if (r.ok) { ls.set('last_employee_code', code); onLoggedIn && onLoggedIn(r); return; }
     if (r.code === 'MUST_CHANGE_PIN') { ls.set('last_employee_code', code); onMustChange && onMustChange(pin); return; }
     pinInp.value = '';
@@ -175,8 +186,9 @@ export function renderChangePin(root, { tempPin, onDone, onCancel, forced = true
     if (weak) { err.innerHTML = bi(weak); return; }
     const btn = $('#cp-btn', el);
     btn.disabled = true;
-    const r = await changePin(cur, n1);
-    btn.disabled = false;
+    let r;
+    try { r = await changePin(cur, n1); } catch (e) { r = { ok: false, code: 'CLIENT_ERROR', message_vi: 'Lỗi trên máy: ' + (e && e.message), message_zh: '本机错误' }; }
+    finally { btn.disabled = false; }
     if (r.ok) { onDone && onDone(r); return; }
     err.textContent = resMsg(r);
     if (r.errors && r.errors[0]) err.textContent += ` (${r.errors[0].message_vi} · ${r.errors[0].message_zh})`;
@@ -206,8 +218,10 @@ export async function renderUnlock(root, { onUnlocked, onLogin } = {}) {
     ev.preventDefault();
     const err = $('#u-err', el);
     const t0 = performance.now();
-    const r = await offlineUnlock(inp.value);
+    let r;
+    try { r = await offlineUnlock(inp.value); } catch (e) { r = { ok: false, error: e && e.message }; }
     inp.value = '';
+    if (r.error) { err.textContent = 'Lỗi trên máy · 本机错误: ' + r.error; return; }
     if (r.ok) { onUnlocked && onUnlocked({ expired: r.expired, ms: Math.round(performance.now() - t0) }); return; }
     if (r.wiped) { err.innerHTML = bi('need_network'); setTimeout(() => onLogin && onLogin(), 1500); return; }
     if (r.locked_minutes) { err.innerHTML = bi('locked', { N: r.locked_minutes }); return; }

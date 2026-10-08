@@ -1,5 +1,6 @@
 // Ghép server/src/*.js thành apps-script/Code.gs (một tệp để dán vào trình soạn Apps Script)
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -37,4 +38,19 @@ for (const [f, re] of Object.entries(checks)) {
   const m = re.exec(fs.readFileSync(path.join(root, f), 'utf8'));
   if (!m || m[1] !== ver) { console.error(`Phiên bản lệch: ${f} = ${m && m[1]}, package.json = ${ver}`); process.exit(1); }
 }
-console.log(`Code.gs: ${files.length} tệp, ${out.length} ký tự · phiên bản ${ver}`);
+// Mã băm nội dung vỏ app → tên cache của Service Worker đổi mỗi khi bất kỳ tệp nào đổi (thiết bị nhận bản mới)
+const swPath = path.join(root, 'sw.js');
+let sw = fs.readFileSync(swPath, 'utf8');
+const listSrc = /const FILES = \[([\s\S]*?)\];/.exec(sw)[1];
+const shellFiles = [...listSrc.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((f) => f !== './');
+const h = crypto.createHash('sha256');
+for (const f of shellFiles) {
+  const fp = path.join(root, f);
+  if (!fs.existsSync(fp)) { console.error(`sw.js liệt kê tệp không có: ${f}`); process.exit(1); }
+  h.update(f + '\0');
+  h.update(fs.readFileSync(fp));
+}
+const hash = h.digest('hex').slice(0, 12);
+const sw2 = sw.replace(/const BUILD_HASH = '[^']*';/, `const BUILD_HASH = '${hash}';`);
+if (sw2 !== sw) fs.writeFileSync(swPath, sw2);
+console.log(`Code.gs: ${files.length} tệp, ${out.length} ký tự · phiên bản ${ver} · vỏ app ${hash}`);

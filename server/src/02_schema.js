@@ -111,7 +111,7 @@ var TYPE_OVERRIDES_ = {
   reorder_level: 'NUMBER',
   record_version: 'INT', sync_revision: 'INT', role_level: 'INT', auth_version: 'INT', failed_attempts: 'INT', file_version: 'INT',
   size_bytes: 'INT', total_rows: 'INT', add_count: 'INT', update_count: 'INT', error_count: 'INT', revision: 'INT',
-  due_revision: 'INT', days_remaining: 'INT', attempt_count: 'INT', row_number: 'INT', expected_version: 'INT',
+  due_revision: 'STRING', days_remaining: 'INT', attempt_count: 'INT', row_number: 'INT', expected_version: 'INT',
   sort_order: 'INT', interval_value: 'INT', lead_time_days: 'INT', manufacture_year: 'INT', default_interval_months: 'INT',
   active: 'BOOL', owned_by_app: 'BOOL', must_change_pin: 'BOOL', lot_tracking: 'BOOL', serial_tracking: 'BOOL',
   is_equipment_component: 'BOOL', is_system_owner: 'BOOL', i18n_meta: 'JSON', code: 'CODE', schema_version: 'STRING',

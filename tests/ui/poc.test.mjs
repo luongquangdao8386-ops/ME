@@ -101,6 +101,24 @@ test('P-03: ghi có xác nhận, DUPLICATE, REUSED, CONFLICT, UNKNOWN_RESULT →
   } finally { await app.close(); }
 });
 
+test('P-03 khi POST bị chuyển thành GET (như lỗi NOT_FOUND ở P-01): app gửi lại cùng operation_id, vẫn đạt, không ghi trùng', async () => {
+  const env = freshServer();
+  // lần 1 tạo và lần 1 sửa đi lạc thành GET (máy chủ không chạy doPost)
+  const app = await openApp({ env, delays: { 'equipment.create': 600 }, fault: (req, n) => ((req.action === 'equipment.create' || req.action === 'equipment.edit') && n === 1 ? 'AS_GET' : null) });
+  try {
+    const { page } = app;
+    await loginOwnerFirstTime(page);
+    await page.click('[data-poc="P-03"] summary');
+    await page.click('#p03');
+    await page.waitForSelector('[data-poc="P-03"] .badge.pass, [data-poc="P-03"] .badge.fail, [data-poc="P-03"] .badge.info', { timeout: 90000 });
+    const out = await page.textContent('[data-poc="P-03"] .poc-out');
+    assert.ok(await page.locator('[data-poc="P-03"] .badge.pass').count(), out);
+    assert.ok(out.includes('UNKNOWN_RESULT · REDIRECTED_AS_GET → gửi lại cùng operation_id'), out);
+    assert.equal(env.rows('Equipment').filter((e) => e.name_vi.startsWith('P03 thử ghi')).length, 1, 'không ghi trùng');
+    assert.equal(env.rows('Equipment').filter((e) => e.name_vi === 'P03 mất phản hồi').length, 1);
+  } finally { await app.close(); }
+});
+
 test('P-04: nháp kiểm định tạo khi offline được gửi đúng một lần khi có mạng lại', async () => {
   const env = freshServer();
   env.g.pocSeedSampleData();

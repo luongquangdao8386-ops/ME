@@ -3,7 +3,6 @@
 
 function log_(msg) {
   Logger.log(msg);
-  try { console.log(msg); } catch (e) { /* bỏ qua */ }
 }
 
 /** Tạo một sheet với hàng tiêu đề, cố định hàng 1, định dạng ô theo kiểu (3.1) */
@@ -127,9 +126,10 @@ function migrateSchema() {
         sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length + missing.length - sheet.getMaxColumns());
       }
       sheet.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
-      formatColumns_(sheet, name, header.concat(missing), header.length);
       added.push(name + '(' + missing.join(',') + ')');
     }
+    // Định dạng Văn bản cho mọi cột kiểu chuỗi, kể cả cột cũ vừa đổi kiểu (vd. due_revision)
+    formatColumns_(sheet, name, header.concat(missing), 0);
   });
   dbReset_();
   seedBaseRows_();

@@ -20,6 +20,8 @@ export function startStatic() {
       const f = path.join(ROOT, p);
       if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end('nf'); return; }
       res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
+      // config.js trỏ tới /exec thật: trong test thay bằng link giả để mọi request đi vào máy chủ giả lập
+      if (p === 'config.js') { res.end(fs.readFileSync(f, 'utf8').replace(/EXEC_URL: '[^']*'/, `EXEC_URL: '${EXEC}'`)); return; }
       fs.createReadStream(f).pipe(res);
     });
     srv.listen(0, '127.0.0.1', () => resolve({ srv, base: `http://127.0.0.1:${srv.address().port}/ME/` }));
@@ -27,7 +29,11 @@ export function startStatic() {
 }
 
 /** Mở trình duyệt; mọi POST tới EXEC đi vào máy chủ giả lập `env` */
-export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, delays = {}, sw = false } = {}) {
+/**
+ * fault(req, n): trả 'AS_GET' để giả lập POST bị chuyển thành GET trên đường đi (máy chủ chạy doGet, không chạy doPost);
+ * n là số thứ tự request của action đó (bắt đầu từ 1).
+ */
+export async function openApp({ env = freshServer(), viewport = { width: 390, height: 844 }, mobile = true, delays = {}, sw = false, fault = null } = {}) {
   const { srv, base } = await startStatic();
   const browser = await chromium.launch();
   const context = await browser.newContext({
@@ -45,8 +51,10 @@ export async function openApp({ env = freshServer(), viewport = { width: 390, he
     } else {
       const parsed = JSON.parse(req.postData() || '{}');
       calls.push(parsed.action);
+      const n = calls.filter((a) => a === parsed.action).length;
       env.g.dbReset_();
-      body = JSON.stringify(env.post(parsed));
+      if (fault && fault(parsed, n) === 'AS_GET') body = JSON.stringify(env.get({}));
+      else body = JSON.stringify(env.post(parsed));
       if (delays[parsed.action]) await new Promise((r) => setTimeout(r, delays[parsed.action]));
     }
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body }).catch(() => {});

@@ -69,9 +69,14 @@ export async function downloadDoc(documentId) {
   return { ok: true, file, url: URL.createObjectURL(file), ms: Math.round(performance.now() - t0), bytes: bytes.length, server_ms: r.server_ms };
 }
 
+/** Máy cảm ứng (iPhone/iPad/Android) mới dùng bảng Chia sẻ; máy tính tải thẳng bằng <a download> (2.6) */
+export function isTouchMobile() {
+  return /iPhone|iPad|iPod|Android/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
 /** Bước 2 trên iPhone: gọi share ngay trong trình xử lý chạm, không await trước đó */
 export function shareFileNow(file) {
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (isTouchMobile() && navigator.canShare && navigator.canShare({ files: [file] })) {
     return navigator.share({ files: [file], title: file.name });
   }
   const a = document.createElement('a');

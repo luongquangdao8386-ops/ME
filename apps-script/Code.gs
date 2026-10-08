@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-poc.2
+ * M&E · 机电管理 — Code.gs 1.0.0-poc.3
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-poc.2';
+var SERVER_VERSION = '1.0.0-poc.3';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.0';
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -373,16 +373,29 @@ function cmpVersion_(a, b) {
   return 0;
 }
 
+/** Trong một request (doPost/doGet) ScriptProperties chỉ đọc một lần; hàm chạy tay thì đọc trực tiếp */
+var PROPS_MEMO_ = null, PROPS_MEMO_ON_ = false;
+
+function propsReset_(on) {
+  PROPS_MEMO_ = null;
+  PROPS_MEMO_ON_ = !!on;
+}
+
 function prop_(key) {
-  return PropertiesService.getScriptProperties().getProperty(key);
+  if (!PROPS_MEMO_ON_) return PropertiesService.getScriptProperties().getProperty(key);
+  if (!PROPS_MEMO_) PROPS_MEMO_ = PropertiesService.getScriptProperties().getProperties() || {};
+  var v = PROPS_MEMO_[key];
+  return v === undefined ? null : v;
 }
 
 function setProp_(key, value) {
   PropertiesService.getScriptProperties().setProperty(key, String(value));
+  if (PROPS_MEMO_) PROPS_MEMO_[key] = String(value);
 }
 
 function delProp_(key) {
   PropertiesService.getScriptProperties().deleteProperty(key);
+  if (PROPS_MEMO_) delete PROPS_MEMO_[key];
 }
 
 function envName_() {
@@ -511,7 +524,7 @@ var TYPE_OVERRIDES_ = {
   reorder_level: 'NUMBER',
   record_version: 'INT', sync_revision: 'INT', role_level: 'INT', auth_version: 'INT', failed_attempts: 'INT', file_version: 'INT',
   size_bytes: 'INT', total_rows: 'INT', add_count: 'INT', update_count: 'INT', error_count: 'INT', revision: 'INT',
-  due_revision: 'INT', days_remaining: 'INT', attempt_count: 'INT', row_number: 'INT', expected_version: 'INT',
+  due_revision: 'STRING', days_remaining: 'INT', attempt_count: 'INT', row_number: 'INT', expected_version: 'INT',
   sort_order: 'INT', interval_value: 'INT', lead_time_days: 'INT', manufacture_year: 'INT', default_interval_months: 'INT',
   active: 'BOOL', owned_by_app: 'BOOL', must_change_pin: 'BOOL', lot_tracking: 'BOOL', serial_tracking: 'BOOL',
   is_equipment_component: 'BOOL', is_system_owner: 'BOOL', i18n_meta: 'JSON', code: 'CODE', schema_version: 'STRING',
@@ -606,6 +619,7 @@ var DB_ = { books: {}, sheets: {}, headers: {}, settings: null };
 /** Xóa bộ nhớ đệm trong một lần chạy (dùng trong test và sau setup) */
 function dbReset_() {
   DB_ = { books: {}, sheets: {}, headers: {}, settings: null };
+  if (PROPS_MEMO_ON_) propsReset_(true);
 }
 
 function book_(b) {
@@ -1268,7 +1282,12 @@ function authLogin_(req) {
   var okPin = verifyPinAgainst_(user, pin);
 
   return withWriteLock_(function () {
-    if (user) user = readRowAt_('Users', user.__row);
+    if (user) {
+      var pre = user;
+      user = readRowAt_('Users', pre.__row);
+      // PIN vừa bị đổi bởi request khác trong lúc tính HMAC: tính lại theo bản mới
+      if (user.pin_hash !== pre.pin_hash || user.salt !== pre.salt) okPin = verifyPinAgainst_(user, pin);
+    }
     var rem = lockedRemaining_(user, eh);
     if (rem > 0) {
       logAttempt_('LOGIN', 'LOCKED', eh, user, req);
@@ -1365,8 +1384,10 @@ function requireSession_(req, action) {
   if (!ls || nowSec * 1000 - ls.getTime() > 3600000) {
     try {
       var nowIso = isoVN_(now_());
-      var rn = ss.row || (findOne_('Sessions', 'session_id', sid) || {}).__row;
-      if (rn) writeCells_('Sessions', rn, { last_seen_at: nowIso });
+      // Số dòng trong cache có thể đã lệch nếu trigger xóa bớt dòng Sessions: kiểm lại trước khi ghi
+      var rn = ss.row;
+      if (!rn || sh_('Sessions').getRange(rn, 1).getValue() !== sid) rn = (findOne_('Sessions', 'session_id', sid) || {}).__row;
+      if (rn) { writeCells_('Sessions', rn, { last_seen_at: nowIso }); ss.row = rn; }
       ss.last_seen_at = nowIso;
       c.put('ss:' + sid, JSON.stringify(ss), Math.max(1, Math.min(21600, exp - nowSec)));
     } catch (e) { /* không chặn request */ }
@@ -1399,34 +1420,41 @@ function verifyReauth_(ctx, rt) {
     Number(p.auth_version) === Number(ctx.user.auth_version || 0);
 }
 
-/** Kiểm PIN của người đang có phiên (reauth, đổi PIN): chung bộ đếm theo người */
-function checkOwnPin_(ctx, pin, kind) {
-  if (!/^\d{6}$/.test(String(pin || ''))) throw validationError_([fieldError_(kind === 'CHANGE_PIN' ? 'current_pin' : 'pin', 'PIN_FORMAT')]);
-  var full = findOne_('Users', 'user_id', ctx.user.user_id);
-  var rem = lockedRemaining_(full, null);
-  if (rem > 0) throw lockedError_(rem);
-  var ok = verifyPinAgainst_(full, String(pin));
-  var eh = empHash_(full.employee_code);
-  if (!ok) {
-    withWriteLock_(function () {
-      var fresh = readRowAt_('Users', full.__row);
-      var f = registerFailure_(fresh, eh);
-      logAttempt_(kind, 'FAILED', eh, fresh, ctx.req);
+/**
+ * Kiểm PIN của người đang có phiên (reauth, đổi PIN): chung bộ đếm theo người.
+ * HMAC tính ngoài khóa; trong khóa đọc lại dòng, kiểm khóa lần nữa và tính lại nếu PIN vừa đổi.
+ * PIN đúng → onOk(user mới đọc, empHash) chạy trong cùng khóa.
+ */
+function checkOwnPin_(ctx, pin, kind, onOk) {
+  pin = String(pin === undefined || pin === null ? '' : pin);
+  if (!/^\d{6}$/.test(pin)) throw validationError_([fieldError_(kind === 'CHANGE_PIN' ? 'current_pin' : 'pin', 'PIN_FORMAT')]);
+  var pre = findOne_('Users', 'user_id', ctx.user.user_id);
+  var rem0 = lockedRemaining_(pre, null);
+  if (rem0 > 0) throw lockedError_(rem0);
+  var ok = verifyPinAgainst_(pre, pin);
+  var eh = empHash_(pre.employee_code);
+  return withWriteLock_(function () {
+    var u = readRowAt_('Users', pre.__row);
+    var rem = lockedRemaining_(u, null);
+    if (rem > 0) throw lockedError_(rem);
+    if (u.pin_hash !== pre.pin_hash || u.salt !== pre.salt) ok = verifyPinAgainst_(u, pin);
+    if (!ok) {
+      var f = registerFailure_(u, eh);
+      logAttempt_(kind, 'FAILED', eh, u, ctx.req);
       if (f.locked) throw lockedError_(f.retry);
-    });
-    throw apiError_('AUTH_FAILED');
-  }
-  return { user: full, empHash: eh };
+      throw apiError_('AUTH_FAILED');
+    }
+    return onOk(u, eh);
+  });
 }
 
 function authReauth_(ctx) {
-  var r = checkOwnPin_(ctx, (ctx.req.payload || {}).pin, 'REAUTH');
-  withWriteLock_(function () {
-    var fresh = readRowAt_('Users', r.user.__row);
-    if (fresh.failed_attempts || fresh.failed_window_started_at) {
-      writeCells_('Users', fresh.__row, { failed_attempts: 0, failed_window_started_at: '' });
+  checkOwnPin_(ctx, (ctx.req.payload || {}).pin, 'REAUTH', function (u, eh) {
+    if (u.failed_attempts || u.failed_window_started_at) {
+      writeCells_('Users', u.__row, { failed_attempts: 0, failed_window_started_at: '' });
+      cache_().remove('us:' + u.user_id);
     }
-    logAttempt_('REAUTH', 'SUCCESS', r.empHash, fresh, ctx.req);
+    logAttempt_('REAUTH', 'SUCCESS', eh, u, ctx.req);
   });
   return makeReauthToken_(ctx);
 }
@@ -1436,18 +1464,16 @@ function authReauth_(ctx) {
 function pinChange_(ctx) {
   var p = ctx.req.payload || {};
   var cur = String(p.current_pin || ''), nw = String(p.new_pin || '');
-  var r = checkOwnPin_(ctx, cur, 'CHANGE_PIN');
-  var weak = pinWeakReason_(nw, r.user.employee_code, cur);
-  if (weak) throw validationError_([fieldError_('new_pin', weak)]);
-  var rec = newPinRecord_(nw);
-  return withWriteLock_(function () {
-    var u = readRowAt_('Users', r.user.__row);
+  var rec = /^\d{6}$/.test(nw) ? newPinRecord_(nw) : null; // HMAC ngoài khóa
+  return checkOwnPin_(ctx, cur, 'CHANGE_PIN', function (u, eh) {
+    var weak = pinWeakReason_(nw, u.employee_code, cur);
+    if (weak) throw validationError_([fieldError_('new_pin', weak)]);
     var nowIso = isoVN_(now_());
     bumpAuthVersion_(u, {
       pin_hash: rec.pin_hash, salt: rec.salt, pin_hash_version: rec.pin_hash_version, must_change_pin: false,
       temp_pin_expires_at: '', pin_changed_at: nowIso, failed_attempts: 0, failed_window_started_at: '', locked_until: ''
     });
-    logAttempt_('CHANGE_PIN', 'SUCCESS', r.empHash, u, ctx.req);
+    logAttempt_('CHANGE_PIN', 'SUCCESS', eh, u, ctx.req);
     writeAudit_({
       user_id: u.user_id, device_id: ctx.req.device_id, action: 'pin.change', entity_type: 'USER', entity_id: u.user_id,
       before_json: null, after_json: { pin_changed_at: nowIso }, operation_id: '', auth_basis: 'ROLE_LEVEL'
@@ -2130,10 +2156,11 @@ function cUpdate_(ctx, row) {
 }
 
 /** So expected_version với bản trên máy chủ (dưới khóa) */
-function assertVersion_(ctx, current, entityType) {
+function assertVersion_(ctx, current, entityType, sheet) {
   var ev = ctx.req.expected_version;
   if (ev === undefined || ev === null || Number(ev) !== Number(current.record_version || 0)) {
-    throw apiError_('VERSION_CONFLICT', { entity_type: entityType, server: projectRow_(ctx, current), server_version: current.record_version });
+    var server = sheet === 'Documents' ? projectDoc_(ctx, current) : projectRow_(ctx, current, sheet);
+    throw apiError_('VERSION_CONFLICT', { entity_type: entityType, server: server, server_version: current.record_version });
   }
 }
 
@@ -2265,7 +2292,8 @@ function projectRow_(ctx, row, sheet) {
   var s = sheet || row.__sheet;
   if (s && COST_FIELDS[s]) {
     var et = Object.keys(ENTITY_TYPES).filter(function (k) { return ENTITY_TYPES[k].sheet === s; })[0];
-    var mod = et ? ENTITY_TYPES[et].module : null;
+    // Dòng con của hợp đồng (ContractEquipment, ContractServices) theo quyền giá của module hợp đồng
+    var mod = et ? ENTITY_TYPES[et].module : (s.indexOf('Contract') === 0 ? 'contracts' : null);
     if (!mod || !canViewCost_(ctx, mod)) {
       COST_FIELDS[s].forEach(function (f) { delete out[f]; });
       out.meta = { cost_hidden: true };
@@ -2293,7 +2321,7 @@ var HANDLERS_ = {
   'auth.logoutAll': function (ctx) { return authLogoutAll_(ctx); },
   'pin.change': function (ctx) { return pinChange_(ctx); },
   'account.view': function (ctx) { return accountView_(ctx); },
-  'system.getPublicState': function () { return publicState_(); },
+  'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
@@ -2331,6 +2359,7 @@ var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth
 function doPost(e) {
   var t0 = Date.now();
   var res;
+  propsReset_(true);
   try {
     var body = e && e.postData ? e.postData.contents : '';
     var req;
@@ -2342,6 +2371,8 @@ function doPost(e) {
     }
   } catch (err2) {
     res = internalError_({}, err2);
+  } finally {
+    propsReset_(false);
   }
   res.server_ms = Date.now() - t0;
   return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
@@ -2353,18 +2384,26 @@ function doGet(e) {
   if (p.action === 'system.health') {
     out = { ok: true, code: 'OK', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
   } else {
-    out = { ok: false, code: 'NOT_FOUND', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
+    // via:'GET' giúp app nhận ra một POST đã bị chuyển thành GET trên đường đi (P-01)
+    if (!p.action) pocNoteGet_();
+    out = { ok: false, code: 'NOT_FOUND', via: 'GET', api_contract_version: API_CONTRACT_VERSION, app_id: APP_ID, server_time: isoVN_(now_()) };
   }
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function publicState_() {
+function publicState_(req) {
   var props = sysProps_();
-  return {
+  var out = {
     app_id: APP_ID, api_contract_version: API_CONTRACT_VERSION, server_version: SERVER_VERSION,
     maintenance_mode: props.maintenance_mode, env: props.env, min_client_version: setting_('min_client_version'),
     ready: !!prop_('BUSINESS_SPREADSHEET_ID')
   };
+  var p = (req && req.payload) || {};
+  if (p.probe_run && isTestEnv_()) {
+    var d = pocProbe_(p);
+    if (d) out.probe = d;
+  }
+  return out;
 }
 
 /** Phong bì phản hồi chuẩn (3.15) */
@@ -2540,7 +2579,7 @@ function equipmentEdit_(ctx) {
     entity_type: 'EQUIPMENT', entity_id: p.equipment_id,
     build: function (st) {
       var cur = findOne_('Equipment', 'equipment_id', p.equipment_id);
-      assertVersion_(ctx, cur, 'EQUIPMENT');
+      assertVersion_(ctx, cur, 'EQUIPMENT', 'Equipment');
       var e2 = [];
       assertRefs_(p, e2);
       if (e2.length) throw validationError_(e2);
@@ -2886,7 +2925,10 @@ function docSetPrivate_(ctx) {
   var module = docModule_(d0.entity_type);
   var auth = authorize_(ctx, 'doc.setPrivate', { module: module });
   if (auth.conds.length && d0.created_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');
-  if (d0.access_scope !== 'LINK_VIEW') throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
+  // Gửi lại cùng mã thao tác (sau khi đã REVOKED) → trả kết quả cũ trước khi kiểm điều kiện
+  var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
+  if (ex) return withWriteLock_(function () { return existingOpResponse_(ctx, ex, payloadHash_(ctx)); });
+  if (d0.access_scope !== 'LINK_VIEW' || d0.drive_sharing_state === 'REVOKED') throw validationError_([fieldError_('document_id', 'INVALID_VALUE')]);
   var ok = true, errCode = '';
   try {
     ok = makePrivate_(d0.drive_file_id);
@@ -2896,9 +2938,8 @@ function docSetPrivate_(ctx) {
     entity_type: 'DOCUMENT', entity_id: p.document_id,
     build: function () {
       var cur = findOne_('Documents', 'document_id', p.document_id);
-      assertVersion_(ctx, cur, 'DOCUMENT');
+      assertVersion_(ctx, cur, 'DOCUMENT', 'Documents');
       var row = clone_(cur);
-      row.access_scope = ok ? 'MODULE_VIEW' : cur.access_scope;
       row.drive_sharing_state = ok ? 'REVOKED' : 'FAILED';
       row.sharing_updated_at = isoVN_(now_());
       row.sharing_error_code = ok ? '' : (errCode || 'NOT_PRIVATE');
@@ -3117,7 +3158,6 @@ function qrResolve_(ctx) {
 
 function log_(msg) {
   Logger.log(msg);
-  try { console.log(msg); } catch (e) { /* bỏ qua */ }
 }
 
 /** Tạo một sheet với hàng tiêu đề, cố định hàng 1, định dạng ô theo kiểu (3.1) */
@@ -3241,9 +3281,10 @@ function migrateSchema() {
         sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length + missing.length - sheet.getMaxColumns());
       }
       sheet.getRange(1, header.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
-      formatColumns_(sheet, name, header.concat(missing), header.length);
       added.push(name + '(' + missing.join(',') + ')');
     }
+    // Định dạng Văn bản cho mọi cột kiểu chuỗi, kể cả cột cũ vừa đổi kiểu (vd. due_revision)
+    formatColumns_(sheet, name, header.concat(missing), 0);
   });
   dbReset_();
   seedBaseRows_();
@@ -3460,6 +3501,39 @@ function pocComputeVectors_() {
   var pass = {};
   Object.keys(v.expect).forEach(function (k) { pass[k] = got[k] === v.expect[k]; });
   return { got: got, expect: v.expect, pass: pass, all_pass: Object.keys(pass).every(function (k) { return pass[k]; }) };
+}
+
+/**
+ * P-01: ghi lại các request system.getPublicState thật sự chạy doPost (theo probe_run/probe_seq)
+ * và các lần doGet bị gọi không có action (POST bị chuyển thành GET trên đường đi).
+ */
+function pocProbe_(p) {
+  var run = String(p.probe_run || '');
+  if (!/^[A-Za-z0-9_-]{4,40}$/.test(run)) return null;
+  var c = cache_();
+  var key = 'diag:probe:' + run;
+  if (p.probe_read) {
+    var gets = c.get('diag:gets');
+    return { run: run, seen: JSON.parse(c.get(key) || '[]'), gets_without_action: gets ? JSON.parse(gets) : [] };
+  }
+  var seq = Number(p.probe_seq);
+  if (seq >= 0 && seq < 1000) {
+    var seen = JSON.parse(c.get(key) || '[]');
+    seen.push(seq);
+    c.put(key, JSON.stringify(seen.slice(-200)), 3600);
+  }
+  return null;
+}
+
+/** Ghi thời điểm doGet bị gọi không có action (giữ 50 lần gần nhất, 6 giờ) */
+function pocNoteGet_() {
+  if (!isTestEnv_()) return;
+  try {
+    var c = cache_();
+    var list = JSON.parse(c.get('diag:gets') || '[]');
+    list.push(isoVN_(now_()));
+    c.put('diag:gets', JSON.stringify(list.slice(-50)), 21600);
+  } catch (e) { /* bỏ qua */ }
 }
 
 function pocVectors_() {
@@ -3714,7 +3788,7 @@ function pocSeedSampleData() {
       return c({
         requirement_id: uuid_(), requirement_code: allocCode_(st, su, 'INSPECTION_REQUIREMENT', null, null), equipment_id: eqs[x[0]].equipment_id,
         location_id: '', inspection_type_id: types[x[1]].inspection_type_id, owner_user_id: by, current_inspection_id: '',
-        current_due_date: '', operational_status: 'ACTIVE', obligation_status: 'REQUIRED', active: true, due_revision: 1
+        current_due_date: '', operational_status: 'ACTIVE', obligation_status: 'REQUIRED', active: true, due_revision: ''
       });
     });
     insertRows_('Locations', locs); insertRows_('Vendors', vends); insertRows_('LookupValues', cats);

@@ -220,10 +220,11 @@ function cUpdate_(ctx, row) {
 }
 
 /** So expected_version với bản trên máy chủ (dưới khóa) */
-function assertVersion_(ctx, current, entityType) {
+function assertVersion_(ctx, current, entityType, sheet) {
   var ev = ctx.req.expected_version;
   if (ev === undefined || ev === null || Number(ev) !== Number(current.record_version || 0)) {
-    throw apiError_('VERSION_CONFLICT', { entity_type: entityType, server: projectRow_(ctx, current), server_version: current.record_version });
+    var server = sheet === 'Documents' ? projectDoc_(ctx, current) : projectRow_(ctx, current, sheet);
+    throw apiError_('VERSION_CONFLICT', { entity_type: entityType, server: server, server_version: current.record_version });
   }
 }
 
@@ -355,7 +356,8 @@ function projectRow_(ctx, row, sheet) {
   var s = sheet || row.__sheet;
   if (s && COST_FIELDS[s]) {
     var et = Object.keys(ENTITY_TYPES).filter(function (k) { return ENTITY_TYPES[k].sheet === s; })[0];
-    var mod = et ? ENTITY_TYPES[et].module : null;
+    // Dòng con của hợp đồng (ContractEquipment, ContractServices) theo quyền giá của module hợp đồng
+    var mod = et ? ENTITY_TYPES[et].module : (s.indexOf('Contract') === 0 ? 'contracts' : null);
     if (!mod || !canViewCost_(ctx, mod)) {
       COST_FIELDS[s].forEach(function (f) { delete out[f]; });
       out.meta = { cost_hidden: true };

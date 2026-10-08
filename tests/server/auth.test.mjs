@@ -238,3 +238,36 @@ test('Sessions lưu token_hash, không lưu token; AuthAttempts không có PIN',
   const all = JSON.stringify(env.rows('AuthAttempts')) + JSON.stringify(env.rows('AuditLogs')) + JSON.stringify(env.rows('Operations'));
   for (const pin of [OWNER_PIN, OWNER_TEMP_PIN]) assert.ok(!all.includes(pin));
 });
+
+test('P-01 chẩn đoán: doPost ghi probe_seq; doGet không action trả via=GET và được ghi lại', () => {
+  const env = freshServer();
+  const c = makeClient(env);
+  for (const seq of [0, 1, 2]) c.call('system.getPublicState', { probe_run: 'run1', probe_seq: seq });
+  const g = env.get({});
+  assert.equal(g.code, 'NOT_FOUND');
+  assert.equal(g.via, 'GET');
+  const r = c.call('system.getPublicState', { probe_run: 'run1', probe_read: true });
+  assert.deepEqual([...r.data.probe.seen], [0, 1, 2]);
+  assert.equal(r.data.probe.gets_without_action.length, 1);
+  env.props.setProperty('ENV', 'THAT');
+  env.cache._map.clear();
+  assert.equal(c.call('system.getPublicState', { probe_run: 'run1', probe_read: true }).data.probe, undefined);
+});
+
+test('reauth: PIN sai tăng bộ đếm, PIN đúng xóa bộ đếm; đổi PIN xong thì PIN cũ không reauth được', () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  assert.equal(c.call('auth.reauth', { pin: '111333' }).code, 'AUTH_FAILED');
+  assert.equal(c.call('auth.reauth', { pin: '111334' }).code, 'AUTH_FAILED');
+  assert.equal(env.rows('Users')[0].failed_attempts, 2);
+  assert.equal(c.call('auth.reauth', { pin: OWNER_PIN }).ok, true);
+  assert.equal(env.rows('Users')[0].failed_attempts, 0);
+  // PIN mới yếu → VALIDATION_ERROR, PIN không đổi
+  const weak = c.call('pin.change', { current_pin: OWNER_PIN, new_pin: '123456' });
+  assert.equal(weak.errors[0].code, 'PIN_WEAK');
+  const ch = c.call('pin.change', { current_pin: OWNER_PIN, new_pin: '715926' });
+  assert.equal(ch.ok, true, JSON.stringify(ch));
+  c.token = ch.data.token;
+  assert.equal(c.call('auth.reauth', { pin: OWNER_PIN }).code, 'AUTH_FAILED');
+  assert.equal(c.call('auth.reauth', { pin: '715926' }).ok, true);
+});

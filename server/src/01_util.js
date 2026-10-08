@@ -209,16 +209,29 @@ function cmpVersion_(a, b) {
   return 0;
 }
 
+/** Trong một request (doPost/doGet) ScriptProperties chỉ đọc một lần; hàm chạy tay thì đọc trực tiếp */
+var PROPS_MEMO_ = null, PROPS_MEMO_ON_ = false;
+
+function propsReset_(on) {
+  PROPS_MEMO_ = null;
+  PROPS_MEMO_ON_ = !!on;
+}
+
 function prop_(key) {
-  return PropertiesService.getScriptProperties().getProperty(key);
+  if (!PROPS_MEMO_ON_) return PropertiesService.getScriptProperties().getProperty(key);
+  if (!PROPS_MEMO_) PROPS_MEMO_ = PropertiesService.getScriptProperties().getProperties() || {};
+  var v = PROPS_MEMO_[key];
+  return v === undefined ? null : v;
 }
 
 function setProp_(key, value) {
   PropertiesService.getScriptProperties().setProperty(key, String(value));
+  if (PROPS_MEMO_) PROPS_MEMO_[key] = String(value);
 }
 
 function delProp_(key) {
   PropertiesService.getScriptProperties().deleteProperty(key);
+  if (PROPS_MEMO_) delete PROPS_MEMO_[key];
 }
 
 function envName_() {

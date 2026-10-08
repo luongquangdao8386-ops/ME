@@ -275,7 +275,12 @@ function authLogin_(req) {
   var okPin = verifyPinAgainst_(user, pin);
 
   return withWriteLock_(function () {
-    if (user) user = readRowAt_('Users', user.__row);
+    if (user) {
+      var pre = user;
+      user = readRowAt_('Users', pre.__row);
+      // PIN vừa bị đổi bởi request khác trong lúc tính HMAC: tính lại theo bản mới
+      if (user.pin_hash !== pre.pin_hash || user.salt !== pre.salt) okPin = verifyPinAgainst_(user, pin);
+    }
     var rem = lockedRemaining_(user, eh);
     if (rem > 0) {
       logAttempt_('LOGIN', 'LOCKED', eh, user, req);
@@ -372,8 +377,10 @@ function requireSession_(req, action) {
   if (!ls || nowSec * 1000 - ls.getTime() > 3600000) {
     try {
       var nowIso = isoVN_(now_());
-      var rn = ss.row || (findOne_('Sessions', 'session_id', sid) || {}).__row;
-      if (rn) writeCells_('Sessions', rn, { last_seen_at: nowIso });
+      // Số dòng trong cache có thể đã lệch nếu trigger xóa bớt dòng Sessions: kiểm lại trước khi ghi
+      var rn = ss.row;
+      if (!rn || sh_('Sessions').getRange(rn, 1).getValue() !== sid) rn = (findOne_('Sessions', 'session_id', sid) || {}).__row;
+      if (rn) { writeCells_('Sessions', rn, { last_seen_at: nowIso }); ss.row = rn; }
       ss.last_seen_at = nowIso;
       c.put('ss:' + sid, JSON.stringify(ss), Math.max(1, Math.min(21600, exp - nowSec)));
     } catch (e) { /* không chặn request */ }
@@ -406,34 +413,41 @@ function verifyReauth_(ctx, rt) {
     Number(p.auth_version) === Number(ctx.user.auth_version || 0);
 }
 
-/** Kiểm PIN của người đang có phiên (reauth, đổi PIN): chung bộ đếm theo người */
-function checkOwnPin_(ctx, pin, kind) {
-  if (!/^\d{6}$/.test(String(pin || ''))) throw validationError_([fieldError_(kind === 'CHANGE_PIN' ? 'current_pin' : 'pin', 'PIN_FORMAT')]);
-  var full = findOne_('Users', 'user_id', ctx.user.user_id);
-  var rem = lockedRemaining_(full, null);
-  if (rem > 0) throw lockedError_(rem);
-  var ok = verifyPinAgainst_(full, String(pin));
-  var eh = empHash_(full.employee_code);
-  if (!ok) {
-    withWriteLock_(function () {
-      var fresh = readRowAt_('Users', full.__row);
-      var f = registerFailure_(fresh, eh);
-      logAttempt_(kind, 'FAILED', eh, fresh, ctx.req);
+/**
+ * Kiểm PIN của người đang có phiên (reauth, đổi PIN): chung bộ đếm theo người.
+ * HMAC tính ngoài khóa; trong khóa đọc lại dòng, kiểm khóa lần nữa và tính lại nếu PIN vừa đổi.
+ * PIN đúng → onOk(user mới đọc, empHash) chạy trong cùng khóa.
+ */
+function checkOwnPin_(ctx, pin, kind, onOk) {
+  pin = String(pin === undefined || pin === null ? '' : pin);
+  if (!/^\d{6}$/.test(pin)) throw validationError_([fieldError_(kind === 'CHANGE_PIN' ? 'current_pin' : 'pin', 'PIN_FORMAT')]);
+  var pre = findOne_('Users', 'user_id', ctx.user.user_id);
+  var rem0 = lockedRemaining_(pre, null);
+  if (rem0 > 0) throw lockedError_(rem0);
+  var ok = verifyPinAgainst_(pre, pin);
+  var eh = empHash_(pre.employee_code);
+  return withWriteLock_(function () {
+    var u = readRowAt_('Users', pre.__row);
+    var rem = lockedRemaining_(u, null);
+    if (rem > 0) throw lockedError_(rem);
+    if (u.pin_hash !== pre.pin_hash || u.salt !== pre.salt) ok = verifyPinAgainst_(u, pin);
+    if (!ok) {
+      var f = registerFailure_(u, eh);
+      logAttempt_(kind, 'FAILED', eh, u, ctx.req);
       if (f.locked) throw lockedError_(f.retry);
-    });
-    throw apiError_('AUTH_FAILED');
-  }
-  return { user: full, empHash: eh };
+      throw apiError_('AUTH_FAILED');
+    }
+    return onOk(u, eh);
+  });
 }
 
 function authReauth_(ctx) {
-  var r = checkOwnPin_(ctx, (ctx.req.payload || {}).pin, 'REAUTH');
-  withWriteLock_(function () {
-    var fresh = readRowAt_('Users', r.user.__row);
-    if (fresh.failed_attempts || fresh.failed_window_started_at) {
-      writeCells_('Users', fresh.__row, { failed_attempts: 0, failed_window_started_at: '' });
+  checkOwnPin_(ctx, (ctx.req.payload || {}).pin, 'REAUTH', function (u, eh) {
+    if (u.failed_attempts || u.failed_window_started_at) {
+      writeCells_('Users', u.__row, { failed_attempts: 0, failed_window_started_at: '' });
+      cache_().remove('us:' + u.user_id);
     }
-    logAttempt_('REAUTH', 'SUCCESS', r.empHash, fresh, ctx.req);
+    logAttempt_('REAUTH', 'SUCCESS', eh, u, ctx.req);
   });
   return makeReauthToken_(ctx);
 }
@@ -443,18 +457,16 @@ function authReauth_(ctx) {
 function pinChange_(ctx) {
   var p = ctx.req.payload || {};
   var cur = String(p.current_pin || ''), nw = String(p.new_pin || '');
-  var r = checkOwnPin_(ctx, cur, 'CHANGE_PIN');
-  var weak = pinWeakReason_(nw, r.user.employee_code, cur);
-  if (weak) throw validationError_([fieldError_('new_pin', weak)]);
-  var rec = newPinRecord_(nw);
-  return withWriteLock_(function () {
-    var u = readRowAt_('Users', r.user.__row);
+  var rec = /^\d{6}$/.test(nw) ? newPinRecord_(nw) : null; // HMAC ngoài khóa
+  return checkOwnPin_(ctx, cur, 'CHANGE_PIN', function (u, eh) {
+    var weak = pinWeakReason_(nw, u.employee_code, cur);
+    if (weak) throw validationError_([fieldError_('new_pin', weak)]);
     var nowIso = isoVN_(now_());
     bumpAuthVersion_(u, {
       pin_hash: rec.pin_hash, salt: rec.salt, pin_hash_version: rec.pin_hash_version, must_change_pin: false,
       temp_pin_expires_at: '', pin_changed_at: nowIso, failed_attempts: 0, failed_window_started_at: '', locked_until: ''
     });
-    logAttempt_('CHANGE_PIN', 'SUCCESS', r.empHash, u, ctx.req);
+    logAttempt_('CHANGE_PIN', 'SUCCESS', eh, u, ctx.req);
     writeAudit_({
       user_id: u.user_id, device_id: ctx.req.device_id, action: 'pin.change', entity_type: 'USER', entity_id: u.user_id,
       before_json: null, after_json: { pin_changed_at: nowIso }, operation_id: '', auth_basis: 'ROLE_LEVEL'
