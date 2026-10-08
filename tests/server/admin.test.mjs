@@ -303,6 +303,40 @@ test('sao lưu: backup.run tạo trigger chạy một lần (QUEUED); backupData
   assert.equal(c3.call('backup.view', {}).code, 'FORBIDDEN');
 });
 
+test('sao lưu đang chạy (thư mục chưa có manifest) hiện RUNNING, không cho Sao lưu ngay chồng; quá 30 phút không manifest → FAILED NO_MANIFEST; lỗi giữa chừng vẫn ghi manifest kèm lý do', () => {
+  const { env, c } = setup();
+  let mid = null;
+  env.drive._afterCopy = () => {
+    env.drive._afterCopy = null;
+    mid = { view: c.call('backup.view', {}).data, run: c.call('backup.run', {}, { operation_id: uuid(), reauth_token: c.reauth() }).data };
+  };
+  assert.equal(env.g.backupData().status, 'VERIFIED');
+  assert.equal(mid.view.items[0].status, 'RUNNING');
+  assert.equal(mid.view.items[0].error, '');
+  assert.equal(mid.view.running, true);
+  assert.equal(mid.run.already, true);
+  assert.equal(env.g.ScriptApp.getProjectTriggers().filter((t) => t.spec.fn === 'backupData' && t.spec.after).length, 0);
+  // Thư mục bỏ dở (trigger bị dừng) → sau 30 phút là FAILED
+  env.clock.advance(60000);
+  env.g.DriveApp.getFolderById(env.props.getProperty('DRIVE_BACKUP_FOLDER_ID')).createFolder(env.g.backupStamp_(env.g.now_()));
+  let v = c.call('backup.view', {}).data;
+  assert.equal(v.items[0].status, 'RUNNING');
+  env.clock.advance(31 * 60000);
+  v = c.call('backup.view', {}).data;
+  assert.equal(v.running, false);
+  assert.equal(v.items[0].status, 'FAILED');
+  assert.equal(v.items[0].error, 'NO_MANIFEST');
+  // Lỗi ở bước đọc trạng thái (trước đây nằm ngoài try) → vẫn có manifest FAILED + lý do
+  env.clock.advance(60000);
+  const orig = env.g.readState_;
+  let once = true;
+  env.g.readState_ = (...a) => { if (once) { once = false; throw new Error('boom'); } return orig(...a); };
+  try { assert.equal(env.g.backupData().status, 'FAILED'); } finally { env.g.readState_ = orig; }
+  v = c.call('backup.view', {}).data;
+  assert.equal(v.items[0].status, 'FAILED');
+  assert.match(v.items[0].error, /boom/);
+});
+
 test('khôi phục thủ công (6.5.4): cần bảo trì; đổi file Nghiệp vụ + epoch mới, thu hồi phiên; hồ sơ sau bản sao mất, QR cũ mở được, QR mới NOT_IN_RESTORED; bộ đếm mã không lùi; NotificationLogs giữ; chạy lại không sai', () => {
   const { env, c } = setup();
   const e1 = uuid();

@@ -83,15 +83,19 @@ function backupDataRun_() {
   var stamp = backupStamp_(started);
   var root = backupRoot_();
   var folder = root.createFolder(stamp);
-  var st0 = readState_();
-  var rev0 = Number(stateGet_(st0, 'sync_revision', 0));
-  var bizId = prop_('BUSINESS_SPREADSHEET_ID'), secId = prop_('SECURITY_SPREADSHEET_ID');
+  // Mọi bước sau khi có thư mục đều trong try: lỗi gì cũng ghi được manifest FAILED kèm lý do
   var manifest = {
-    app_id: APP_ID, env: envName_(), created_at: isoVN_(started), folder: stamp, schema_version: stateGet_(st0, 'schema_version', SCHEMA_VERSION),
-    server_version: SERVER_VERSION, dataset_epoch: sysProps_().dataset_epoch, sync_revision: rev0, retry: isRetry,
+    app_id: APP_ID, created_at: isoVN_(started), folder: stamp, server_version: SERVER_VERSION, retry: isRetry,
     status: 'FAILED', consistent: false, counts: {}, copied_counts: {}, files: {}
   };
   try {
+    var st0 = readState_();
+    var rev0 = Number(stateGet_(st0, 'sync_revision', 0));
+    var bizId = prop_('BUSINESS_SPREADSHEET_ID'), secId = prop_('SECURITY_SPREADSHEET_ID');
+    manifest.env = envName_();
+    manifest.schema_version = stateGet_(st0, 'schema_version', SCHEMA_VERSION);
+    manifest.dataset_epoch = sysProps_().dataset_epoch;
+    manifest.sync_revision = rev0;
     countRows_(SpreadsheetApp.openById(bizId), manifest.counts);
     countRows_(SpreadsheetApp.openById(secId), manifest.counts);
     manifest.documents = manifest.counts.Documents || 0;
@@ -153,20 +157,35 @@ function pruneBackups_() {
 /* ---------------- Action ---------------- */
 
 /** backup.view: danh sách bản, trạng thái kiểm chứng, lần gần nhất, đang chờ chạy (C4) */
+/** Bản sao lưu mất bao lâu tối đa (thời hạn trigger 6 phút + dư) trước khi coi thư mục không manifest là thất bại */
+var BACKUP_RUNNING_MS_ = 30 * 60000;
+
+/** Thư mục chưa có manifest.json: đang chạy nếu tạo chưa quá 30 phút, quá thì thất bại (trigger bị dừng giữa chừng) */
+function backupRunningRef_(b, nowMs) {
+  if (b.manifest) return false;
+  var n = b.name;
+  var t = Date.parse(n.slice(0, 10) + 'T' + n.slice(11, 13) + ':' + n.slice(13, 15) + ':00+07:00');
+  return !isNaN(t) && nowMs - t < BACKUP_RUNNING_MS_;
+}
+
 function backupView_(ctx) {
   var st = readState_();
+  var nowMs = now_().getTime();
+  var running = false;
   var items = listBackups_().slice(0, 30).map(function (b) {
     var m = b.manifest || {};
     var total = 0;
     Object.keys(m.counts || {}).forEach(function (k) { if (!BACKUP_VOLATILE_[k]) total += m.counts[k]; });
+    var isRunning = backupRunningRef_(b, nowMs);
+    if (isRunning) running = true;
     return {
-      ref: b.name, created_at: m.created_at || '', finished_at: m.finished_at || '', status: m.status || 'FAILED', consistent: !!m.consistent,
-      schema_version: m.schema_version || '', rows: total, documents: m.documents || 0, retry: !!m.retry, error: m.error || '',
-      mismatch: m.mismatch || []
+      ref: b.name, created_at: m.created_at || '', finished_at: m.finished_at || '', status: isRunning ? 'RUNNING' : (m.status || 'FAILED'), consistent: !!m.consistent,
+      schema_version: m.schema_version || '', rows: total, documents: m.documents || 0, retry: !!m.retry,
+      error: m.error || (b.manifest || isRunning ? '' : 'NO_MANIFEST'), mismatch: m.mismatch || []
     };
   });
   return {
-    items: items, queued: oneShotIds_().length > 0,
+    items: items, queued: oneShotIds_().length > 0, running: running,
     last_backup_at: stateGet_(st, 'last_backup_at', ''), last_backup_ref: stateGet_(st, 'last_backup_ref', ''), last_backup_status: stateGet_(st, 'last_backup_status', ''),
     last_restore_at: stateGet_(st, 'last_restore_at', ''), restored_from_ref: stateGet_(st, 'restored_from_ref', ''),
     backup_weekday: setting_('backup_weekday'), backup_hour: setting_('backup_hour'), keep_count: setting_('backup_keep_count')
@@ -176,6 +195,8 @@ function backupView_(ctx) {
 /** backup.run: tạo trigger chạy một lần cho backupData, trả QUEUED (C4, PIN) */
 function backupRun_(ctx) {
   if (oneShotIds_().length) return { status: 'QUEUED', already: true };
+  var nowMs = now_().getTime();
+  if (listBackups_().some(function (b) { return backupRunningRef_(b, nowMs); })) return { status: 'QUEUED', already: true };
   withWriteLock_(function () {
     scheduleBackupOnce_(1000);
     writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'backup.run', entity_type: 'BACKUP', entity_id: '',

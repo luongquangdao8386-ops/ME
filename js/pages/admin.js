@@ -254,6 +254,7 @@ export async function renderPermissions(view, { shell }) {
 /* ====================== Sao lưu ====================== */
 
 const WEEKDAY = { MONDAY: 1, TUESDAY: 2, WEDNESDAY: 3, THURSDAY: 4, FRIDAY: 5, SATURDAY: 6, SUNDAY: 7 };
+const bkErr = (e) => (e === 'NO_MANIFEST' ? bi('adm.backup.no_manifest') : esc(e));
 
 export async function renderBackup(view, { shell }) {
   shell.setScreen({ title: 'admin.backup', back: '/account' });
@@ -266,15 +267,15 @@ export async function renderBackup(view, { shell }) {
   const list = d.items.length ? (isWide()
     ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('adm.backup.time')}</th><th>${bi('col.status')}</th><th>${bi('adm.backup.rows')}</th><th>${bi('adm.backup.docs')}</th><th></th></tr></thead>
       <tbody>${d.items.map((b) => `<tr><td>${esc(fmtDateTime(b.created_at) || b.ref)}</td><td>${badge('backup_status.' + b.status)}</td><td>${esc(fmtNumber(b.rows))}</td><td>${esc(fmtNumber(b.documents))}</td>
-        <td class="muted small">${b.retry ? bi('adm.backup.retry') : ''}${b.error ? ' ' + esc(b.error) : ''}</td></tr>`).join('')}</tbody></table></div>`
+        <td class="muted small">${b.retry ? bi('adm.backup.retry') : ''}${b.error ? ' ' + bkErr(b.error) : ''}</td></tr>`).join('')}</tbody></table></div>`
     : `<div class="cards">${d.items.map((b) => `<div class="card rec-card"><div class="rec-top"><span>${esc(fmtDateTime(b.created_at) || b.ref)}</span>${badge('backup_status.' + b.status)}</div>
-        <div class="muted small">${bi('adm.backup.rows')}: ${esc(fmtNumber(b.rows))} · ${bi('adm.backup.docs')}: ${esc(fmtNumber(b.documents))}${b.retry ? ' · ' + bi('adm.backup.retry') : ''}</div></div>`).join('')}</div>`)
+        <div class="muted small">${bi('adm.backup.rows')}: ${esc(fmtNumber(b.rows))} · ${bi('adm.backup.docs')}: ${esc(fmtNumber(b.documents))}${b.retry ? ' · ' + bi('adm.backup.retry') : ''}${b.error ? ' · ' + bkErr(b.error) : ''}</div></div>`).join('')}</div>`)
     : `<p class="muted">${bi('adm.backup.none')}</p>`;
   view.innerHTML = `<div class="bk">${restored}
     <section class="card"><h2>${bi('adm.backup.last')}</h2>
       <p>${d.last_backup_at ? `${esc(fmtDateTime(d.last_backup_at))} ${badge('backup_status.' + (d.last_backup_status || 'FAILED'))}` : bi('adm.backup.none')}</p>
       <p class="muted small">${bi('adm.backup.note', { D: biText('weekday.' + (WEEKDAY[d.backup_weekday] || 7)), H: String(d.backup_hour).padStart(2, '0'), N: d.keep_count })}</p>
-      ${d.queued ? `<p class="banner info" id="bk-queued">${bi('adm.backup.queued')}</p>` : `<button type="button" class="btn primary" id="bk-run">${bi('btn.backup_now')}</button>`}
+      ${d.queued || d.running ? `<p class="banner info" id="bk-queued">${bi(d.queued ? 'adm.backup.queued' : 'adm.backup.running')}</p>` : `<button type="button" class="btn primary" id="bk-run">${bi('btn.backup_now')}</button>`}
     </section>${list}</div>`;
   const run = $('#bk-run', view);
   if (run) run.addEventListener('click', async (ev) => {
@@ -284,7 +285,7 @@ export async function renderBackup(view, { shell }) {
     if (res.ok) renderBackup(view, { shell }); else if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
   });
   // Hỏi lại mỗi 5 giây tới khi xong (3.15); dừng khi rời màn
-  if (d.queued) setTimeout(() => { if (view.isConnected && $('#bk-queued', view)) renderBackup(view, { shell }); }, 5000);
+  if (d.queued || d.running) setTimeout(() => { if (view.isConnected && $('#bk-queued', view)) renderBackup(view, { shell }); }, 5000);
 }
 
 /* ====================== Nhật ký thao tác ====================== */

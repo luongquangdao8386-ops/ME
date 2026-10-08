@@ -1,7 +1,7 @@
 {
   "name": "me-co-dien",
   "private": true,
-  "version": "1.0.0-d1.1",
+  "version": "1.0.0-d1.2",
   "description": "M&E 机电管理 — Google Apps Script + PWA (GitHub Pages)",
   "type": "module",
   "scripts": {

@@ -178,6 +178,7 @@
   "backup_status.VERIFIED": ["Đã kiểm chứng", "已校验", "green"],
   "backup_status.INCONSISTENT": ["Không nhất quán", "不一致", "amber"],
   "backup_status.FAILED": ["Thất bại", "失败", "red"],
+  "backup_status.RUNNING": ["Đang sao lưu", "备份中", "amber"],
 
   "doc_kind.PHOTO_EQUIPMENT": ["Ảnh thiết bị", "设备照片"],
   "doc_kind.PHOTO_MATERIAL": ["Ảnh vật tư", "物料照片"],
@@ -887,6 +888,8 @@
   "adm.backup.last": ["Lần sao lưu gần nhất", "最近一次备份"],
   "adm.backup.restored": ["Đã khôi phục lúc {T} từ bản {R}", "已于{T}从备份{R}恢复"],
   "adm.backup.none": ["Chưa có bản sao lưu", "暂无备份"],
+  "adm.backup.running": ["Đang sao lưu (thường 1–3 phút), màn tự cập nhật…", "正在备份（通常1–3分钟），页面自动刷新…"],
+  "adm.backup.no_manifest": ["Không có manifest.json: lần chạy bị dừng giữa chừng, xem Lần thực thi trong Apps Script", "缺少manifest.json：运行中途停止，请查看Apps Script执行记录"],
   "adm.audit.tab_ops": ["Thao tác", "操作"],
   "adm.audit.tab_auth": ["Đăng nhập", "登录记录"],
   "adm.audit.before": ["Trước", "修改前"],
