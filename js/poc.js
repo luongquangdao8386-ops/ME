@@ -99,12 +99,17 @@ async function p01() {
   const run = 'p01' + uuid().slice(0, 8);
   const times = [], serverMs = [];
   let ok = 0;
-  const errs = {}, failed = [];
+  const errs = {}, failed = [], details = [];
+  const net = ($('#p01-net') || {}).value || '', relay = ($('#p01-relay') || {}).value || '';
+  ls.set('p01_net', net); ls.set('p01_relay', relay);
   for (let i = 0; i < 20; i++) {
     const r = await rawPost(envelope('system.getPublicState', { probe_run: run, probe_seq: i }, { token: null, epoch: null }), { timeoutMs: 30000 });
     if (r.ok) { ok++; times.push(r.client_ms); if (typeof r.server_ms === 'number') serverMs.push(r.server_ms); }
-    else { const k = r.code + (r.transport ? '/' + r.transport : ''); errs[k] = (errs[k] || 0) + 1; failed.push(i); }
-    out('P-01', `#${i + 1}: ${r.ok ? '✓' : '✗ ' + esc(r.code) + (r.transport ? ' ' + esc(r.transport) : '')} ${r.client_ms ? ms(r.client_ms) : ''}${typeof r.server_ms === 'number' ? ' (máy chủ ' + ms(r.server_ms) + ')' : ''}`);
+    else {
+      const k = r.code + (r.transport ? '/' + r.transport : ''); errs[k] = (errs[k] || 0) + 1; failed.push(i);
+      details.push({ i: i + 1, t: r.transport || r.code, http: r.http || null, url: r.final_url || '', ms: r.client_ms || null });
+    }
+    out('P-01', `#${i + 1}: ${r.ok ? '✓' : '✗ ' + esc(r.code) + (r.transport ? ' ' + esc(r.transport) : '') + (r.http ? ' HTTP ' + esc(r.http) : '') + (r.final_url ? ' · ' + esc(r.final_url) : '')} ${r.client_ms ? ms(r.client_ms) : ''}${typeof r.server_ms === 'number' ? ' (máy chủ ' + ms(r.server_ms) + ')' : ''}`);
   }
   let getOk = false, getMs = null;
   try {
@@ -125,8 +130,11 @@ async function p01() {
       out('P-01', `Chẩn đoán: ${failed.length} request lỗi; máy chủ đã chạy doPost cho ${diag.executed_on_server.length} request trong số đó (${esc(diag.executed_on_server.map((i) => '#' + (i + 1)).join(', ') || '—')}); số lần doGet không có action gần đây: ${diag.gets_without_action}`);
     }
   }
-  const m = { ok, total: 20, median_ms: median(times), max_ms: Math.max(...times, 0), server_median_ms: median(serverMs), get_health: getOk, errors: errs, diag };
-  await rec('P-01', ok === 20 && getOk ? 'pass' : 'fail', `${ok}/20, trung vị ${ms(m.median_ms || 0)} (máy chủ ${ms(m.server_median_ms || 0)}), chậm nhất ${ms(m.max_ms)}${failed.length ? ', lỗi: ' + Object.entries(errs).map(([k, v]) => k + '×' + v).join(' ') : ''}`, m);
+  // Giữ tóm tắt các lần chạy trước để so Wi-Fi / 4G, bật / tắt Private Relay
+  const prevRuns = results['P-01'] && results['P-01'].metrics && results['P-01'].metrics.runs ? results['P-01'].metrics.runs : [];
+  const runs = prevRuns.concat([{ at: isoNowVN(), net, relay, ok, median_ms: median(times), lost_after_exec: diag ? diag.executed_on_server.length : 0 }]).slice(-6);
+  const m = { ok, total: 20, median_ms: median(times), max_ms: Math.max(...times, 0), server_median_ms: median(serverMs), get_health: getOk, errors: errs, diag, details, net, relay, runs };
+  await rec('P-01', ok === 20 && getOk ? 'pass' : 'fail', `${net ? '[' + net + (relay ? ', relay ' + relay : '') + '] ' : ''}${ok}/20, trung vị ${ms(m.median_ms || 0)} (máy chủ ${ms(m.server_median_ms || 0)}), chậm nhất ${ms(m.max_ms)}${failed.length ? ', lỗi: ' + Object.entries(errs).map(([k, v]) => k + '×' + v).join(' ') : ''}${runs.length > 1 ? ' · các lần: ' + runs.map((x) => (x.net || '?') + (x.relay ? '/' + x.relay : '') + ' ' + x.ok + '/20').join(', ') : ''}`, m);
 }
 
 const VEC = {
@@ -783,7 +791,10 @@ export async function renderPoc(main, { isOwner, offline }) {
     <div class="row">${btn('rep-copy', bi(['Sao chép báo cáo', '复制报告']), 'primary')}${btn('rep-share', bi(['Chia sẻ', '分享']))}${btn('rep-sync', bi('sync_now'))}${btn('rep-backup', bi('export_backup'))}</div>
     <p class="muted">${bi(['Chạy từng mục trên iPhone (Safari và Màn hình chính) và máy tính, rồi sao chép báo cáo gửi lại.', '在iPhone（Safari和主屏幕）及电脑上逐项运行，然后复制报告发回。'])}</p>
   </section>
-  ${card('P-01', bi(['Kết nối', '连接']), 'fetch POST tới /exec, không đặt header; 20 lần liên tiếp không lỗi. · 20次连续请求无错误', btn('p01', bi(['Chạy 20 lần', '运行20次']), 'primary'))}
+  ${card('P-01', bi(['Kết nối', '连接']), 'fetch POST tới /exec, không đặt header; 20 lần liên tiếp không lỗi. · 20次连续请求无错误',
+    `<select id="p01-net" class="tiny-input" style="width:auto">${[['', 'Mạng?'], ['wifi', 'Wi-Fi'], ['4g', '4G/5G']].map(([v, t]) => `<option value="${v}"${ls.get('p01_net') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+     <select id="p01-relay" class="tiny-input" style="width:auto">${[['', 'Private Relay?'], ['bat', 'Relay bật'], ['tat', 'Relay tắt']].map(([v, t]) => `<option value="${v}"${ls.get('p01_relay') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>` +
+    btn('p01', bi(['Chạy 20 lần', '运行20次']), 'primary'))}
   ${card('P-02', bi(['Đăng nhập PIN', 'PIN登录']), 'Test vector HMAC/base64url khớp; 012345, 000000 → PIN_WEAK; sai 5 lần thì khóa.', btn('p02v', 'Test vector', 'primary') + btn('p02w', bi(['Thử PIN yếu', '测试弱PIN'])) + btn('p02l', bi(['Thử khóa (MAU-KHOA)', '测试锁定'])))}
   ${card('P-03', bi(['Ghi có xác nhận', '确认写入']), 'COMMITTED + record_version; gửi lại → DUPLICATE_OPERATION; khác nội dung → OPERATION_ID_REUSED; bản cũ → VERSION_CONFLICT; mất phản hồi → UNKNOWN_RESULT rồi hỏi getOperationStatus.', btn('p03', bi(['Chạy P-03', '运行P-03']), 'primary'))}
   ${card('P-04', bi(['Mở lại khi offline', '离线重新打开']), 'Bật chế độ máy bay, tắt hẳn app, mở lại → màn Mở khóa ngoại tuyến; tạo 1 nháp kiểm định; có mạng lại thì gửi đúng 1 lần.',
