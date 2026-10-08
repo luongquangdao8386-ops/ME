@@ -744,9 +744,10 @@ async function p19() {
 async function reportText() {
   const d = deviceInfo();
   const boot = await getMeta('bootstrap');
+  const sh = await shellHash();
   const lines = [
     'M&E PoC — báo cáo · PoC报告',
-    `Lúc: ${fmtDateTime(new Date())} · App ${BUILD_VERSION} · Máy chủ ${serverVersion || (boot ? boot.server_version + ' (bản lưu)' : '?')} · Môi trường ${boot ? boot.env : '?'}`,
+    `Lúc: ${fmtDateTime(new Date())} · App ${BUILD_VERSION}${sh ? ' (' + sh.slice(0, 6) + ')' : ''} · Máy chủ ${serverVersion || (boot ? boot.server_version + ' (bản lưu)' : '?')} · Môi trường ${boot ? boot.env : '?'}`,
     `Máy: ${d.platform}${d.ios_version ? ' iOS ' + d.ios_version : ''} · ${d.standalone ? 'Màn hình chính' : d.browser} · ${d.screen}`,
     `UA: ${d.user_agent}`, ''
   ];
@@ -761,8 +762,14 @@ async function reportText() {
 const POC_ORDER = ['P-01', 'P-02', 'P-03', 'P-04', 'P-05', 'P-06', 'P-07', 'P-08', 'P-09', 'P-10', 'P-12', 'P-13', 'P-14', 'P-15', 'P-16', 'P-17', 'P-18', 'P-19'];
 
 /* ================= Vẽ trang ================= */
+/** Mã băm vỏ app đang chạy (tên cache me-shell-<bản>-<mã băm>) để biết máy đã nhận bản mới chưa */
+async function shellHash() {
+  try { const k = (await caches.keys()).find((x) => x.startsWith('me-shell-')); return k ? k.split('-').pop() : ''; } catch (e) { return ''; }
+}
+
 export async function renderPoc(main, { isOwner, offline }) {
   await loadResults();
+  const sh = await shellHash();
   const boot = await getMeta('bootstrap');
   const last = await getMeta('last_sync');
   const d = deviceInfo();
@@ -770,6 +777,7 @@ export async function renderPoc(main, { isOwner, offline }) {
   main.innerHTML = `
   <section class="card poc-head">
     <div class="kv"><span>${bi(['Máy', '设备'])}</span><strong>${esc(d.platform)}${d.ios_version ? ' iOS ' + esc(d.ios_version) : ''} · ${esc(d.standalone ? 'Màn hình chính' : d.browser)}</strong></div>
+    <div class="kv"><span>App</span><strong>${esc(BUILD_VERSION)}${sh ? ' · ' + esc(sh.slice(0, 6)) : ''}</strong></div>
     <div class="kv"><span>${bi(['Máy chủ', '服务器'])}</span><strong><span id="srv-ver">${esc(serverVersion || (boot ? boot.server_version : '—'))}</span> · ${esc(boot ? boot.env : '—')} · epoch ${esc((session.epoch || '').slice(0, 8))}</strong></div>
     <div class="kv"><span>${bi('last_sync')}</span><strong>${esc(fmtDateTime(last) || '—')}</strong></div>
     <div class="row">${btn('rep-copy', bi(['Sao chép báo cáo', '复制报告']), 'primary')}${btn('rep-share', bi(['Chia sẻ', '分享']))}${btn('rep-sync', bi('sync_now'))}${btn('rep-backup', bi('export_backup'))}</div>
