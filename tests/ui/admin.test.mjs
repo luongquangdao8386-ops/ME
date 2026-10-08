@@ -171,6 +171,25 @@ test('web: Danh mục chung — C4 thêm khu vực (mã tự cấp) và thuật 
   } finally { await app2.close(); }
 });
 
+test('web C4: mở Người dùng (máy chủ trả chậm) rồi chuyển ngay sang Danh mục chung → màn Người dùng xong muộn không đè lên Danh mục chung', async () => {
+  const env = freshServer();
+  ownerClient(env);
+  const app = await openApp({ env, ...WEB, delays: { 'user.view': 2500 } });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, '#/admin/users');
+    await page.waitForTimeout(300);
+    await go(page, '#/admin/catalog');
+    await page.waitForSelector('#cat-add', { timeout: 15000 });
+    await page.waitForTimeout(3500);
+    assert.equal(await page.locator('#cat-add').count(), 1, 'nút Thêm của Danh mục chung vẫn còn');
+    assert.ok(!(await viewText(page)).includes('Thêm người dùng'), 'không có nội dung màn Người dùng');
+    assert.match(await page.textContent('header'), /Danh mục chung/);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('web C4: Sao lưu ngay → QUEUED, màn tự hỏi lại tới khi có bản VERIFIED; Trạng thái hệ thống + sửa cấu hình có PIN', async () => {
   const env = freshServer();
   ownerClient(env);

@@ -35,13 +35,27 @@ async function renderRoute() {
   if (!m) { navigate('/', { replace: true }); return; }
   shell.setActive(m.route.opts.nav || '');
   shell.setBackHandler((target) => back(target || '/'));
-  const view = shell.view;
-  view.className = 'view';
+  const main = shell.view;
+  main.className = 'view';
+  // Mỗi địa chỉ một khung nội dung riêng: màn trước tải chậm (vd Người dùng) xong muộn chỉ vẽ vào khung cũ đã gỡ,
+  // không đè lên màn mới (vd Danh mục chung). Cùng địa chỉ (vẽ lại) thì dùng lại khung.
+  const hash = location.hash || '#/';
+  let view = main.firstElementChild;
+  if (!view || !view.classList.contains('view-page') || view.dataset.hash !== hash) {
+    const fresh = document.createElement('div');
+    fresh.className = 'view-page';
+    fresh.dataset.hash = hash;
+    if (view && view.classList.contains('view-page')) fresh.append(...view.childNodes);
+    main.replaceChildren(fresh);
+    view = fresh;
+  }
   // Không để nội dung màn trước (vd cụm logo trang chủ) còn hiện trong lúc màn mới đang tải
-  if (!view.querySelector('.pane') || !path.startsWith(view.dataset.path || '\u0000')) view.innerHTML = '<div class="loading"><div class="spinner small" aria-hidden="true"></div></div>';
-  view.dataset.path = path.split('/').slice(0, 2).join('/');
+  if (!view.querySelector('.pane') || !path.startsWith(main.dataset.path || '\u0000')) view.innerHTML = '<div class="loading"><div class="spinner small" aria-hidden="true"></div></div>';
+  main.dataset.path = path.split('/').slice(0, 2).join('/');
+  // Màn đã bị thay không được đổi tiêu đề/nút trên header nữa
+  const pageShell = Object.assign(Object.create(shell), { setScreen: (o) => { if (seq === renderSeq) shell.setScreen(o); } });
   try {
-    await m.route.handler(view, { params: m.params, query: queryParams(), shell, app, seq, isCurrent: () => seq === renderSeq });
+    await m.route.handler(view, { params: m.params, query: queryParams(), shell: pageShell, app, seq, isCurrent: () => seq === renderSeq });
   } catch (e) {
     if (seq !== renderSeq) return;
     view.innerHTML = `<div class="card"><p class="banner warn">${bi('err.client')}: ${esc(e && e.message)}</p></div>`;
