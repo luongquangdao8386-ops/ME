@@ -1,5 +1,5 @@
 // Đồng bộ: bootstrap, changes, hàng chờ offline (phụ lục 1.5 mục 3.15, 1.4 §14)
-import { api, session, idb, uuid, isoNowVN } from './core.js';
+import { api, session, idb, uuid, isoNowVN, todayVN } from './core.js';
 
 const STOP_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'SYSTEM_MAINTENANCE', 'MUST_CHANGE_PIN', 'CLIENT_UPDATE_REQUIRED', 'QUOTA_EXCEEDED']);
 /** Không biết thao tác đã ghi hay chưa */
@@ -25,6 +25,7 @@ export async function bootstrap() {
   await idb.clear('me_data', 'records');
   for (const [t, list] of Object.entries(acc)) await idb.put('me_data', 'records', t, list);
   session.settings = first.settings || {};
+  session.settings.__today_offset_days = todayOffset(first.server_today);
   await setMeta('bootstrap', { user: first.user, subroles: first.subroles, settings: first.settings, permissions: first.permissions, env: first.env, server_version: first.server_version });
   await setMeta('cursor', cursor);
   await setMeta('epoch', session.epoch);
@@ -32,9 +33,25 @@ export async function bootstrap() {
   return { ok: true, data: first };
 }
 
+/** Khóa chính theo loại hồ sơ (khớp SYNC_ENTITIES_ của máy chủ) */
+export const KEY = {
+  EQUIPMENT: 'equipment_id', EQUIPMENT_SPEC: 'spec_id', MATERIAL: 'material_id', EQUIPMENT_PART: 'equipment_part_id',
+  EQUIPMENT_PART_EVENT: 'event_id', DOCUMENT: 'document_id', INSPECTION: 'inspection_id',
+  INSPECTION_REQUIREMENT: 'requirement_id', INSPECTION_TYPE: 'inspection_type_id', LOCATION: 'location_id', VENDOR: 'vendor_id',
+  LOOKUP: 'value_id', CONTRACT: 'contract_id', CONTRACT_EQUIPMENT: 'contract_equipment_id', CONTRACT_SERVICE: 'service_id',
+  ALERT: 'alert_id', USER_PICK: 'user_id'
+};
+
 function keyOf(type, rec) {
-  const k = { EQUIPMENT: 'equipment_id', DOCUMENT: 'document_id', INSPECTION: 'inspection_id', INSPECTION_REQUIREMENT: 'requirement_id', INSPECTION_TYPE: 'inspection_type_id', LOCATION: 'location_id', VENDOR: 'vendor_id', LOOKUP: 'value_id' }[type];
-  return rec[k];
+  return rec[KEY[type]];
+}
+
+/** Độ lệch ngày "hôm nay" của máy chủ (TEST_TODAY ở THỬ, hoặc đồng hồ máy sai) so với máy này */
+function todayOffset(serverToday) {
+  const re = /^(\d{4})-(\d{2})-(\d{2})/;
+  const a = re.exec(todayVN()), b = re.exec(String(serverToday || ''));
+  if (!a || !b) return 0;
+  return Math.round((Date.UTC(+b[1], +b[2] - 1, +b[3]) - Date.UTC(+a[1], +a[2] - 1, +a[3])) / 86400000);
 }
 
 /** Áp một bản ghi máy chủ trả về (sau COMMITTED) vào cache cục bộ */
@@ -69,6 +86,13 @@ export async function pullChanges() {
     }
     cursor = r.data.next_cursor;
     await setMeta('cursor', cursor);
+    if (r.data.server_today && session.settings) {
+      const off = todayOffset(r.data.server_today);
+      if (off !== (session.settings.__today_offset_days || 0)) {
+        session.settings.__today_offset_days = off;
+        if (boot) { boot.settings = { ...(boot.settings || {}), __today_offset_days: off }; await setMeta('bootstrap', boot); }
+      }
+    }
     if (!r.data.has_more) break;
   }
   await setMeta('last_sync', isoNowVN());

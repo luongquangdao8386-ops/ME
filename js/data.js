@@ -1,15 +1,8 @@
 // Dữ liệu đã tải trên máy: đọc nhanh theo loại, tra theo ID, quyền phía client (chỉ để ẩn/hiện nút), tính hạn (1.4 §12.1)
 import { session, todayVN } from './core.js';
-import { getRecords, getMeta } from './sync.js';
+import { getRecords, getMeta, KEY } from './sync.js';
 
-/** Khóa chính theo loại hồ sơ (khớp SYNC_ENTITIES_ của máy chủ) */
-export const KEY = {
-  EQUIPMENT: 'equipment_id', EQUIPMENT_SPEC: 'spec_id', MATERIAL: 'material_id', EQUIPMENT_PART: 'equipment_part_id',
-  EQUIPMENT_PART_EVENT: 'event_id', DOCUMENT: 'document_id', INSPECTION: 'inspection_id',
-  INSPECTION_REQUIREMENT: 'requirement_id', INSPECTION_TYPE: 'inspection_type_id', LOCATION: 'location_id', VENDOR: 'vendor_id',
-  LOOKUP: 'value_id', CONTRACT: 'contract_id', CONTRACT_EQUIPMENT: 'contract_equipment_id', CONTRACT_SERVICE: 'service_id',
-  USER_PICK: 'user_id'
-};
+export { KEY };
 export const CODE = {
   EQUIPMENT: 'equipment_code', MATERIAL: 'material_code', INSPECTION: 'inspection_code', INSPECTION_REQUIREMENT: 'requirement_code',
   CONTRACT: 'contract_code', LOCATION: 'location_code', VENDOR: 'vendor_code'

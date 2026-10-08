@@ -139,6 +139,7 @@ function registerRoutes() {
   route('/contracts/:id', lazy('./pages/contracts.js', 'renderContract'), { nav: 'contracts' });
   route('/contracts/:id/edit', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
   route('/contracts/:id/renew', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
+  route('/admin/gmail', lazy('./pages/gmail.js', 'renderGmail'), { nav: 'account' });
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });

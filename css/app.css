@@ -542,3 +542,8 @@ details.more summary { cursor: pointer; min-height: 40px; display: flex; align-i
 .tbl td.ref { font-weight: 700; color: var(--navy); }
 .hist-row { display: flex; flex-direction: column; gap: 4px; }
 @media (min-width: 900px) { .ce-grid { grid-template-columns: 2fr 90px 120px 160px 140px auto; } .ce-grid input[data-k="service"] { grid-column: auto; } }
+
+/* Nhắc hạn: nút tiếp nhận trên thẻ */
+div.rec-card.click { cursor: pointer; }
+div.rec-card.click:active { background: #EEF2F6; }
+.rec-actions { display: flex; justify-content: flex-end; margin-top: 8px; }

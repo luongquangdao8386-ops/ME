@@ -79,7 +79,7 @@ var SHEETS = {
     cols: 'alert_id entity_type entity_id due_revision due_date days_remaining alert_state owner_user_id acknowledged_at ' +
       'resolved_at refreshed_at dataset_epoch reference_date_kind stage sync_revision' },
   NotificationRecipients: { book: 'B', dot: 1, key: 'recipient_id', c: true,
-    cols: 'recipient_id email user_id location_scope entity_scope active' },
+    cols: 'recipient_id email user_id location_scope entity_scope active confirmed_by confirmed_at' },
   NotificationLogs: { book: 'B', dot: 1, key: 'notification_id',
     cols: 'notification_id dedupe_key run_date recipient_id entity_type entity_id due_revision due_date stage status ' +
       'attempt_at sent_at error_code dataset_epoch alert_id reference_date_kind days_remaining digest_id queued_at attempt_count' },

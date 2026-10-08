@@ -15,6 +15,7 @@ var SYNC_ENTITIES_ = [
   { type: 'INSPECTION_TYPE', sheet: 'InspectionTypes', action: 'inspection.view', module: 'inspections' },
   { type: 'INSPECTION_REQUIREMENT', sheet: 'InspectionRequirements', action: 'inspection.view', module: 'inspections', qr: true },
   { type: 'INSPECTION', sheet: 'Inspections', action: 'inspection.view', module: 'inspections', qr: true },
+  { type: 'ALERT', sheet: 'Alerts', action: 'alert.view', module: '*alert' },
   { type: 'DOCUMENT', sheet: 'Documents', action: 'doc.view', module: null }
 ];
 
@@ -30,6 +31,14 @@ function syncProject_(ctx, ent, row, qm, costCache) {
     if (row.access_scope === 'COST_VIEW' && !costCache[mod].cost) return null;
     return projectDoc_(ctx, row);
   }
+  if (ent.type === 'ALERT') {
+    // Cảnh báo đã đóng → xóa ở máy; module theo loại hồ sơ
+    if (row.alert_state === 'RESOLVED') return null;
+    var am = alertModule_(row.entity_type);
+    if (!(('alert:' + am) in costCache)) costCache['alert:' + am] = can_(ctx, 'alert.view', { module: am });
+    if (!costCache['alert:' + am]) return null;
+    return projectRow_(ctx, row, ent.sheet);
+  }
   var o = projectRow_(ctx, row, ent.sheet);
   if (ent.qr) o.qr_key = qm[o[sheetSchema_(ent.sheet).key]] || null;
   return o;
@@ -38,6 +47,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
 function visibleEntities_(ctx) {
   return SYNC_ENTITIES_.filter(function (ent) {
     if (!ent.module) return true;
+    if (ent.module === '*alert') return can_(ctx, ent.action, { module: 'inspections' }) || can_(ctx, ent.action, { module: 'contracts' });
     return can_(ctx, ent.action, { module: ent.module });
   });
 }
@@ -76,6 +86,7 @@ function syncBootstrap_(ctx) {
     out.permissions = permissionSummary_(ctx);
     out.server_version = SERVER_VERSION;
     out.env = envName_();
+    out.server_today = todayVN_();
   }
   return out;
 }
@@ -121,7 +132,7 @@ function syncChanges_(ctx) {
   var nextCursor = hasMore ? changes[changes.length - 1].sync_revision : head;
   return {
     changes: changes, next_cursor: String(nextCursor), has_more: hasMore,
-    perm_version: sysStateCached_().perm_version || 1, sync_cursor: String(nextCursor)
+    perm_version: sysStateCached_().perm_version || 1, sync_cursor: String(nextCursor), server_today: todayVN_()
   };
 }
 

@@ -237,33 +237,12 @@ function adminFinalizeManualRestore() {
 
 /* ---------------- Trigger ---------------- */
 
-/** Hằng ngày: (Đợt 1) tính Alerts và gửi email; dọn AuthAttempts > 90 ngày và Sessions cũ */
-function sendExpiryDigest() {
-  if (prop_('MAINTENANCE_MODE') === 'true') return;
-  var keepDays = setting_('auth_attempts_retention_days');
-  var cutoff = now_().getTime() - keepDays * 86400000;
-  withWriteLock_(function () {
-    var rows = readRows_('AuthAttempts');
-    var n = 0;
-    while (n < rows.length) {
-      var t = parseTime_(rows[n].occurred_at);
-      if (!t || t.getTime() >= cutoff) break;
-      n++;
-    }
-    if (n > 0) sh_('AuthAttempts').deleteRows(2, n);
-  });
-  var sCut = now_().getTime() - 30 * 86400000;
-  withWriteLock_(function () {
-    var del = readRows_('Sessions').filter(function (s) {
-      var end = parseTime_(s.revoked_at) || parseTime_(s.expires_at);
-      return end && end.getTime() < sCut;
-    }).map(function (s) { return s.__row; }).sort(function (a, b) { return b - a; });
-    del.slice(0, 200).forEach(function (r) { sh_('Sessions').deleteRow(r); });
-  });
-  log_('sendExpiryDigest: đã dọn nhật ký đăng nhập và phiên cũ. Nhắc hạn Gmail bật ở Đợt 1 (sau PoC).');
-}
+/* sendExpiryDigest (trigger hằng ngày) ở 19_alerts.js */
 
-var MT_SHEETS_ = { Equipment: ['name'], Documents: ['title'] };
+var MT_SHEETS_ = {
+  Equipment: ['name'], Documents: ['title'], Materials: ['name', 'specification'], EquipmentParts: ['function', 'position'],
+  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services']
+};
 
 /** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
 function runBackgroundJobs() {

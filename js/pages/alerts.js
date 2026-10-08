@@ -1,9 +1,12 @@
 // Nhắc hạn (nav 4, 5.2) và lịch kiểm định tháng (HOME-02)
 import { bi, biText, esc, fmtDate, badge, nameText } from '../core.js';
-import { ICON } from '../ui.js';
+import { ICON, toast } from '../ui.js';
 import { isWide } from '../shell.js';
-import { mapOf, deadlineItems, dueSort, today, addDays, weekday, recs, dueInfo } from '../data.js';
+import { mapOf, deadlineItems, dueSort, today, addDays, weekday, recs, dueInfo, can } from '../data.js';
+import { writeOnline } from '../form.js';
+import { afterCommit } from '../app.js';
 import { deadlineText } from './home.js';
+import { handleWriteError } from './equipment.js';
 
 const STATES = ['ALL', 'DUE_SOON', 'DUE_TODAY', 'OVERDUE', 'MISSING'];
 // Bộ lọc chỉ giữ trong phiên làm việc (đăng xuất là mất, 2.5)
@@ -27,23 +30,30 @@ export async function renderAlerts(view, { shell }) {
     return `<div class="dates"><span${mark('RENEWAL_NOTICE')}>${bi('field.renewal_notice_date')}: <strong>${esc(fmtDate(x.renewal_notice_date) || '—')}</strong></span>
       <span${mark('END_DATE')}>${bi('field.end_date')}: <strong>${esc(fmtDate(x.end_date) || '—')}</strong></span></div>`;
   };
+  // Cảnh báo máy chủ (Alerts): trạng thái tiếp nhận; hạn tính ở máy để xem được khi offline
+  const alertBy = new Map((await recs('ALERT')).filter((a) => a.alert_state !== 'RESOLVED').map((a) => [a.entity_id, a]));
+  const canAck = await can('alert.acknowledge');
   const rows = await Promise.all(list.map(async (x) => {
     const e = eqs.get(x.equipment_id), l = locs.get(locOf(x));
     const rs = ['FAILED', 'REVOKED', 'SUSPENDED'].includes(x.record_status) ? badge('record_status.' + x.record_status) : '';
-    return { x, e, l, rs, text: await deadlineText(x) };
+    const al = alertBy.get(x.id);
+    const ack = al && al.alert_state === 'ACKNOWLEDGED' ? badge('alert_state.ACKNOWLEDGED') : '';
+    const ackBtn = al && al.alert_state === 'OPEN' && canAck ? `<button type="button" class="btn small" data-ack="${esc(al.alert_id)}">${ICON.check}${bi('btn.acknowledge')}</button>` : '';
+    return { x, e, l, rs, ack, ackBtn, text: await deadlineText(x) };
   }));
   const chips = STATES.map((st) => `<button type="button" class="chip${filt.state === st ? ' on' : ''}" data-state="${st}">${bi('due_filter.' + st)} <span class="count">${count(st)}</span></button>`).join('');
   const sel = (id, opts, cur) => `<select id="${id}" class="sel">${opts.map(([v, t]) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
   const body = isWide()
-    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.type')}</th><th>${bi('col.code')}</th><th>${bi('col.content')}</th><th>${bi('col.equipment_location')}</th><th>${bi('col.due')}</th><th>${bi('col.status')}</th><th>${bi('col.owner')}</th></tr></thead>
-      <tbody>${rows.map(({ x, e, l, rs, text }) => `<tr class="click" data-href="${esc(x.href)}"><td>${bi(x.kind === 'INSPECTION' ? 'module.inspections' : 'module.contracts')}</td><td class="code">${esc(x.code)}</td><td>${esc(text)}</td>
-        <td>${esc([e && e.equipment_code, l && l.location_code].filter(Boolean).join(' · '))}</td><td>${dateLines(x)}</td><td>${badge(x.due.key, x.due.vars)} ${rs}</td><td>${esc(x.rec.owner_name || '')}</td></tr>`).join('')}</tbody></table></div>`
-    : `<div class="cards">${rows.map(({ x, e, l, rs, text }) => `<a class="card rec-card" href="#${esc(x.href)}">
+    ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.type')}</th><th>${bi('col.code')}</th><th>${bi('col.content')}</th><th>${bi('col.equipment_location')}</th><th>${bi('col.due')}</th><th>${bi('col.status')}</th><th>${bi('col.owner')}</th><th></th></tr></thead>
+      <tbody>${rows.map(({ x, e, l, rs, ack, ackBtn, text }) => `<tr class="click" data-href="${esc(x.href)}"><td>${bi(x.kind === 'INSPECTION' ? 'module.inspections' : 'module.contracts')}</td><td class="code">${esc(x.code)}</td><td>${esc(text)}</td>
+        <td>${esc([e && e.equipment_code, l && l.location_code].filter(Boolean).join(' · '))}</td><td>${dateLines(x)}</td><td>${badge(x.due.key, x.due.vars)} ${rs} ${ack}</td><td>${esc(x.rec.owner_name || '')}</td><td>${ackBtn}</td></tr>`).join('')}</tbody></table></div>`
+    : `<div class="cards">${rows.map(({ x, e, l, rs, ack, ackBtn, text }) => `<div class="card rec-card click" data-href="${esc(x.href)}" role="link" tabindex="0">
         <div class="rec-top"><span class="kind">${bi(x.kind === 'INSPECTION' ? 'module.inspections' : 'module.contracts')}</span><span class="code">${esc(x.code)}</span></div>
         <div class="rec-name">${esc(text)}</div>
         ${e || l ? `<div class="muted small">${esc([e && e.equipment_code, l && nameText(l)].filter(Boolean).join(' · '))}</div>` : ''}
-        ${dateLines(x)}<div class="rec-badges">${badge(x.due.key, x.due.vars)} ${rs}</div>
-        ${x.rec.owner_name ? `<div class="muted small">${bi('col.owner')}: ${esc(x.rec.owner_name)}</div>` : ''}</a>`).join('')}</div>`;
+        ${dateLines(x)}<div class="rec-badges">${badge(x.due.key, x.due.vars)} ${rs} ${ack}</div>
+        ${x.rec.owner_name ? `<div class="muted small">${bi('col.owner')}: ${esc(x.rec.owner_name)}</div>` : ''}
+        ${ackBtn ? `<div class="rec-actions">${ackBtn}</div>` : ''}</div>`).join('')}</div>`;
   view.innerHTML = `<div class="filters"><div class="chips">${chips}</div>
     <div class="row">${sel('f-kind', [['', bi('due_filter.ALL')], ['INSPECTION', bi('module.inspections')], ['CONTRACT', bi('module.contracts')]], filt.kind)}
       ${sel('f-loc', [['', bi('field.location')]].concat(locIds.map((id) => [id, esc((locs.get(id) || {}).location_code || '') + ' ' + esc(nameText(locs.get(id)))])), filt.location)}
@@ -55,7 +65,19 @@ export async function renderAlerts(view, { shell }) {
   view.querySelector('#f-kind').addEventListener('change', (e) => { filt.kind = e.target.value; rerender(); });
   view.querySelector('#f-loc').addEventListener('change', (e) => { filt.location = e.target.value; rerender(); });
   view.querySelector('#f-owner').addEventListener('change', (e) => { filt.owner = e.target.value; rerender(); });
-  view.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => import('../router.js').then((r) => r.navigate(tr.dataset.href))));
+  view.querySelectorAll('[data-href]').forEach((el) => {
+    const go = (ev) => { if (ev.target.closest('[data-ack]')) return; import('../router.js').then((r) => r.navigate(el.dataset.href)); };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') go(ev); });
+  });
+  // Tiếp nhận: chỉ ghi nhận đã thấy, không đổi hạn, email vẫn gửi theo mốc
+  view.querySelectorAll('[data-ack]').forEach((b) => b.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    if (!navigator.onLine) { toast(bi('sync.need_network'), 'err'); return; }
+    b.disabled = true;
+    const res = await writeOnline('alert.acknowledge', { alert_id: b.dataset.ack });
+    if (res.ok) { await afterCommit(); toast(bi('alert_state.ACKNOWLEDGED'), 'ok'); rerender(); } else { b.disabled = false; await handleWriteError(res); }
+  }));
 }
 
 let monthCursor = null;

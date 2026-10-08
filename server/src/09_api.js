@@ -47,6 +47,12 @@ var HANDLERS_ = {
   'inspection.requirement.edit': function (ctx) { return inspectionRequirementEdit_(ctx); },
   'inspection.approve': function (ctx) { return inspectionApprove_(ctx); },
   'inspection.revoke': function (ctx) { return inspectionRevoke_(ctx); },
+  'alert.view': function (ctx) { return alertView_(ctx); },
+  'alert.acknowledge': function (ctx) { return alertAcknowledge_(ctx); },
+  'notify.log.view': function (ctx) { return notifyLogView_(ctx); },
+  'notify.recipient.edit': function (ctx) { return notifyRecipientEdit_(ctx); },
+  'notify.settings.edit': function (ctx) { return notifySettingsEdit_(ctx); },
+  'notify.resend': function (ctx) { return notifyResend_(ctx); },
   'catalog.view': function (ctx) { return catalogView_(ctx); },
   'doc.view': function (ctx) { return docView_(ctx); },
   'doc.upload': function (ctx) { return docUpload_(ctx); },
@@ -65,6 +71,12 @@ var HANDLERS_ = {
   'poc.makeTestFiles': function (ctx) { return pocMakeTestFiles_(ctx); },
   'poc.driveChecks': function (ctx) { return pocDriveChecks_(ctx); },
   'poc.triggers': function (ctx) { return pocTriggers_(ctx); }
+};
+
+/** Thao tác làm đổi hạn: ghi xong thì tính lại Alerts ngay (không đợi trigger hằng ngày) */
+var DUE_ACTIONS_ = {
+  'inspection.approve': 1, 'inspection.revoke': 1, 'inspection.requirement.edit': 1,
+  'contract.create': 1, 'contract.edit': 1, 'contract.editTerms': 1, 'contract.archive': 1, 'contract.close': 1, 'contract.renewal.approve': 1
 };
 
 /** Action không cần phiên (chỉ qua bước 1 và 3 của 4.2) */
@@ -198,6 +210,7 @@ function dispatchInner_(req, viaPush) {
   if (def.net === 'pin' && !verifyReauth_(ctx, req.reauth_token)) throw apiError_('REAUTH_REQUIRED');
   ctx.viaPush = !!viaPush;
   var out = HANDLERS_[req.action](ctx);
+  if (DUE_ACTIONS_[req.action] && out && out.ok) afterDueChange_();
   if (out && out.__envelope) return out.__envelope; // sync.push: phản hồi giống action gốc
   if (out && out.state === 'COMMITTED' && out.ok) {
     return envelope_(req, out);
