@@ -630,10 +630,10 @@ async function p16upload(mb = 1.5) {
   if (!eq) return;
   const blob = makeTestPdf([`M&E PoC P-16 upload ${mb} MB`], Math.round(mb * 1048576));
   const up = await uploadDoc({ entity_type: 'EQUIPMENT', entity_id: eq.equipment_id, kind: 'OTHER', blob, mime: 'application/pdf', title_vi: `Tệp thử ${mb} MB`, title_zh: `${mb} MB测试文件` });
-  out('P-16', `Tải lên ${mb} MB: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''} ${up.upload_ms ? ms(up.upload_ms) : ''}${typeof up.server_ms === 'number' ? ' (máy chủ ' + ms(up.server_ms) + ')' : ''}${up.retries ? ' · gửi lại ' + up.retries : ''}`);
+  out('P-16', `Tải lên ${mb} MB: ${code(up)}${up.transport ? ' · ' + esc(up.transport) : ''}${up.http ? ' · HTTP ' + esc(up.http) : ''} ${up.upload_ms ? ms(up.upload_ms) : ''}${typeof up.server_ms === 'number' ? ' (máy chủ ' + ms(up.server_ms) + ')' : ''}${up.retries ? ' · gửi lại ' + up.retries : ''}`);
   if (!up.ok) await p16diag(up);
   const prev = results['P-16'] ? results['P-16'].metrics : {};
-  const upload_ms = { ...(prev.upload_ms || {}), [mb + 'MB']: up.ok ? up.upload_ms : up.code + '/' + (up.transport || '') };
+  const upload_ms = { ...(prev.upload_ms || {}), [mb + 'MB']: up.ok ? up.upload_ms : up.code + '/' + (up.transport || '') + (up.http ? '/' + up.http : '') };
   await p16rec({ ...prev, upload_ms, ...(mb === 1.5 ? { upload_15_ms: up.ok ? up.upload_ms : null } : {}) });
 }
 /** Lỗi đường truyền ở P-16: URL cuối sau chuyển hướng và các lần doGet không action gần đây (máy chủ ghi) */
