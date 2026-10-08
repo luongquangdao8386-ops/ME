@@ -478,7 +478,7 @@ async function p09render() {
   const eqs = (await getRecords('EQUIPMENT')).sort((a, b) => String(a.equipment_code).localeCompare(String(b.equipment_code))).slice(0, 5);
   const last = await getMeta('last_sync');
   $('#p09-last').innerHTML = `${bi('last_sync')}: ${esc(fmtDateTime(last) || '—')}`;
-  list.innerHTML = eqs.map((e) => `<li><strong>${esc(e.equipment_code)}</strong> ${esc(e.name_vi)}${e.i18n_meta && e.i18n_meta.name && e.i18n_meta.name.state === 'MACHINE' ? ` <span class="mt">${bi('machine_translated')}</span>` : ''}<br><span class="zh">${esc(e.name_zh || '')}</span> · v${e.record_version}
+  list.innerHTML = eqs.map((e) => `<li><strong>${esc(e.equipment_code)}</strong> ${esc(e.name_vi)}${e.i18n_meta && e.i18n_meta.name && e.i18n_meta.name.state === 'MACHINE' ? ` <span class="mt">${bi('machine_translated')}</span>` : ''}<br><span class="zh">${esc(e.name_zh || '')}</span>${e.model ? ' · Model <strong>' + esc(e.model) + '</strong>' : ''} · v${e.record_version}
     <button type="button" class="btn tiny" data-edit="${esc(e.equipment_id)}">✎</button></li>`).join('');
   $$('[data-edit]', list).forEach((b) => b.addEventListener('click', () => p09edit(b.dataset.edit)));
 }
