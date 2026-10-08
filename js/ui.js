@@ -6,6 +6,15 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 /** Tạo phần tử từ HTML */
+// Chạm vào bất kỳ chỗ nào của khung ô nhập (biểu tượng, lề) cũng đưa con trỏ vào ô.
+// focus() chạy ngay trong sự kiện chạm nên iPhone (cả app ở Màn hình chính) mở bàn phím.
+document.addEventListener('click', (e) => {
+  const field = e.target.closest && e.target.closest('.field');
+  if (!field || e.target.closest('button, input, a')) return;
+  const inp = field.querySelector('input');
+  if (inp && !inp.disabled) inp.focus();
+});
+
 export function h(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();

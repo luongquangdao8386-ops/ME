@@ -32,6 +32,9 @@ for (const [name, viewport, mobile] of [['iphone', { width: 390, height: 844 }, 
       assert.equal(await page.textContent('.brand-sub'), '机电管理');
       assert.ok(await noHorizontalOverflow(page));
       await page.screenshot({ path: path.join(SHOTS, `login-${name}.png`) });
+      // Chạm vào biểu tượng trong khung ô → con trỏ vào ô (bàn phím iPhone)
+      await page.click('.field-icon');
+      assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'emp');
       // Đăng nhập lần đầu bằng PIN tạm → đổi PIN → bàn thử PoC
       await page.click('#forgot');
       assert.ok((await page.textContent('#forgot-help')).includes('请联系管理员重置密码'));
