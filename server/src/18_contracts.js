@@ -231,7 +231,8 @@ function contractEditTerms_(ctx) {
     build: function () {
       var cur = findOne_('Contracts', 'contract_id', p.contract_id);
       if (!cur) throw apiError_('NOT_FOUND');
-      var basis = assertNotSelf_(ctx, 'contract.editTerms', [cur.created_by]);
+      // Commit lô Excel nhạy cảm là duyệt (người commit khác người nhập, 4.4.11 ⁷)
+      var basis = ctx.importBatch ? 'IMPORT_COMMIT' : assertNotSelf_(ctx, 'contract.editTerms', [cur.created_by]);
       assertVersion_(ctx, cur, 'CONTRACT', 'Contracts');
       if (cur.lifecycle_status !== 'ACTIVE' || cur.archived_at) throw validationError_([fieldError_('contract_id', 'INVALID_VALUE')]);
       var merged = {};

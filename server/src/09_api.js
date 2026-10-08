@@ -69,6 +69,13 @@ var HANDLERS_ = {
   'permission.view': function (ctx) { return permissionView_(ctx); },
   'permission.edit': function (ctx) { return permissionEdit_(ctx); },
   'system.status': function (ctx) { return systemStatus_(ctx); },
+  'import.template': function (ctx) { return importTemplateAction_(ctx); },
+  'import.preview': function (ctx) { return importPreview_(ctx); },
+  'import.errors': function (ctx) { return importErrors_(ctx); },
+  'import.submit': function (ctx) { return importSubmit_(ctx); },
+  'import.commit': function (ctx) { return importCommit_(ctx); },
+  'import.cancel': function (ctx) { return importCancel_(ctx); },
+  'export.xlsx': function (ctx) { return exportXlsx_(ctx); },
   'catalog.view': function (ctx) { return catalogView_(ctx); },
   'location.edit': function (ctx) { return locationEdit_(ctx); },
   'vendor.edit': function (ctx) { return vendorEdit_(ctx); },
@@ -94,6 +101,9 @@ var HANDLERS_ = {
   'poc.driveChecks': function (ctx) { return pocDriveChecks_(ctx); },
   'poc.triggers': function (ctx) { return pocTriggers_(ctx); }
 };
+
+/** Khúc commit Excel tiếp theo không hỏi lại PIN (3.8) */
+var PIN_WAIVERS_ = { 'import.commit': function (ctx) { return importCommitPinWaived_(ctx); } };
 
 /** Thao tác làm đổi hạn: ghi xong thì tính lại Alerts ngay (không đợi trigger hằng ngày) */
 var DUE_ACTIONS_ = {
@@ -228,8 +238,10 @@ function dispatchInner_(req, viaPush) {
   } else if (!dynamic) {
     ctx.auth = authorize_(ctx, req.action, null);
   }
+  // Module theo hồ sơ: ô theo cấp/subrole không cho thì từ chối trước khi hỏi PIN
+  if (dynamic && def.net === 'pin' && !evalCells_(ctx, def, null).allowed) throw apiError_('FORBIDDEN');
   // 8. Hỏi lại PIN — sau khi đã biết người dùng có quyền (không hỏi PIN người không có quyền)
-  if (def.net === 'pin' && !verifyReauth_(ctx, req.reauth_token)) throw apiError_('REAUTH_REQUIRED');
+  if (def.net === 'pin' && !verifyReauth_(ctx, req.reauth_token) && !(PIN_WAIVERS_[req.action] && PIN_WAIVERS_[req.action](ctx))) throw apiError_('REAUTH_REQUIRED');
   ctx.viaPush = !!viaPush;
   var out = HANDLERS_[req.action](ctx);
   if (DUE_ACTIONS_[req.action] && out && out.ok) afterDueChange_();

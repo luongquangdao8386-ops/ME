@@ -236,6 +236,9 @@ function assertNewId_(sheet, field, id) {
 
 /* ---------------- Dịch máy (2.3) ---------------- */
 
+/** Commit Excel không dịch (2.3 quy tắc 9): trường cần dịch đặt PENDING cho runBackgroundJobs */
+var MT_DEFER_ = false;
+
 function mtEnabled_() {
   if (!setting_('machine_translation_enabled')) return false;
   var paused = parseTime_(sysStateCached_().mt_paused_until);
@@ -290,7 +293,7 @@ function applyTranslations_(sheet, fields, input, current) {
     // Cả chuỗi trùng thuật ngữ đã duyệt: lấy từ điển, không cần dịch máy (2.3 quy tắc 4)
     var g = glossaryExact_(text, src, tgt);
     if (g) { values[tgt === 'zh' ? kz : kv] = g; meta[f] = { src: src, state: 'GLOSSARY', at: nowIso }; return; }
-    if (!mtEnabled_() || now_().getTime() > budgetEnd) { meta[f] = { src: src, state: 'PENDING', at: nowIso }; return; }
+    if (MT_DEFER_ || !mtEnabled_() || now_().getTime() > budgetEnd) { meta[f] = { src: src, state: 'PENDING', at: nowIso }; return; }
     var out = translateText_(text, src, tgt);
     if (out) {
       values[tgt === 'zh' ? kz : kv] = out.text;

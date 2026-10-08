@@ -57,6 +57,12 @@ var SUB_MSG = {
   SELF_ACTION: ['Không thao tác lên chính mình', '不能对自己执行此操作'],
   PERM_CEILING: ['Vượt trần quyền của cấp này', '超出该级别的权限上限'],
   PERM_LOCKED: ['Ô quyền này khóa, không sửa trong app', '该权限项已锁定，不能在应用中修改'],
+  FORMULA: ['Ô có công thức — hãy chuyển thành giá trị', '单元格含公式——请改为数值'],
+  VERSION_CONFLICT: ['Hồ sơ đã bị sửa sau khi xuất file — xuất lại rồi nhập', '导出后记录已被修改——请重新导出再导入'],
+  SOURCE_CHANGED: ['Tệp đã đổi sau khi xem trước — chọn lại tệp để xem trước', '预览后文件已更改——请重新选择文件预览'],
+  TEMPLATE_EPOCH: ['Mẫu thuộc thế hệ dữ liệu cũ — tải mẫu mới', '模板属于旧数据批次——请下载新模板'],
+  TEMPLATE_MISMATCH: ['Tệp không đúng mẫu đã chọn', '文件与所选模板不符'],
+  DEPENDENCY_FAILED: ['Dòng được tham chiếu bị lỗi nên dòng này không ghi', '所引用的行出错，本行未写入'],
   LAST_ADMIN: ['Phải còn ít nhất một tài khoản cấp 4 đang hoạt động', '必须保留至少一个启用的四级账号'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
 };
