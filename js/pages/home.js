@@ -30,7 +30,7 @@ async function weekItems(from, to) {
     if (r.current_due_date >= from && r.current_due_date <= to) out.push({ date: r.current_due_date, kind: 'INSPECTION', code: r.requirement_code, href: '/inspections/' + r.requirement_id });
   }
   for (const c of await recs('CONTRACT')) {
-    if (c.lifecycle_status && c.lifecycle_status !== 'ACTIVE') continue;
+    if (c.lifecycle_status !== 'ACTIVE') continue; // dự thảo, phiên cũ, đã kết thúc: không nhắc
     for (const d of [c.renewal_notice_date, c.end_date]) {
       if (d && d >= from && d <= to) out.push({ date: d, kind: 'CONTRACT', code: c.contract_code, href: '/contracts/' + c.contract_id });
     }

@@ -535,3 +535,10 @@ details.more summary { cursor: pointer; min-height: 40px; display: flex; align-i
   .hdr-title { flex: 0 1 auto; min-width: 0; }
   .hdr-status { flex: 0 1 auto; min-width: 0; }
 }
+.ce-row { border-top: 1px solid var(--bg); padding: 8px 0; }
+.ce-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; align-items: center; }
+.ce-grid .inp { min-height: 42px; }
+.ce-grid input[data-k="service"] { grid-column: 1 / -1; }
+.tbl td.ref { font-weight: 700; color: var(--navy); }
+.hist-row { display: flex; flex-direction: column; gap: 4px; }
+@media (min-width: 900px) { .ce-grid { grid-template-columns: 2fr 90px 120px 160px 140px auto; } .ce-grid input[data-k="service"] { grid-column: auto; } }

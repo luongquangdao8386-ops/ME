@@ -149,7 +149,7 @@ export async function deadlineItems() {
     });
   }
   for (const c of await recs('CONTRACT')) {
-    if (c.lifecycle_status && c.lifecycle_status !== 'ACTIVE') continue;
+    if (c.lifecycle_status !== 'ACTIVE') continue; // dự thảo, phiên cũ, đã kết thúc: không nhắc
     const ref = contractRefDate(c);
     out.push({
       kind: 'CONTRACT', id: c.contract_id, code: c.contract_code, rec: c, date: ref.date, ref_kind: ref.kind, due: dueInfo(ref.date, t),

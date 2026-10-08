@@ -51,7 +51,8 @@ export function fmtNumber(n, maxFrac = 3) {
   if (n === null || n === undefined || n === '' || isNaN(Number(n))) return '';
   const v = Number(n);
   const neg = v < 0;
-  const s = Math.abs(v).toFixed(maxFrac).replace(/\.?0+$/, '');
+  let s = Math.abs(v).toFixed(maxFrac);
+  if (s.includes('.')) s = s.replace(/\.?0+$/, ''); // bỏ số 0 cuối phần lẻ, không đụng phần nguyên
   const [i, f] = s.split('.');
   const grouped = i.length >= 4 ? i.replace(/\B(?=(\d{3})+(?!\d))/g, THOUSANDS_SEP) : i;
   return (neg ? '-' : '') + grouped + (f ? '.' + f : '');

@@ -30,6 +30,17 @@ var HANDLERS_ = {
   'part.link': function (ctx) { return partLink_(ctx); },
   'part.unlink': function (ctx) { return partUnlink_(ctx); },
   'part.approve': function (ctx) { return partApprove_(ctx); },
+  'contract.view': function (ctx) { return contractView_(ctx); },
+  'contract.create': function (ctx) { return contractCreate_(ctx); },
+  'contract.edit': function (ctx) { return contractEdit_(ctx); },
+  'contract.editTerms': function (ctx) { return contractEditTerms_(ctx); },
+  'contract.archive': function (ctx) { return contractArchive_(ctx); },
+  'contract.close': function (ctx) { return contractClose_(ctx); },
+  'contract.renewal.create': function (ctx) { return contractRenewalCreate_(ctx); },
+  'contract.renewal.submit': function (ctx) { return contractRenewalSubmit_(ctx); },
+  'contract.renewal.approve': function (ctx) { return contractRenewalApprove_(ctx); },
+  'contract.service.record': function (ctx) { return contractServiceRecord_(ctx); },
+  'contract.service.accept': function (ctx) { return contractServiceAccept_(ctx); },
   'inspection.view': function (ctx) { return inspectionView_(ctx); },
   'inspection.submit': function (ctx) { return inspectionSubmit_(ctx); },
   'inspection.type.edit': function (ctx) { return inspectionTypeEdit_(ctx); },
@@ -175,8 +186,6 @@ function dispatchInner_(req, viaPush) {
   // 2. Phiên
   var ctx = requireSession_(req, req.action);
   if (def.write && !isUuidV4_(req.operation_id)) throw validationError_([fieldError_('operation_id', 'ID_INVALID')]);
-  // 8. Hỏi lại PIN
-  if (def.net === 'pin' && !verifyReauth_(ctx, req.reauth_token)) throw apiError_('REAUTH_REQUIRED');
   // Bước 4–5: module cố định thì kiểm ngay; module theo hồ sơ ('*', '*work', 'contracts|inspections')
   // thì thao tác gọi authorize_ với hồ sơ đích. Action '-' chỉ xét ô theo cấp/subrole.
   var dynamic = def.module === '*' || def.module === '*work' || def.module === 'contracts|inspections';
@@ -185,6 +194,8 @@ function dispatchInner_(req, viaPush) {
   } else if (!dynamic) {
     ctx.auth = authorize_(ctx, req.action, null);
   }
+  // 8. Hỏi lại PIN — sau khi đã biết người dùng có quyền (không hỏi PIN người không có quyền)
+  if (def.net === 'pin' && !verifyReauth_(ctx, req.reauth_token)) throw apiError_('REAUTH_REQUIRED');
   ctx.viaPush = !!viaPush;
   var out = HANDLERS_[req.action](ctx);
   if (out && out.__envelope) return out.__envelope; // sync.push: phản hồi giống action gốc

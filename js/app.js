@@ -134,8 +134,11 @@ function registerRoutes() {
   route('/inspections/:id', lazy('./pages/inspections.js', 'renderRequirement'), { nav: 'inspections' });
   route('/inspections/:id/edit', lazy('./pages/inspections.js', 'renderRequirementForm'), { nav: 'inspections' });
   route('/inspections/:id/submit', lazy('./pages/inspections.js', 'renderSubmitForm'), { nav: 'inspections' });
-  route('/contracts', lazy('./pages/misc.js', 'renderContractsInterim'), { nav: 'contracts' });
-  route('/contracts/:id', lazy('./pages/misc.js', 'renderContractsInterim'), { nav: 'contracts' });
+  route('/contracts', lazy('./pages/contracts.js', 'renderContractList'), { nav: 'contracts' });
+  route('/contracts/new', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
+  route('/contracts/:id', lazy('./pages/contracts.js', 'renderContract'), { nav: 'contracts' });
+  route('/contracts/:id/edit', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
+  route('/contracts/:id/renew', lazy('./pages/contracts.js', 'renderContractForm'), { nav: 'contracts' });
   route('/admin/:page', lazy('./pages/misc.js', 'renderAdminInterim'), { nav: 'account' });
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });

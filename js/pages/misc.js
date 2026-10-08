@@ -30,12 +30,6 @@ export async function renderAdminInterim(view, { shell, params }) {
   view.innerHTML = interimNote();
 }
 
-export async function renderContractsInterim(view, { shell }) {
-  shell.setScreen({ title: 'module.contracts', back: '/' });
-  const list = await recs('CONTRACT');
-  view.innerHTML = interimNote() + `<div class="cards">${list.map((c) => `<div class="card rec-card"><span class="code">${esc(c.contract_code)}</span><div>${biName(c, 'title')}</div></div>`).join('') || `<p class="muted">${bi('draft.empty')}</p>`}</div>`;
-}
-
 /* ---------------- QR: xem trong hồ sơ, in tem (6.5.2) ---------------- */
 
 const QR_TYPES = {

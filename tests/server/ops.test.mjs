@@ -115,7 +115,7 @@ test('dịch máy: sửa bên dịch máy → HUMAN; sửa bên gốc → dịch
   assert.ok(row.sync_revision > b.r.record_version);
 });
 
-test('quyền: cấp 1 xem được, không tạo được; KT không tạo thiết bị; action Đợt 1 chưa làm → FEATURE_NOT_ENABLED', () => {
+test('quyền: cấp 1 xem được, không tạo được; KT không tạo thiết bị; action chờ chốt (inspection.schedule) → FEATURE_NOT_ENABLED', () => {
   const env = freshServer();
   const o = ownerClient(env);
   createEq(o);
@@ -125,7 +125,8 @@ test('quyền: cấp 1 xem được, không tạo được; KT không tạo thi�
   assert.equal(c1.write('equipment.create', { equipment_id: uuid(), name_vi: 'x' }).code, 'FORBIDDEN');
   const kt = userClient(env, 'KT-01', 2, '482917', 'KY_THUAT');
   assert.equal(kt.write('equipment.create', { equipment_id: uuid(), name_vi: 'x' }).code, 'FORBIDDEN');
-  assert.equal(kt.call('contract.view').code, 'FEATURE_NOT_ENABLED');
+  assert.equal(kt.call('inspection.schedule').code, 'FEATURE_NOT_ENABLED');
+  assert.equal(kt.call('contract.view').ok, true);
   // cấp 2 chưa có subrole = cấp 1
   const c2 = userClient(env, 'C2-00', 2, '482918');
   assert.equal(c2.call('equipment.view').ok, true);

@@ -50,7 +50,7 @@ test('quyền: HĐ tạo yêu cầu, nộp; HĐ không duyệt; người nộp k
   const { id, r } = submit(hd, req);
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.match(r.data.display_code, /^LKD-2610-\d{3}$/);
-  assert.equal(hd.write('inspection.approve', { inspection_id: id, decision: 'APPROVE' }, { expected_version: 1 }).code, 'REAUTH_REQUIRED');
+  assert.equal(hd.write('inspection.approve', { inspection_id: id, decision: 'APPROVE' }, { expected_version: 1 }).code, 'FORBIDDEN', 'không hỏi PIN người không có quyền');
   // C4 nộp rồi tự duyệt → FORBIDDEN
   const own = submit(c, req, { inspection_date: '2026-09-01' });
   const rt = c.call('auth.reauth', { pin: '604817' }).data.reauth_token;
@@ -107,7 +107,7 @@ test('từ chối cần lý do; thu hồi giữ hạn → REVOKED; tạm ngưng/
   const s = c3.write('inspection.revoke', { requirement_id: req, op: 'SUSPEND', reason: 'Dừng máy dài hạn' }, { expected_version: rv + 1, reauth_token: c3.reauth() });
   assert.equal(s.ok, true);
   assert.equal(c3.call('inspection.view', {}).data.requirements[0].record_status, 'SUSPENDED');
-  assert.equal(hd.write('inspection.revoke', { requirement_id: req, op: 'RESUME', reason: 'x' }, { expected_version: rv + 2 }).code, 'REAUTH_REQUIRED');
+  assert.equal(hd.write('inspection.revoke', { requirement_id: req, op: 'RESUME', reason: 'x' }, { expected_version: rv + 2 }).code, 'FORBIDDEN');
   assert.equal(c3.write('inspection.revoke', { requirement_id: req, op: 'RESUME', reason: 'Chạy lại' }, { expected_version: rv + 2, reauth_token: c3.reauth() }).ok, true);
 });
 
