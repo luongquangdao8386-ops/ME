@@ -73,6 +73,8 @@ export async function pullChanges() {
     const r = await api('sync.changes', { cursor, limit: 500 }, { retry: true });
     if (!r.ok) return r;
     if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return bootstrap();
+    // Máy chủ lên phiên bản mới: tải lại quyền và cài đặt (action mới có trong danh sách quyền)
+    if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap();
     const byType = {};
     for (const ch of r.data.changes) (byType[ch.entity_type] = byType[ch.entity_type] || []).push(ch);
     for (const [type, chs] of Object.entries(byType)) {

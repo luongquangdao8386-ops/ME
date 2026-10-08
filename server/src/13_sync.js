@@ -132,7 +132,7 @@ function syncChanges_(ctx) {
   var nextCursor = hasMore ? changes[changes.length - 1].sync_revision : head;
   return {
     changes: changes, next_cursor: String(nextCursor), has_more: hasMore,
-    perm_version: sysStateCached_().perm_version || 1, sync_cursor: String(nextCursor), server_today: todayVN_()
+    perm_version: sysStateCached_().perm_version || 1, sync_cursor: String(nextCursor), server_today: todayVN_(), server_version: SERVER_VERSION
   };
 }
 
