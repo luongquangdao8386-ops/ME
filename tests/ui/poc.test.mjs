@@ -122,6 +122,23 @@ test('P-03 khi POST bị chuyển thành GET (như lỗi NOT_FOUND ở P-01): ap
   } finally { await app.close(); }
 });
 
+test('mở app khi máy chủ chậm hơn offline_probe_seconds mà vẫn có mạng: chờ tiếp, không chuyển sang mở khóa ngoại tuyến', async () => {
+  const delays = {};
+  const app = await openApp({ viewport: { width: 1440, height: 900 }, mobile: false, delays });
+  try {
+    const { page } = app;
+    await loginOwnerFirstTime(page);
+    delays['sync.changes'] = 9000; // lâu hơn 8 giây mặc định
+    await page.reload();
+    await page.waitForSelector('.boot', { timeout: 10000 });
+    await page.waitForFunction(() => (document.querySelector('.boot') || {}).textContent?.includes('phản hồi chậm'), null, { timeout: 15000 });
+    await page.waitForSelector('[data-poc="P-01"]', { timeout: 45000 });
+    assert.equal(await page.locator('#upin').count(), 0, 'không hiện màn mở khóa ngoại tuyến');
+    const cold = await page.evaluate(() => JSON.parse(localStorage.getItem('me.cold_starts') || '[]'));
+    assert.ok(cold.length && cold[cold.length - 1].timed_out, JSON.stringify(cold));
+  } finally { await app.close(); }
+});
+
 test('P-04: nháp kiểm định tạo khi offline được gửi đúng một lần khi có mạng lại', async () => {
   const env = freshServer();
   env.g.pocSeedSampleData();

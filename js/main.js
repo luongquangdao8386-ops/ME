@@ -1,5 +1,5 @@
 // Khởi động app M&E (PoC): Service Worker, phiên, mở offline, định tuyến
-import { api, session, ls, bi, esc, execUrl, resMsg, isoNowVN } from './core.js';
+import { api, session, ls, bi, biText, esc, execUrl, resMsg, isoNowVN } from './core.js';
 import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup } from './sync.js';
 import { shareFileNow } from './media.js';
@@ -183,9 +183,15 @@ async function start() {
   const cursor0 = Number((await getMeta('cursor')) || 0);
   let r = await api('sync.changes', { cursor: cursor0, limit: 1 }, { timeoutMs: probeSec * 1000 });
   if (decided) return;
-  noteColdStart(Math.round(performance.now() - t0), r.code === 'NETWORK_ERROR' && r.transport === 'TIMEOUT');
-  if (r.code === 'NETWORK_ERROR' && navigator.onLine && !(await getVerifier())) {
-    // Không có verifier (tab Safari, máy dùng chung): chờ thêm thay vì bắt đăng nhập lại
+  const timedOut = r.code === 'NETWORK_ERROR' && r.transport === 'TIMEOUT';
+  noteColdStart(Math.round(performance.now() - t0), timedOut);
+  if (r.code === 'NETWORK_ERROR' && navigator.onLine && (timedOut || !(await getVerifier()))) {
+    // Còn mạng mà máy chủ chậm (PoC: mở app 4–8 giây trở lên), hoặc không có verifier (tab Safari, máy dùng chung):
+    // chờ thêm thay vì chuyển sang mở khóa ngoại tuyến; nút "Mở bằng PIN" vẫn bấm được
+    const hint = document.createElement('p');
+    hint.className = 'muted';
+    hint.textContent = biText(['Máy chủ đang phản hồi chậm…', '服务器响应较慢…']);
+    wait.appendChild(hint);
     r = await api('sync.changes', { cursor: cursor0, limit: 1 }, { timeoutMs: 30000, retry: true });
     if (decided) return;
   }

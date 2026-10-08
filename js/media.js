@@ -62,11 +62,18 @@ export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thum
 /** Bước 1: tải file riêng tư về bộ nhớ app. Trả {ok, file, url, ms, bytes} */
 export async function downloadDoc(documentId) {
   const t0 = performance.now();
-  const r = await api('doc.download', { document_id: documentId });
-  if (!r.ok) return { ok: false, res: r, ms: Math.round(performance.now() - t0) };
+  let r = await api('doc.download', { document_id: documentId });
+  let retried = null;
+  // Lỗi đường truyền không phải hết giờ (vd. POST bị đổi thành GET): đọc lại một lần
+  if (r.code === 'NETWORK_ERROR' && r.transport !== 'TIMEOUT') {
+    retried = r.transport || r.code;
+    await new Promise((res) => setTimeout(res, 2000));
+    r = await api('doc.download', { document_id: documentId });
+  }
+  if (!r.ok) return { ok: false, res: r, retried, ms: Math.round(performance.now() - t0) };
   const bytes = b64ToBytes(r.data.content_b64);
   const file = new File([bytes], r.data.file_name, { type: r.data.mime_type });
-  return { ok: true, file, url: URL.createObjectURL(file), ms: Math.round(performance.now() - t0), bytes: bytes.length, server_ms: r.server_ms };
+  return { ok: true, file, url: URL.createObjectURL(file), ms: Math.round(performance.now() - t0), bytes: bytes.length, server_ms: r.server_ms, retried };
 }
 
 /** Máy cảm ứng (iPhone/iPad/Android) mới dùng bảng Chia sẻ; máy tính tải thẳng bằng <a download> (2.6) */

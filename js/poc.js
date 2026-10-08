@@ -64,15 +64,15 @@ const TRANSIENT = new Set(['UNKNOWN_RESULT', 'NETWORK_ERROR', 'SERVER_BUSY']);
 const transient = (r) => !r || TRANSIENT.has(r.code);
 
 /** Ghi có thử lại khi lỗi đường truyền hoặc SERVER_BUSY: giữ nguyên operation_id để máy chủ không ghi trùng (3.3) */
-async function writeSure(action, payload, opts = {}, log) {
+async function writeSure(action, payload, opts = {}, log, waits = [2000, 5000, 10000, 0]) {
   const operation_id = opts.operation_id || uuid();
   let r, retries = 0;
-  for (const wait of [2000, 5000, 10000, 0]) {
+  for (const wait of waits) {
     r = await api(action, payload, { ...opts, write: true, operation_id });
     if (!transient(r) || !wait) break;
     retries++;
     if (log) log(`&nbsp;&nbsp;${code(r)}${r.transport ? ' · ' + esc(r.transport) : ''} → gửi lại cùng operation_id`);
-    await sleep(wait);
+    await sleep(wait + Math.floor(Math.random() * 1000)); // lệch nhau để các máy không gửi lại cùng lúc
   }
   r.retries = retries;
   return r;
@@ -358,13 +358,36 @@ async function p06file(file) {
 }
 async function p06private() {
   if (!lastPhoto) { toast('Tải một ảnh trước · 请先上传照片', 'err'); return; }
-  const r = await api('doc.setPrivate', { document_id: lastPhoto.document_id }, { write: true, expected_version: lastPhoto.record_version });
+  const fid = lastPhoto.thumb_drive_file_id || lastPhoto.drive_file_id;
+  if (fid) ls.set('p06_old_urls', JSON.stringify(photoUrls(fid, 400)));
+  const r = await writeSure('doc.setPrivate', { document_id: lastPhoto.document_id }, { expected_version: lastPhoto.record_version });
   out('P-06', `doc.setPrivate: ${code(r)} ${esc(r.data ? r.data.drive_sharing_state : '')}`);
   if (r.ok) { lastPhoto = r.data.record; await upsertLocal('DOCUMENT', r.data.record); }
   const prev = results['P-06'] ? results['P-06'].metrics : {};
   const m = { ...prev, set_private: r.ok && r.data.drive_sharing_state === 'REVOKED' };
-  await rec('P-06', m.set_private && (prev.img_thumbnail || prev.img_lh3) ? 'manual' : 'fail',
-    `ảnh hiện ${prev.img_thumbnail || prev.img_lh3 ? '✓' : '✗'}, đặt riêng tư ${m.set_private ? '✓' : '✗'} — mở link cũ ở cửa sổ ẩn danh (chưa đăng nhập Google) phải bị chặn`, m);
+  await rec('P-06', m.set_private && (prev.img_thumbnail || prev.img_lh3) ? 'manual' : 'fail', p06summary(m), m);
+  if (m.set_private) { await sleep(3000); await p06check(); }
+}
+function p06summary(m) {
+  const after = m.old_link_blocked === true ? '✓ link cũ bị chặn (không cookie)' : m.old_link_blocked === false ? '✗ link cũ vẫn mở (có thể do bộ nhớ đệm Google — thử lại sau 10 phút)' : 'link cũ: chưa kiểm';
+  return `ảnh hiện ${m.img_thumbnail || m.img_lh3 ? '✓' : '✗'}, đặt riêng tư ${m.set_private ? '✓' : m.set_private === false ? '✗' : '—'}, ${after}`;
+}
+/** Mở lại link ảnh cũ không kèm cookie Google (như người chưa đăng nhập): phải bị chặn */
+async function p06check() {
+  let urls = null;
+  try { urls = JSON.parse(ls.get('p06_old_urls') || 'null'); } catch (e) { urls = null; }
+  if (!urls) { toast('Đặt riêng tư một ảnh trước · 请先设为私有', 'err'); return; }
+  const prev = results['P-06'] ? results['P-06'].metrics : {};
+  // Chỉ kết luận bằng loại link đã đọc được qua CORS lúc còn chia sẻ (thumbnail của Drive thường không cho CORS)
+  const kinds = ['lh3', 'thumbnail'].filter((k) => prev['cors_' + k]);
+  const probes = {};
+  for (const k of kinds) probes[k] = await probeCors(urls[k]);
+  const blocked = kinds.length ? kinds.every((k) => !probes[k].ok) : null;
+  out('P-06', `Link cũ, không cookie: ${kinds.map((k) => `${k} ${probes[k].ok ? 'vẫn mở' : 'bị chặn ✓'}`).join(' · ') || 'không tự kiểm được (CORS)'}`);
+  out('P-06', `Link cũ để thử ở cửa sổ ẩn danh: <code>${esc(urls.lh3)}</code>`);
+  const m = { ...prev, old_link_blocked: blocked };
+  const status = m.set_private && blocked ? 'pass' : (m.set_private ? 'manual' : 'fail');
+  await rec('P-06', status, p06summary(m), m);
 }
 
 let p07file = null, p07doc = null;
@@ -407,7 +430,16 @@ async function p07forbidden() {
   if (!contract) return;
   const pin = await askPin('pin6', 'PIN của tài khoản mẫu MAU-C1 (xem nhật ký Apps Script khi chạy pocSeedSampleData) · 示例账户MAU-C1的PIN');
   if (!pin) return;
-  const lr = await rawPost(envelope('auth.login', { employee_code: 'MAU-C1', pin, device_label: 'PoC P-07' }, { token: null, epoch: null }), { timeoutMs: 30000 });
+  let lr = await rawPost(envelope('auth.login', { employee_code: 'MAU-C1', pin, device_label: 'PoC P-07' }, { token: null, epoch: null }), { timeoutMs: 30000 });
+  if (lr.code === 'MUST_CHANGE_PIN' && lr.data && lr.data.token) {
+    // PIN tạm (cấp bằng pocResetPin): đổi sang một PIN ngẫu nhiên để có phiên đầy đủ; tài khoản MẪU, cần thì cấp lại
+    for (let i = 0; i < 3; i++) {
+      const np = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+      const cr = await rawPost(envelope('pin.change', { current_pin: pin, new_pin: np }, { token: lr.data.token, epoch: lr.dataset_epoch }), { timeoutMs: 30000 });
+      if (cr.ok) { lr = cr; out('P-07', 'MAU-C1 dùng PIN tạm → đã đổi sang PIN ngẫu nhiên (cần thì chạy lại pocResetPin)'); break; }
+      if (!(cr.errors && cr.errors[0] && cr.errors[0].code === 'PIN_WEAK')) { lr = cr; break; }
+    }
+  }
   if (!lr.ok) { out('P-07', `Đăng nhập MAU-C1: ${code(lr)}`); return; }
   const tok = lr.data.token;
   const r = await rawPost(envelope('doc.download', { document_id: contract.document_id }, { token: tok, epoch: lr.dataset_epoch }), { timeoutMs: 55000 });
@@ -471,19 +503,20 @@ async function p10run() {
   const tag = ($('#p10-tag').value || 'X').replace(/[^A-Za-z0-9]/g, '').slice(0, 6) || 'X';
   ls.set('p10_tag', tag);
   const counts = { ok: 0, busy: 0, retries: 0, other: 0 };
-  const times = [];
+  const times = [], serverMs = [];
   let i = 0;
   const worker = async () => {
     while (i < 20) {
       const n = i++;
       // SERVER_BUSY hoặc lỗi đường truyền → chờ rồi gửi lại cùng operation_id (không tạo trùng)
-      const r = await writeSure('equipment.create', { equipment_id: uuid(), name_vi: `P10-${tag}-${n}` }, { expected_version: 0 });
+      const r = await writeSure('equipment.create', { equipment_id: uuid(), name_vi: `P10-${tag}-${n}` }, { expected_version: 0 }, null, [2000, 4000, 8000, 12000, 16000, 20000, 0]);
       counts.retries += r.retries;
+      if (typeof r.server_ms === 'number') serverMs.push(r.server_ms);
       if (r.ok) { counts.ok++; times.push(r.client_ms); } else if (r.code === 'SERVER_BUSY') counts.busy++; else counts.other++;
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  out('P-10', `Máy ${esc(tag)}: thành công ${counts.ok}/20 · gửi lại ${counts.retries} · vẫn SERVER_BUSY ${counts.busy} · lỗi khác ${counts.other} · trung vị ${ms(median(times) || 0)}`);
+  out('P-10', `Máy ${esc(tag)}: thành công ${counts.ok}/20 · gửi lại ${counts.retries} · vẫn SERVER_BUSY ${counts.busy} · lỗi khác ${counts.other} · trung vị ${ms(median(times) || 0)} (máy chủ ${ms(median(serverMs) || 0)})`);
   await p10check(counts);
 }
 async function p10check(counts) {
@@ -600,7 +633,8 @@ async function p16download() {
   for (const f of files) {
     const d = await downloadDoc(f.document_id);
     m.download_ms[f.size_mb + 'MB'] = d.ok ? d.ms : d.res.code + '/' + (d.res.transport || '');
-    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) : code(d.res)}`);
+    if (d.retried) m.download_retried = { ...(m.download_retried || {}), [f.size_mb + 'MB']: d.retried };
+    out('P-16', `Tải xuống ${f.size_mb} MB: ${d.ok ? '✓ ' + ms(d.ms) : code(d.res)}${d.retried ? ' (gửi lại sau lỗi ' + esc(d.retried) + ')' : ''}`);
     if (d.ok) URL.revokeObjectURL(d.url);
   }
   const dc = await api('poc.driveChecks');
@@ -725,7 +759,7 @@ export async function renderPoc(main, { isOwner, offline }) {
     btn('p05s', bi('scan'), 'primary scan') + `<a class="btn small" href="#/labels">${bi(['In tem thử (máy tính)', '打印测试标签（电脑）'])}</a>`)}
   ${card('P-06', bi(['Ảnh xem bằng link', '链接查看照片']), 'Thu ảnh 1 600 px + ảnh nhỏ 400 px (thử ảnh 48 MP, HEIC); hiện bằng &lt;img&gt;; Đặt riêng tư → link cũ không mở khi chưa đăng nhập Google.',
     `<label class="btn small primary file">${bi(['Chụp ảnh', '拍照'])}<input type="file" accept="image/*" capture="environment" id="p06cap" hidden></label>
-     <label class="btn small file">${bi(['Chọn ảnh', '选择照片'])}<input type="file" accept="image/*" id="p06pick" hidden></label>${btn('p06p', bi('set_private'))}
+     <label class="btn small file">${bi(['Chọn ảnh', '选择照片'])}<input type="file" accept="image/*" id="p06pick" hidden></label>${btn('p06p', bi('set_private'))}${btn('p06c', bi(['Kiểm tra link cũ', '检查旧链接']))}
      <p class="muted small">${bi('photo_warning')}</p><div class="imgs" id="p06-imgs"></div>`)}
   ${card('P-07', bi(['Tài liệu riêng tư', '私有文件']), 'Tải qua máy chủ (doc.download); iPhone: Tải về rồi Mở / Lưu vào Tệp; không có quyền → FORBIDDEN.',
     `<label class="btn small file">${bi(['Chọn PDF/ảnh', '选择PDF/图片'])}<input type="file" accept="application/pdf,image/jpeg,image/png" id="p07pick" hidden></label>
@@ -755,7 +789,7 @@ export async function renderPoc(main, { isOwner, offline }) {
   if (!offline) refreshServerVersion(main).catch(() => {});
   const on = (id, fn) => { const el = $('#' + id, main); if (el) el.addEventListener('click', async () => { el.disabled = true; try { await fn(); } catch (e) { toast(esc(e.message), 'err'); } finally { el.disabled = false; } }); };
   on('p01', p01); on('p02v', p02vectors); on('p02w', p02weak); on('p02l', p02lock); on('p03', p03);
-  on('p04d', p04draft); on('p04s', p04flush); on('p05s', p05scan); on('p06p', p06private);
+  on('p04d', p04draft); on('p04s', p04flush); on('p05s', p05scan); on('p06p', p06private); on('p06c', p06check);
   on('p07t', async () => { p07doc = await p07upload(null); }); on('p07d', () => p07download()); on('p07f', p07forbidden);
   on('p07big', async () => { const f = JSON.parse(ls.get('p16_files') || '[]').find((x) => x.size_mb === 5); if (!f) { toast('Tạo tệp ở P-16 trước', 'err'); return; } await p07download(f.document_id); });
   $('#p07-open', main).addEventListener('click', p07open);
