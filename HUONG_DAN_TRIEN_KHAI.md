@@ -34,7 +34,7 @@ Mã Đợt 1 nằm trên nhánh `claude/intelligent-gauss-y0z9b3` (đã gồm to
 1. **Tài khoản → Trạng thái hệ thống · 系统状态**, phần **Cấu hình · 系统设置**:
    - `app_base_url` → **Sửa** → `https://luongquangdao8386-ops.github.io/ME/` (có dấu `/` cuối) → nhập lý do → PIN.
    - `offline_probe_seconds` (Thời gian chờ máy chủ khi mở app) → **12**.
-2. **Tài khoản → Sao lưu · 备份** → **Sao lưu ngay · 立即备份** → PIN. Màn tự cập nhật; sau khoảng 1 phút có dòng **Đã kiểm chứng · 已校验**.
+2. **Tài khoản → Sao lưu · 备份** → **Sao lưu ngay · 立即备份** → PIN. Màn tự cập nhật; sau 1–5 phút (Google chạy trigger) có dòng **Đã kiểm chứng · 已校验**.
 3. **Tài khoản → Phân quyền · 权限**: đọc kỹ bảng quyền (bắt buộc duyệt trước khi nhập dữ liệu thật). Muốn đổi ô nào thì báo Claude hoặc tự bật/tắt rồi **Lưu** kèm lý do.
 4. (Khi muốn thử Gmail) **Tài khoản → Người nhận Gmail và nhật ký gửi**: thêm địa chỉ của chính anh/chị → tick **Xác nhận** → PIN → **Bật gửi Gmail** → **Gửi thử**.
 5. Chạy lại **Trạng thái hệ thống**: các dòng nên là **Đạt · 正常** (trừ "Thư nhắc hạn gửi gần nhất" khi chưa có thư).
@@ -54,17 +54,37 @@ Mã Đợt 1 nằm trên nhánh `claude/intelligent-gauss-y0z9b3` (đã gồm to
 
 ## Phần E — Diễn tập khôi phục thủ công (bắt buộc trước khi nhập dữ liệu thật)
 
-Làm trên **THỬ** theo đúng thứ tự, mỗi bước chạy hàm từ trình soạn Apps Script:
+Làm trên **THỬ**, sau Phần C (đã có ít nhất một bản sao lưu "Đã kiểm chứng" — gọi là **bản B1**).
 
-1. Báo mọi người ngừng nhập → chạy **`adminMaintenanceOn`**.
-2. Chạy **`backupData`** (giữ hiện trạng).
-3. Drive → `ME_HeThong_THU` → `ME_Backups_THU` → mở thư mục mới nhất có `manifest.json` ghi `"status": "VERIFIED"`.
-4. Chuột phải tệp **ME_NghiepVu_…** trong thư mục đó → **Tạo bản sao** → đổi tên `ME_NghiepVu_khoiphuc_<ngày>` → **Di chuyển** về thư mục `ME_HeThong_THU`. Mở bản sao, chép **ID** trong địa chỉ (đoạn giữa `/d/` và `/edit`).
-5. Cài đặt dự án → **Thuộc tính tập lệnh** → thêm `RESTORE_SOURCE_ID` = ID vừa chép → Lưu.
-6. Chạy **`adminFinalizeManualRestore`** → Nhật ký báo "Khôi phục xong từ bản …". Bảo trì vẫn bật.
-7. Kiểm tra trên app sau khi tắt bảo trì ở bước 8: mở 5 hồ sơ bất kỳ, quét 3 tem in trước lúc sao lưu (mở đúng hồ sơ), xem Nhắc hạn.
-8. Chạy **`adminMaintenanceOff`** → mọi người đăng nhập lại.
-9. **Quay lại bản trước** (để diễn tập đủ): bật bảo trì → đặt `RESTORE_SOURCE_ID` = giá trị của thuộc tính `PREVIOUS_BUSINESS_SPREADSHEET_ID` → chạy lại `adminFinalizeManualRestore` → kiểm tra → tắt bảo trì.
+**Chuẩn bị (trong app, trên máy tính):**
+1. **Thiết bị → Thêm** một thiết bị tên `THỬ KHÔI PHỤC` → Lưu. Ghi lại mã (vd `TB-0005`). Thiết bị này tạo **sau** B1 nên sẽ mất khi khôi phục về B1.
+2. Mở thiết bị `THỬ KHÔI PHỤC` → **Xem QR** → chụp màn hình mã QR (Windows: Win+Shift+S, dán vào Paint, lưu lại).
+3. Mở một thiết bị MẪU có từ trước → **Xem QR** → chụp màn hình tương tự (đây là "tem cũ").
+
+**Khôi phục (trong trình soạn Apps Script `ME_MayChu_THU`):**
+4. Chọn hàm **`adminMaintenanceOn`** → **Chạy**. App sẽ báo "Hệ thống đang bảo trì".
+5. Chọn **`backupData`** → **Chạy** → Nhật ký: `backupData: <ngày_giờ> → VERIFIED` (bản **B2**, giữ hiện trạng để quay lại).
+6. Google Drive → `ME_HeThong_THU` → `ME_Backups_THU` → mở thư mục **B1** (tên ngày-giờ của lần Sao lưu ngay ở Phần C, **không** phải thư mục vừa tạo ở bước 5). Mở `manifest.json`: phải thấy `"status": "VERIFIED"`.
+7. Trong thư mục B1, chuột phải tệp **`ME_NghiepVu_<ngày_giờ>`** (không lấy `ME_BaoMat_…`) → **Tạo bản sao**.
+8. Chuột phải tệp "Bản sao của ME_NghiepVu_…" → **Đổi tên** → `ME_NghiepVu_khoiphuc_<ngày>` → chuột phải → **Sắp xếp → Di chuyển** → chọn thư mục `ME_HeThong_THU` → **Di chuyển**. **Bắt buộc chuyển ra ngoài** `ME_Backups_THU`, vì sao lưu tự động sẽ dọn các tệp cũ trong thư mục sao lưu.
+9. Mở tệp `ME_NghiepVu_khoiphuc_…` → chép **ID** trên thanh địa chỉ: đoạn giữa `/d/` và `/edit`.
+10. Apps Script → **Cài đặt dự án** (bánh răng) → **Thuộc tính tập lệnh** → **Chỉnh sửa thuộc tính tập lệnh** → **Thêm thuộc tính tập lệnh**: Thuộc tính `RESTORE_SOURCE_ID`, Giá trị = ID vừa chép → **Lưu thuộc tính tập lệnh**.
+11. Về Trình chỉnh sửa → chọn **`adminFinalizeManualRestore`** → **Chạy** → Nhật ký: "Khôi phục xong từ bản … Bảo trì vẫn đang BẬT."
+12. Chọn **`adminMaintenanceOff`** → **Chạy**.
+
+**Kiểm tra (app):**
+13. Mọi máy phải **đăng nhập lại** (phiên cũ bị thu hồi). Nháp chưa gửi trên máy cũ chuyển vào "Nháp thế hệ dữ liệu cũ".
+14. Thiết bị `THỬ KHÔI PHỤC` không còn trong danh sách. Mở 5 hồ sơ khác: còn đủ.
+15. Trên iPhone bấm **Quét QR · 扫码**: quét ảnh QR thiết bị MẪU → mở đúng hồ sơ; quét ảnh QR `THỬ KHÔI PHỤC` → báo "Không có mã này trong dữ liệu hiện tại…".
+16. **Nhắc hạn** hiển thị bình thường; **Tài khoản → Sao lưu** có dòng "Đã khôi phục lúc … từ bản …".
+
+**Quay lại bản trước khôi phục (diễn tập đủ bước):**
+17. Chạy **`adminMaintenanceOn`**.
+18. Cài đặt dự án → Thuộc tính tập lệnh: chép giá trị của **`PREVIOUS_BUSINESS_SPREADSHEET_ID`** → thêm lại thuộc tính `RESTORE_SOURCE_ID` = giá trị đó → Lưu.
+19. Chạy **`adminFinalizeManualRestore`** → rồi **`adminMaintenanceOff`**.
+20. Đăng nhập lại: thiết bị `THỬ KHÔI PHỤC` xuất hiện trở lại, QR của nó mở được.
+
+Gặp lỗi đỏ ở bất kỳ bước nào: dừng, chụp Nhật ký thực thi gửi Claude (bảo trì đang bật thì cứ để bật).
 
 ## Lưu ý an toàn
 
