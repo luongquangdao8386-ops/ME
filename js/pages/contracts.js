@@ -7,7 +7,7 @@ import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
 import {
-  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, fieldWrap
+  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, fieldWrap, assistedFields, retranslateButton, wireRetranslate
 } from '../form.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { handleWriteError } from './equipment.js';
@@ -135,6 +135,7 @@ export async function renderContract(view, ctx) {
     ${isDraft ? `<p class="banner info">${bi('co.renewal_help')}</p>` : ''}
     <div class="rec-top"><span class="code big">${esc(c.contract_code)}</span><span>${lifeBadge(c)} ${due ? badge(due.key, due.vars) : ''}</span></div>
     <h2 class="eq-name">${biName(c, 'title')}</h2>
+    ${retranslateButton('CONTRACT', c.contract_id, c, can_['contract.edit'] && c.lifecycle_status === 'ACTIVE') ? `<div class="row">${retranslateButton('CONTRACT', c.contract_id, c, can_['contract.edit'] && c.lifecycle_status === 'ACTIVE')}</div>` : ''}
     <div class="kv-grid">
       ${kv('co.revision', esc(String(c.revision || 1)))}
       ${kv('co.number', esc(c.contract_number || ''))}
@@ -183,6 +184,7 @@ export async function renderContract(view, ctx) {
   box.innerHTML = await docsTabHtml('CONTRACT', c);
   const repaint = () => renderContract(view, ctx);
   wireDocsTab(box, 'CONTRACT', c, repaint);
+  wireRetranslate(view, async () => { await afterCommit(); repaint(); });
   const on = (id, fn) => { const el = $('#' + id, view); if (el) el.addEventListener('click', fn); };
   on('co-renew', () => navigate(`/contracts/${c.contract_id}/renew`));
   on('co-terms', async () => { if (await termsDialog(c, showCost)) repaint(); });
@@ -333,7 +335,7 @@ export async function renderContractForm(view, ctx) {
       ${renew ? '' : selectInput('owner_user_id', 'field.owner', users.map((u) => [u.user_id, esc(`${u.employee_code} · ${u.display_name}`)]), rec.owner_user_id)}
       ${termsEditable ? dateInput('start_date', 'co.start_date', rec.start_date) + dateInput('end_date', 'field.end_date', rec.end_date, { required: true }) + dateInput('renewal_notice_date', 'field.renewal_notice_date', rec.renewal_notice_date) : ''}
       ${termsEditable && showCost ? numberInput('value', 'co.value', rec.value, { hint: 'VND' }) : ''}
-      ${renew ? '' : bilingualInputs('scope', rec, { required: false, labelKey: 'co.scope', area: true, maxlength: 1000 })}
+      ${renew ? '' : bilingualInputs('scope', rec, { required: false, labelKey: 'co.scope', area: true, maxlength: 1000, suggest: 'contracts' })}
     </div>
     ${renew ? '' : `<p class="muted small">${bi('in.no_mt')} (${bi('co.scope')})</p>
     <fieldset class="bi-pair"><legend>${bi('co.equipment')}</legend><div id="ce-rows"></div>
@@ -390,7 +392,10 @@ export async function renderContractForm(view, ctx) {
       if (p.renewal_notice_date && p.end_date && p.renewal_notice_date > p.end_date) errs.push({ field: 'renewal_notice_date', key: 'field.invalid_date' });
       if (showCost) { const v = readField(form, 'value'); if (Number.isNaN(v)) errs.push({ field: 'value', key: 'field.invalid' }); else if (v !== null) p.value = v; }
     }
+    const as = assistedFields(form);
+    if (!as.ok) errs.push(...as.errors);
     if (errs.length) { showErrors(form, errs); return; }
+    if (as.bases.length) p.i18n_assisted = as.bases;
     if (!renew) {
       p.equipment = eqRows.filter((x) => x.__dirty || x.remove).map((x) => {
         if (x.remove) return { contract_equipment_id: x.contract_equipment_id, remove: true };

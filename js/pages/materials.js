@@ -8,7 +8,7 @@ import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import {
   textInput, selectInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang,
-  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput
+  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
 import { conflictDialog } from './drafts.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
@@ -191,6 +191,7 @@ async function renderMaterialPane(pane, id, ctx) {
       ${wide && canEdit ? `<a class="btn small" href="#/materials/${esc(m.material_id)}/edit">${ICON.edit}<span>${bi('btn.edit')}</span></a>` : ''}
       ${canArch && m.active !== false ? `<button type="button" class="btn small" id="mt-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi('btn.archive')}</span></button>` : ''}
       ${canEdit && m.active === false ? `<button type="button" class="btn small" id="mt-react" ${online ? '' : 'disabled'}>${bi('mat.reactivate')}</button>` : ''}
+      ${retranslateButton('MATERIAL', m.material_id, m, canEdit)}
     </div>
     ${!online && (canEdit || canArch) ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
   </section>
@@ -204,6 +205,7 @@ async function renderMaterialPane(pane, id, ctx) {
   docBox.innerHTML = await docsTabHtml('MATERIAL', m);
   const repaint = () => renderMaterialPane(pane, id, ctx);
   wireDocsTab(docBox, 'MATERIAL', m, repaint);
+  wireRetranslate(pane, async () => { await afterCommit(); repaint(); });
   const ar = $('#mt-arch', pane);
   if (ar) ar.addEventListener('click', async () => {
     const v = await dialog({

@@ -9,7 +9,7 @@ import { afterCommit, syncNow } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
 import { processPhoto, uploadDoc } from '../media.js';
 import {
-  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin,
+  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, assistedFields,
   loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap
 } from '../form.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
@@ -289,7 +289,7 @@ export async function renderSubmitForm(view, ctx) {
       ${textInput('certificate_number', 'field.certificate_number', draft.certificate_number || '', { maxlength: 80 })}
       ${selectInput('vendor_id', 'field.vendor', vendors.map((v) => [v.vendor_id, `${esc(v.vendor_code)} · ${esc(v.name)}`]), draft.vendor_id || '')}
       ${showCost ? numberInput('cost', 'in.cost', draft.cost || '', { hint: 'VND' }) : ''}
-      ${bilingualInputs('restriction', draft, { required: false, labelKey: 'in.restriction', area: true, maxlength: 500 })}
+      ${bilingualInputs('restriction', draft, { required: false, labelKey: 'in.restriction', area: true, maxlength: 500, suggest: 'inspections' })}
     </div>
     <p class="muted small">${bi('in.no_mt')}</p>
     <fieldset class="bi-pair"><legend>${bi('in.attachments')}</legend>
@@ -328,9 +328,12 @@ export async function renderSubmitForm(view, ctx) {
     if (v.valid_from && v.valid_to && v.valid_from > v.valid_to) errs.push({ field: 'valid_to', key: 'field.invalid_date' });
     if (v.result === 'CONDITIONAL_PASS' && !v.restriction_vi && !v.restriction_zh) errs.push({ field: 'restriction', key: 'field.required' });
     if (Number.isNaN(v.cost)) errs.push({ field: 'cost', key: 'field.invalid' });
+    const as = assistedFields(form);
+    if (!as.ok) errs.push(...as.errors);
     if (errs.length) { showErrors(form, errs); return; }
     const payload = { inspection_id: uuid(), requirement_id: r.requirement_id };
     Object.entries(v).forEach(([k, x]) => { if (x !== '' && x !== null && x !== undefined) payload[k] = x; });
+    if (as.bases.length) payload.i18n_assisted = as.bases;
     // Ảnh/tệp: chuẩn bị trước (thu nhỏ ảnh), gửi sau thao tác nộp
     const docs = [];
     for (const f of files.cert) {
@@ -450,11 +453,11 @@ export async function renderTypes(view, ctx) {
     const wrap = h(`<div class="modal" role="dialog" aria-modal="true"><div class="modal-card form-card">
       <h2>${bi(t ? 'btn.edit' : 'in.type_new')}</h2>
       ${textInput('code', 'col.code', t ? t.code : '', { maxlength: 32, upper: true, required: true })}
-      ${bilingualInputs('name', t)}
+      ${bilingualInputs('name', t, { suggest: 'inspections' })}
       <p class="muted small">${bi('in.no_mt')}</p>
       ${textInput('reference_basis', 'in.reference_basis', t ? t.reference_basis : '', { maxlength: 300 })}
       ${numberInput('default_interval_months', 'in.interval', t ? t.default_interval_months : '', { integer: true })}
-      ${bilingualInputs('required_docs', t, { required: false, labelKey: 'in.required_docs', area: true, maxlength: 500 })}
+      ${bilingualInputs('required_docs', t, { required: false, labelKey: 'in.required_docs', area: true, maxlength: 500, suggest: 'inspections' })}
       ${t ? `<label class="check"><input type="checkbox" id="f-active" ${t.active !== false ? 'checked' : ''}><span>${bi('material_active.TRUE')}</span></label>` : ''}
       <p class="form-err err"></p>
       <div class="modal-actions"><button type="button" class="btn" data-x="cancel">${bi('btn.cancel')}</button><button type="button" class="btn primary" data-x="save">${bi('btn.save')}</button></div>
@@ -474,7 +477,10 @@ export async function renderTypes(view, ctx) {
       if (!payload.code) errs.push({ field: 'code', key: 'field.required' });
       if (!payload.name_vi && !payload.name_zh) errs.push({ field: 'name', key: 'field.one_lang' });
       if (Number.isNaN(payload.default_interval_months)) errs.push({ field: 'default_interval_months', key: 'field.invalid' });
+      const as = assistedFields(wrap);
+      if (!as.ok) errs.push(...as.errors);
       if (errs.length) { showErrors(wrap, errs); return; }
+      if (as.bases.length) payload.i18n_assisted = as.bases;
       busy(ev.currentTarget, true);
       const res = await writeOnline('inspection.type.edit', payload, { expected_version: t ? t.record_version : 0 });
       busy(ev.currentTarget, false);

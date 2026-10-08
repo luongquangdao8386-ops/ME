@@ -8,7 +8,7 @@ import { navigate, back } from '../router.js';
 import { app, afterCommit } from '../app.js';
 import {
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline,
-  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput
+  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
 import { conflictDialog } from './drafts.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
@@ -197,6 +197,7 @@ async function renderPane(pane, id, tab, ctx) {
     ${eq.archived_at ? `<p class="banner warn">${bi('eq.archived_banner')} · ${esc(fmtDateTime(eq.archived_at))}</p>` : ''}
     <div class="rec-top"><span class="code big">${esc(eq.equipment_code || biText('tag.pending_code'))}</span>${badge('equipment_status.' + eq.status)}</div>
     <h2 class="eq-name">${biName(eq)}</h2>
+    ${retranslateButton('EQUIPMENT', eq.equipment_id, eq, canEdit && !eq.archived_at) ? `<div class="row">${retranslateButton('EQUIPMENT', eq.equipment_id, eq, canEdit && !eq.archived_at)}</div>` : ''}
     <div class="kv-grid">
       ${kv('field.location', await locLabel(eq.location_id))}
       ${kv('field.model', esc(eq.model || ''))}
@@ -228,6 +229,7 @@ async function renderPane(pane, id, tab, ctx) {
     const base = wide ? `/equipment/${id}?tab=${t}&scroll=0` : `/equipment/${id}?tab=${t}`;
     navigate(base, { replace: true });
   }));
+  wireRetranslate(pane, async () => { await afterCommit(); repaint(); });
   const arch = $('#eq-arch', pane);
   if (arch) arch.addEventListener('click', async () => { if (await archiveFlow(eq)) { invalidate(); retiredCache = null; if (eq.archived_at) repaint(); else navigate('/equipment', { replace: true }); } });
   if (tab === 'specs') { tb.innerHTML = await specsTabHtml(eq); wireSpecs(tb, eq, repaint); }

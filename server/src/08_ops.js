@@ -343,6 +343,10 @@ function applyTranslations_(sheet, fields, input, current) {
     }
     oneSide(f, s1, t1);
   });
+  // Đã dùng "Gợi ý dịch" và người dùng tick đã kiểm tra: HUMAN kèm assisted (2.3)
+  (Array.isArray(input.i18n_assisted) ? input.i18n_assisted : []).forEach(function (f) {
+    if (fields.indexOf(f) >= 0 && meta[f] && meta[f].state === 'HUMAN') meta[f].assisted = true;
+  });
   return { values: values, meta: meta };
 }
 

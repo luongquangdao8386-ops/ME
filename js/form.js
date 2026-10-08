@@ -1,5 +1,5 @@
 // Thành phần biểu mẫu dùng chung: ô song ngữ, ngày (5.4.3), số (5.4.2), chọn, lỗi theo trường, ghi trực tuyến chịu mất phản hồi (3.15)
-import { bi, biText, esc, api, uuid, fmtDate, fmtNumber, L, session } from './core.js';
+import { bi, biText, esc, api, uuid, fmtDate, fmtNumber, L, session, resMsg } from './core.js';
 import { getMeta, setMeta } from './sync.js';
 import { isWide } from './shell.js';
 import { $, $$, toast, askPin } from './ui.js';
@@ -74,7 +74,7 @@ export function numberInput(id, labelKey, value, { integer = false, hint = '', r
 }
 
 /** Cặp ô Việt/Trung: chỉ bắt nhập một thứ tiếng (A3); hiện nhãn dịch máy/chưa có bản dịch của bản đang lưu */
-export function bilingualInputs(base, rec, { required = true, labelKey = 'field.name', maxlength = 200, area = false } = {}) {
+export function bilingualInputs(base, rec, { required = true, labelKey = 'field.name', maxlength = 200, area = false, suggest = '' } = {}) {
   const meta = rec && rec.i18n_meta && rec.i18n_meta[base];
   const tag = (lang) => {
     if (!meta) return '';
@@ -88,7 +88,10 @@ export function bilingualInputs(base, rec, { required = true, labelKey = 'field.
   return `<fieldset class="bi-pair" data-field="${esc(base)}"><legend>${bi(labelKey)}${required ? ' <span class="req">*</span>' : ''}</legend>
     <div class="fld" data-field="${base}_vi"><label for="f-${base}_vi">${bi('i18n.lang_vi')} ${tag('vi')}</label>${inp('vi')}<div class="ferr"></div></div>
     <div class="fld" data-field="${base}_zh"><label for="f-${base}_zh">${bi('i18n.lang_zh')} ${tag('zh')}</label>${inp('zh')}<div class="ferr"></div></div>
-    <div class="hint">${bi('field.one_lang')}</div><div class="ferr" role="alert"></div></fieldset>`;
+    <div class="hint">${bi('field.one_lang')}</div>
+    ${suggest ? `<div class="i18n-suggest" data-suggest="${esc(suggest)}" data-base="${esc(base)}"><button type="button" class="btn tiny" data-sg>${bi('i18n.suggest')}</button>
+      <label class="check" hidden><input type="checkbox" data-sg-ok><span>${bi('i18n.checked')}</span></label></div>` : ''}
+    <div class="ferr" role="alert"></div></fieldset>`;
 }
 
 /** Gắn hành vi cho ô ngày, ô số, chữ hoa */
@@ -118,6 +121,53 @@ export function wireForm(root) {
     });
   });
   $$('input[data-upper]', root).forEach((i) => i.addEventListener('input', () => { const p = i.selectionStart; i.value = i.value.toUpperCase(); try { i.setSelectionRange(p, p); } catch (e) { /* bỏ qua */ } }));
+  // Gợi ý dịch (2.3): trường không dịch tự động; điền bản dịch máy vào ô còn trống, phải tick "Đã kiểm tra bản dịch" mới lưu
+  $$('[data-suggest]', root).forEach((box) => {
+    const base = box.dataset.base;
+    $('[data-sg]', box).addEventListener('click', async (ev) => {
+      const vi = $(`#f-${base}_vi`, root), zh = $(`#f-${base}_zh`, root);
+      const from = vi.value.trim() && !zh.value.trim() ? 'vi' : (zh.value.trim() && !vi.value.trim() ? 'zh' : '');
+      if (!from) { toast(bi('i18n.suggest_need_one'), 'err'); return; }
+      if (!navigator.onLine) { toast(bi('sync.need_network'), 'err'); return; }
+      busy(ev.currentTarget, true);
+      const r = await api('i18n.suggest', { module: box.dataset.suggest, text: (from === 'vi' ? vi : zh).value.trim(), from }, { retry: true });
+      busy(ev.currentTarget, false);
+      if (!r.ok) { toast(esc(resMsg(r)), 'err'); return; }
+      (from === 'vi' ? zh : vi).value = r.data.text;
+      box.dataset.assisted = '1';
+      const lab = $('label.check', box);
+      lab.hidden = false;
+      $('[data-sg-ok]', box).checked = false;
+    });
+  });
+}
+
+/** Trường đã dùng Gợi ý dịch: phải tick đã kiểm tra; trả {ok, errors, bases} để gửi i18n_assisted */
+export function assistedFields(root) {
+  const bases = [], errors = [];
+  $$('[data-suggest]', root).forEach((box) => {
+    if (box.dataset.assisted !== '1') return;
+    if (!$('[data-sg-ok]', box).checked) errors.push({ field: box.dataset.base, key: 'i18n.check_required' });
+    else bases.push(box.dataset.base);
+  });
+  return { ok: !errors.length, errors, bases };
+}
+
+/** Nút "Dịch lại" khi hồ sơ còn trường chờ dịch (PENDING) và người xem sửa được hồ sơ */
+export function retranslateButton(entityType, id, rec, canEdit) {
+  const meta = (rec && rec.i18n_meta) || {};
+  if (!canEdit || !Object.keys(meta).some((f) => meta[f] && meta[f].state === 'PENDING')) return '';
+  return `<button type="button" class="btn small" data-retr="${esc(entityType)}" data-retr-id="${esc(id)}"${navigator.onLine ? '' : ' disabled'}>${bi('i18n.retranslate')}</button>`;
+}
+export function wireRetranslate(root, onDone) {
+  $$('[data-retr]', root).forEach((b) => b.addEventListener('click', async () => {
+    busy(b, true);
+    const r = await writeOnline('i18n.retranslate', { entity_type: b.dataset.retr, entity_id: b.dataset.retrId });
+    busy(b, false);
+    if (!r.ok) { toast(esc(resMsg(r)), 'err'); return; }
+    toast(bi(r.data && r.data.pending && r.data.pending.length ? 'i18n.still_pending' : 'i18n.retranslated'), r.data && r.data.pending && r.data.pending.length ? 'err' : 'ok');
+    if (onDone) await onDone();
+  }));
 }
 
 /** Đọc giá trị: ngày → ISO ('' khi trống, null khi sai); số → number|null|NaN khi sai */

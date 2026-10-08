@@ -969,4 +969,10 @@ export const DICT = {"nav.home":["Trang chủ","首页"],
 "excel.options":["Giá trị cho phép","允许值"],
 "excel.no_rows":["Tệp không có dòng dữ liệu (từ dòng 3)","文件没有数据行（从第3行起）"],
 "excel.bad_file":["Không đọc được tệp hoặc thiếu sheet {S}","无法读取文件或缺少工作表{S}"],
-"excel.exported":["Đã tạo tệp Excel","已生成Excel文件"]};
+"excel.exported":["Đã tạo tệp Excel","已生成Excel文件"],
+"i18n.suggest":["Gợi ý dịch","翻译建议"],
+"i18n.suggest_need_one":["Nhập một bên rồi bấm Gợi ý dịch","先填写一种语言再点翻译建议"],
+"i18n.check_required":["Tick \"Đã kiểm tra bản dịch\" trước khi lưu","保存前请勾选\"已核对译文\""],
+"i18n.retranslate":["Dịch lại","重新翻译"],
+"i18n.retranslated":["Đã dịch lại","已重新翻译"],
+"i18n.still_pending":["Dịch chưa được, thử lại sau","暂时无法翻译，请稍后再试"]};
