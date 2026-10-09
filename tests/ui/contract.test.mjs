@@ -73,6 +73,25 @@ test('web C4: hồ sơ hợp đồng chưa có thiết bị → nút Thêm thi�
   } finally { await app.close(); }
 });
 
+test('web C4: dự thảo gia hạn do chính mình tạo và gửi → không có nút Duyệt, có dòng giải thích không tự duyệt', async () => {
+  const env = freshServer();
+  const owner = ownerClient(env);
+  const id = uuid(), d = uuid();
+  assert.equal(owner.write('contract.create', { contract_id: id, title_vi: 'Bảo trì máy nén MẪU', start_date: '2026-10-09', end_date: '2026-11-09' }).ok, true);
+  assert.equal(owner.write('contract.renewal.create', { contract_id: d, previous_contract_id: id, start_date: '2026-11-10', end_date: '2027-11-09' }).ok, true);
+  assert.equal(owner.write('contract.renewal.submit', { contract_id: d }, { expected_version: 1 }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/contracts/${d}`);
+    await page.waitForSelector('#co-why');
+    assert.match(await page.textContent('#co-why'), /không tự duyệt/);
+    assert.equal(await page.locator('#co-appr').count(), 0);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('iPhone C1: thấy hợp đồng nhưng không thấy giá trị; không có nút sửa/gia hạn', async () => {
   const env = freshServer();
   const owner = ownerClient(env);

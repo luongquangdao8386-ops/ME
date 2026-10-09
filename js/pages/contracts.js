@@ -158,6 +158,8 @@ export async function renderContract(view, ctx) {
       ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && c.created_by !== uid && c.submitted_by !== uid ? `<button type="button" class="btn small primary" id="co-appr" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button><button type="button" class="btn small" id="co-rej" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button>` : ''}
       ${can_['contract.archive'] && !c.archived_at && c.lifecycle_status !== 'ACTIVE' ? `<button type="button" class="btn small" id="co-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi('co.archive')}</span></button>` : ''}
     </div>
+    ${c.status === 'PENDING_APPROVAL' && !can_['contract.renewal.approve'] && Number(session.user && session.user.role_level) >= 3 ? `<p class="muted small" id="co-why">${bi('co.no_approve_right')}</p>` : ''}
+    ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && (c.created_by === uid || c.submitted_by === uid) ? `<p class="muted small" id="co-why">${bi('co.self_no_approve')}</p>` : ''}
     ${!online ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
   </section>
   <section class="card"><h3>${bi('co.equipment')}</h3>

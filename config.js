@@ -4,5 +4,5 @@ window.ME_CONFIG = {
   APP_BASE_URL: 'https://luongquangdao8386-ops.github.io/ME/',
   EXEC_URL: 'https://script.google.com/macros/s/AKfycbx1VfL34FkUruqbza59AzLrKWvNhd3YC9UkKGnQC5sooaqA6VKn9XCwuAxAhBYOpMYh/exec',
   API_CONTRACT_VERSION: '1.0',
-  BUILD_VERSION: '1.0.0-d1.8'
+  BUILD_VERSION: '1.0.0-d1.9'
 };
