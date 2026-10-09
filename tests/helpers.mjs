@@ -4,7 +4,7 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d1.10';
+export const APP_VERSION = '1.0.0-d1.11';
 
 export const uuid = () => crypto.randomUUID();
 
