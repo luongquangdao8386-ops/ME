@@ -427,7 +427,8 @@ export async function linkDialog(eq, part, preselect = '') {
     ${part ? `<p><strong>${esc(cur ? cur.material_code + ' · ' + nameText(cur) : '')}</strong></p>` : `
       <div class="fld" data-field="material_id"><label for="pl-q">${bi('mat.pick')}</label>
         <input id="pl-q" class="inp" type="search" placeholder="${esc(biText('mat.search_placeholder'))}" autocomplete="off">
-        <select id="f-material_id" class="inp sel" size="6">${mats.map((m) => `<option value="${esc(m.material_id)}"${m.material_id === preselect ? ' selected' : ''}>${esc(m.material_code)} · ${esc(nameText(m))}${m.part_number ? ' · ' + esc(m.part_number) : ''}</option>`).join('')}</select><div class="ferr"></div></div>`}
+        <select id="f-material_id" class="inp sel" size="6">${mats.map((m) => `<option value="${esc(m.material_id)}"${m.material_id === preselect ? ' selected' : ''}>${esc(m.material_code)} · ${esc(nameText(m))}${m.part_number ? ' · ' + esc(m.part_number) : ''}</option>`).join('')}</select>
+        <p class="muted small" id="pl-empty"${mats.length ? ' hidden' : ''}>${bi('mat.pick_empty')}</p><div class="ferr"></div></div>`}
     ${numberInput('installed_qty', 'field.installed_qty', part ? part.installed_qty : 1, { required: true })}
     <div class="muted small" id="pl-unit"></div>
     ${bilingualInputs('function', part, { required: false, labelKey: 'field.function', maxlength: 200 })}
@@ -448,6 +449,7 @@ export async function linkDialog(eq, part, preselect = '') {
     q.addEventListener('input', () => {
       const t = q.value.toLowerCase();
       [...sel.options].forEach((o) => { o.hidden = t && !o.textContent.toLowerCase().includes(t); });
+      $('#pl-empty', wrap).hidden = [...sel.options].some((o) => !o.hidden);
     });
   }
   showUnit();

@@ -172,6 +172,27 @@ test('iPhone: thêm linh kiện mới từ tab Linh kiện → gắn ngay vào m
   } finally { await app.close(); }
 });
 
+test('web: Gắn linh kiện có sẵn — vật tư chưa đánh dấu "Gắn máy được" không có trong danh sách và có dòng giải thích', async () => {
+  const env = seeded();
+  const eq = env.rows('Equipment')[0];
+  const c = ownerClient2(env);
+  assert.equal(c.write('material.create', { material_id: uuid(), name_vi: 'Lọc gió MẪU', base_unit: 'cái' }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/equipment/${eq.equipment_id}?tab=parts`);
+    await page.waitForSelector('#pt-link');
+    await page.click('#pt-link');
+    await page.waitForSelector('#pl-q');
+    await page.fill('#pl-q', 'Lọc gió');
+    await page.waitForSelector('#pl-empty:not([hidden])');
+    assert.match(await page.textContent('#pl-empty'), /Gắn máy được/);
+    await page.click('[data-x="cancel"]');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('Tài khoản: phiên đăng nhập có "Máy này"; đăng xuất khi còn nháp hỏi 4 lựa chọn, giữ nháp (2.5)', async () => {
   const env = seeded();
   const app = await openApp({ env, ...IPHONE });
