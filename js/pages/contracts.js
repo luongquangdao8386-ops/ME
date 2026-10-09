@@ -163,6 +163,7 @@ export async function renderContract(view, ctx) {
   <section class="card"><h3>${bi('co.equipment')}</h3>
     ${ces.length ? `<ul class="list">${ces.map((x) => { const e = eqs.get(x.equipment_id); return `<li>${e ? `<a class="code" href="#/equipment/${esc(e.equipment_id)}">${esc(e.equipment_code)}</a> ${biName(e)}` : ''}
       <div class="muted small">${x.service_vi || x.service_zh ? biName(x, 'service') : ''}${x.interval_value ? ` · ${bi('co.interval')}: ${fmtNumber(x.interval_value)} ${bi('interval.' + (x.interval_type || 'MONTH'))}` : ''}${x.next_service_date ? ` · ${bi('co.next_service')}: ${esc(fmtDate(x.next_service_date))}` : ''}${showCost && x.price !== undefined && x.price !== '' ? ' · ' + money(x.price, x.currency) : ''}</div></li>`; }).join('')}</ul>` : `<p class="muted">${bi('field.not_set')}</p>`}
+    ${!isDraft && c.lifecycle_status === 'ACTIVE' && can_['contract.edit'] && online ? `<div class="row"><a class="btn small" id="co-add-eq" href="#/contracts/${esc(c.contract_id)}/edit">${ICON.plus}<span>${bi('co.add_equipment')}</span></a></div>` : ''}
   </section>
   <section class="card"><h3>${bi('co.services')}</h3>
     <ul class="list">

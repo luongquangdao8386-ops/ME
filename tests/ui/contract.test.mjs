@@ -55,6 +55,24 @@ test('web: tạo hợp đồng kèm thiết bị và ngày dịch vụ; hồ sơ
   } finally { await app.close(); }
 });
 
+test('web C4: hồ sơ hợp đồng chưa có thiết bị → nút Thêm thiết bị trong mục Thiết bị trong phạm vi mở màn Sửa có ô chọn thiết bị', async () => {
+  const env = freshServer();
+  const owner = ownerClient(env);
+  const id = uuid();
+  assert.equal(owner.write('contract.create', { contract_id: id, title_vi: 'Bảo trì máy nén MẪU', end_date: '2026-11-09' }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/contracts/${id}`);
+    await page.waitForSelector('#co-add-eq');
+    await page.click('#co-add-eq');
+    await page.waitForSelector('#ce-add', { timeout: 15000 });
+    assert.match(page.url(), /\/edit$/);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('iPhone C1: thấy hợp đồng nhưng không thấy giá trị; không có nút sửa/gia hạn', async () => {
   const env = freshServer();
   const owner = ownerClient(env);
@@ -70,7 +88,7 @@ test('iPhone C1: thấy hợp đồng nhưng không thấy giá trị; không c�
     await page.waitForSelector('.code.big');
     const txt = await page.textContent('.view');
     assert.ok(!txt.includes('99') && txt.includes('Không có quyền xem giá · 无权查看价格'));
-    assert.equal(await page.locator('#co-renew, #co-terms, #co-close').count(), 0);
+    assert.equal(await page.locator('#co-renew, #co-terms, #co-close, #co-add-eq').count(), 0);
     const stored = await page.evaluate(async () => JSON.stringify(await (await import('./js/sync.js')).getRecords('CONTRACT')));
     assert.ok(!stored.includes('99000000'), 'IndexedDB không chứa giá (NT1-21)');
   } finally { await app.close(); }
