@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d1.9';
+var SERVER_VERSION = '1.0.0-d1.10';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.0';
 var TZ = 'Asia/Ho_Chi_Minh';

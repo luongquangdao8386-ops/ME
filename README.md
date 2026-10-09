@@ -3,7 +3,7 @@
 App quản lý cơ điện: Google Sheets + Apps Script (máy chủ) + PWA trên GitHub Pages (iPhone và máy tính).
 Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân viên + PIN 6 số.
 
-**Trạng thái:** Đợt 1, phiên bản `1.0.0-d1.9` (thiết bị, kho vật tư, kiểm định, hợp đồng, nhắc hạn/Gmail, quản trị, sao lưu, nhập/xuất Excel, tem QR). Đang thử trên môi trường THỬ với dữ liệu mẫu.
+**Trạng thái:** Đợt 1, phiên bản `1.0.0-d1.10` (thiết bị, kho vật tư, kiểm định, hợp đồng, nhắc hạn/Gmail, quản trị, sao lưu, nhập/xuất Excel, tem QR). Đang thử trên môi trường THỬ với dữ liệu mẫu.
 
 ## Cấu trúc
 
