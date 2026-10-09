@@ -162,7 +162,7 @@ export async function renderContract(view, ctx) {
   </section>
   <section class="card"><h3>${bi('co.equipment')}</h3>
     ${ces.length ? `<ul class="list">${ces.map((x) => { const e = eqs.get(x.equipment_id); return `<li>${e ? `<a class="code" href="#/equipment/${esc(e.equipment_id)}">${esc(e.equipment_code)}</a> ${biName(e)}` : ''}
-      <div class="muted small">${x.service_vi || x.service_zh ? biName(x, 'service') : ''}${x.interval_value ? ` · ${bi('co.interval')}: ${fmtNumber(x.interval_value)} ${bi('interval.' + (x.interval_type || 'MONTH'))}` : ''}${x.next_service_date ? ` · ${bi('co.next_service')}: ${esc(fmtDate(x.next_service_date))}` : ''}${showCost && x.price !== undefined && x.price !== '' ? ' · ' + money(x.price, x.currency) : ''}</div></li>`; }).join('')}</ul>` : `<p class="muted">${bi('field.not_set')}</p>`}
+      <div class="muted small">${[x.service_vi || x.service_zh ? biName(x, 'service') : '', x.interval_value ? `${bi('co.interval')}: ${fmtNumber(x.interval_value)} ${bi('interval.' + (x.interval_type || 'MONTH'))}` : '', x.next_service_date ? `${bi('co.next_service')}: ${esc(fmtDate(x.next_service_date))}` : '', showCost && x.price != null && x.price !== '' ? money(x.price, x.currency) : ''].filter(Boolean).join(' · ')}</div></li>`; }).join('')}</ul>` : `<p class="muted">${bi('field.not_set')}</p>`}
     ${!isDraft && c.lifecycle_status === 'ACTIVE' && can_['contract.edit'] && online ? `<div class="row"><a class="btn small" id="co-add-eq" href="#/contracts/${esc(c.contract_id)}/edit">${ICON.plus}<span>${bi('co.add_equipment')}</span></a></div>` : ''}
   </section>
   <section class="card"><h3>${bi('co.services')}</h3>
@@ -402,7 +402,7 @@ export async function renderContractForm(view, ctx) {
         if (x.remove) return { contract_equipment_id: x.contract_equipment_id, remove: true };
         const o = { contract_equipment_id: x.contract_equipment_id, service_vi: x.service_vi || '', service_zh: x.service_zh || '', interval_type: x.interval_type || 'MONTH', interval_value: x.interval_value === '' || x.interval_value === undefined ? '' : Number(x.interval_value), next_service_date: x.next_service_date || '' };
         if (x.__new) o.equipment_id = x.equipment_id;
-        if (showCost && x.price !== undefined && x.price !== '') o.price = Number(String(x.price).replace(/[\s  ]/g, '').replace(',', '.'));
+        if (showCost && x.price != null && x.price !== '') o.price = Number(String(x.price).replace(/[\s  ]/g, '').replace(',', '.'));
         // Dịch vụ tới: tạo dòng lịch dịch vụ dự kiến
         return o;
       });
