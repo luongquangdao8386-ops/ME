@@ -190,6 +190,40 @@ test('web C4: mở Người dùng (máy chủ trả chậm) rồi chuyển ngay 
   } finally { await app.close(); }
 });
 
+test('web: đang ở màn đổi PIN tạm thì quản trị cấp PIN tạm mới → Lưu đưa về màn Đăng nhập kèm lời giải thích; PIN tạm mới đăng nhập được', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  const rt = () => c.call('auth.reauth', { pin: OWNER_PIN }).data.reauth_token;
+  const uid = uuid();
+  const r = c.write('user.create', { user_id: uid, employee_code: 'MAU-C3X', display_name: 'Trưởng bộ phận MẪU', role_level: 3, subroles: [] }, { expected_version: 0, reauth_token: rt() });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const app = await openApp({ env, ...WEB });
+  try {
+    const { page } = app;
+    await page.fill('#emp', 'MAU-C3X');
+    await page.fill('#pin', r.data.temp_pin);
+    await page.click('#login-btn');
+    await page.waitForSelector('#cp-btn', { timeout: 15000 });
+    const u = env.rows('Users').find((x) => x.user_id === uid);
+    const r2 = c.write('user.resetPin', { user_id: uid, reason: 'cấp lại' }, { expected_version: u.record_version, reauth_token: rt() });
+    assert.equal(r2.ok, true, JSON.stringify(r2));
+    await page.fill('#new1', '582914');
+    await page.fill('#new2', '582914');
+    await page.click('#cp-btn');
+    await page.waitForSelector('#login-btn', { timeout: 15000 });
+    assert.match(await page.textContent('body'), /PIN tạm mới nhất/);
+    await page.fill('#emp', 'MAU-C3X');
+    await page.fill('#pin', r2.data.temp_pin);
+    await page.click('#login-btn');
+    await page.waitForSelector('#cp-btn', { timeout: 15000 });
+    await page.fill('#new1', '582914');
+    await page.fill('#new2', '582914');
+    await page.click('#cp-btn');
+    await page.waitForSelector('.grid9', { timeout: 15000 });
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('web C4: Sao lưu ngay → QUEUED, màn tự hỏi lại tới khi có bản VERIFIED; Trạng thái hệ thống + sửa cấu hình có PIN', async () => {
   const env = freshServer();
   ownerClient(env);

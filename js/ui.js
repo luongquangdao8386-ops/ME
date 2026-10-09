@@ -198,7 +198,7 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
 }
 
 /* ---------------- Màn đổi PIN (B5) ---------------- */
-export function renderChangePin(root, { tempPin, onDone, onCancel, forced = true } = {}) {
+export function renderChangePin(root, { tempPin, onDone, onCancel, onSessionError, forced = true } = {}) {
   const el = h(`<div class="page narrow">
     <header class="bar"><button type="button" class="icon-btn" id="cp-back" aria-label="${esc(biText('back'))}">${ICON.back}</button>
       <h1>${bi('change_pin')}</h1></header>
@@ -229,6 +229,8 @@ export function renderChangePin(root, { tempPin, onDone, onCancel, forced = true
     try { r = await changePin(cur, n1); } catch (e) { r = { ok: false, code: 'CLIENT_ERROR', message_vi: 'Lỗi trên máy: ' + (e && e.message), message_zh: '本机错误' }; }
     finally { btn.disabled = false; }
     if (r.ok) { onDone && onDone(r); return; }
+    // Phiên đổi PIN không còn dùng được (đã cấp PIN tạm mới hơn, hết hạn, khôi phục dữ liệu): về màn Đăng nhập
+    if (onSessionError && ['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET'].includes(r.code)) { onSessionError(r); return; }
     err.textContent = resMsg(r);
     if (r.errors && r.errors[0]) err.textContent += ` (${r.errors[0].message_vi} · ${r.errors[0].message_zh})`;
   });

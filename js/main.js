@@ -126,7 +126,8 @@ function showLogin(reason) {
       renderChangePin(root, {
         tempPin, forced: true,
         onDone: async () => { toast(bi('sync.committed'), 'ok'); await bootstrap(); goApp(false); },
-        onCancel: async () => { await logout(); showLogin(); }
+        onCancel: async () => { await logout(); showLogin(); },
+        onSessionError: async () => { await handleRevoked(); showLogin(bi('auth.temp_pin_stale')); }
       });
     }
   });
@@ -143,7 +144,8 @@ async function handleSessionError(r) {
   if (r.code === 'AUTH_REQUIRED' || r.code === 'SESSION_EXPIRED') { showLogin(bi('btn.relogin')); return true; }
   if (r.code === 'DATASET_RESET') { await handleRevoked(); showLogin(bi('sync.dataset_reset')); return true; }
   if (r.code === 'MUST_CHANGE_PIN') {
-    renderChangePin(root, { forced: true, onDone: async () => { await bootstrap(); goApp(false); }, onCancel: async () => { await logout(); showLogin(); } });
+    renderChangePin(root, { forced: true, onDone: async () => { await bootstrap(); goApp(false); }, onCancel: async () => { await logout(); showLogin(); },
+      onSessionError: async () => { await handleRevoked(); showLogin(bi('auth.temp_pin_stale')); } });
     return true;
   }
   return false;

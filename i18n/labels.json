@@ -327,6 +327,7 @@
   "auth.temp_pin": ["Bạn đang dùng PIN tạm, hãy đặt PIN mới", "您正在使用临时PIN，请设置新PIN"],
   "auth.reauth": ["Nhập lại PIN để tiếp tục", "请重新输入PIN以继续"],
   "auth.revoked": ["Phiên đã bị thu hồi hoặc quyền đã thay đổi", "会话已撤销或权限已变更"],
+  "auth.temp_pin_stale": ["PIN tạm này không còn dùng được (đã có PIN tạm mới hơn, hoặc quá hạn đổi PIN). Đăng nhập lại bằng PIN tạm mới nhất", "此临时PIN已失效（已发放更新的临时PIN或超过修改时限）。请用最新的临时PIN重新登录"],
   "auth.session_warn": ["Phiên sắp hết hạn — {D}", "会话即将到期 — {D}"],
   "auth.shared_device": ["Máy dùng chung", "公用设备"],
   "auth.switch_user": ["Đăng nhập người khác", "切换用户"],
