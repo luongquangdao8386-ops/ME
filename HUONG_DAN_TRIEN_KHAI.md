@@ -50,7 +50,7 @@ Các mục quản trị nằm ở trang **Tài khoản**, kéo xuống dưới p
 | Kiểm định | Tạo loại + yêu cầu → người HĐ nộp chứng nhận → C3/C4 duyệt (PIN). Người nộp không tự duyệt |
 | Hợp đồng | Tạo hợp đồng có **Hạn báo gia hạn** và **Ngày hết hạn**; dự thảo gia hạn → duyệt có PIN |
 | Nhắc hạn | Trang Nhắc hạn có nút **Tiếp nhận · 受理** (HĐ, C3, C4); hồ sơ hết hạn trong 40 ngày hiện ở đây |
-| Excel | Danh sách Thiết bị → **Nhập/xuất Excel** → **Xuất Excel** → sửa một ô Model trong tệp → **Chọn tệp .xlsx để nhập** → xem trước → **Nhập dữ liệu** (PIN) |
+| Excel | Danh sách Thiết bị → **Nhập/xuất Excel** → **Xuất Excel** (không phải *Tải mẫu*) → sửa một ô Model trong tệp → **Chọn tệp .xlsx để nhập** → xem trước: **Cập nhật 1**, các dòng còn lại **Không đổi (bỏ qua)** → **Nhập dữ liệu** (PIN). Thử lỗi: xóa trống **cả** `name_vi` **và** `name_zh` của một dòng, hoặc gõ ngày `31/02/2026` → bảng lỗi theo dòng, không có nút Nhập → **Hủy lô**. (Chỉ xóa một tiếng thì hợp lệ: máy dịch lại tiếng còn thiếu.) |
 | Danh mục chung | Quản trị → Danh mục chung: khu vực, nhà cung cấp, danh mục tra cứu, **Thuật ngữ** (tick "Duyệt" thì dịch máy dùng thuật ngữ) |
 | Tem QR | Danh sách → tick vài dòng → **In QR** → xem trước (THỬ: chỉ in thử, không dán tem thật) |
 
