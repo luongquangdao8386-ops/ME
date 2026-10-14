@@ -204,6 +204,12 @@ export async function renderContract(view, ctx) {
     if (res.ok) { await afterCommit(); toast(bi('form.saved'), 'ok'); repaint(); } else if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
   });
   on('co-submit', async () => {
+    // Gửi duyệt dự thảo người khác tạo: người tạo và người gửi đều không được duyệt (4.6) → cần người thứ ba
+    if (c.created_by && c.created_by !== uid) {
+      const go = await dialog({ title: bi('btn.submit_review'), body: `<p>${bi('co.submit_other_warn')}</p>`,
+        actions: [{ label: bi('btn.cancel'), value: false }, { label: bi('btn.submit_review'), kind: 'primary', value: true }] });
+      if (!go) return;
+    }
     const res = await writeOnline('contract.renewal.submit', { contract_id: c.contract_id }, { expected_version: c.record_version });
     if (res.ok) { await afterCommit(); toast(bi('form.saved'), 'ok'); repaint(); } else await handleWriteError(res);
   });

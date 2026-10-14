@@ -92,6 +92,30 @@ test('web C4: dự thảo gia hạn do chính mình tạo và gửi → không c
   } finally { await app.close(); }
 });
 
+test('web C4: gửi duyệt dự thảo do người khác tạo → cảnh báo cần người duyệt thứ ba; Hủy thì dự thảo vẫn là Nháp', async () => {
+  const env = freshServer();
+  ownerClient(env);
+  env.g.pocSeedSampleData();
+  const hd = userClient(env, 'U-HD', 2, '583019', 'HD_KD');
+  const id = uuid(), d = uuid();
+  assert.equal(hd.write('contract.create', { contract_id: id, title_vi: 'Bảo trì máy nén MẪU', start_date: '2026-10-09', end_date: '2026-11-09' }).ok, true);
+  assert.equal(hd.write('contract.renewal.create', { contract_id: d, previous_contract_id: id, start_date: '2026-11-10', end_date: '2027-11-09' }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/contracts/${d}`);
+    await page.waitForSelector('#co-submit');
+    await page.click('#co-submit');
+    await page.waitForSelector('.modal');
+    assert.match(await page.textContent('.modal'), /thứ ba/);
+    await page.locator('.modal-actions .btn').first().click();
+    await page.waitForSelector('.modal', { state: 'detached' });
+    assert.equal(env.rows('Contracts').find((x) => x.contract_id === d).status, 'DRAFT');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('iPhone C1: thấy hợp đồng nhưng không thấy giá trị; không có nút sửa/gia hạn', async () => {
   const env = freshServer();
   const owner = ownerClient(env);

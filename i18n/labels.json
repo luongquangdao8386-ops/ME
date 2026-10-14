@@ -639,6 +639,7 @@
   "co.lifecycle_filter": ["Hiệu lực", "效力"],
   "co.close_kind": ["Hình thức", "方式"],
   "co.no_approve_right": ["Tài khoản này chưa có quyền Duyệt hợp đồng (Phân quyền: module Hợp đồng, ô A của cấp mình)", "此账号没有合同审批权限（权限设置：合同模块中本级别的A项）"],
+  "co.submit_other_warn": ["Dự thảo này do người khác tạo. Nếu bạn gửi duyệt, cả bạn và người tạo đều không được duyệt; phải có một Trưởng bộ phận/Quản trị thứ ba. Thường người tạo tự gửi duyệt", "此草稿由他人创建。若由您提交，您和创建人都不能审批，须由第三位主管/管理员审批。通常应由创建人自行提交"],
   "co.self_no_approve": ["Bạn đã tạo hoặc gửi dự thảo này nên không tự duyệt được; cần Trưởng bộ phận/Quản trị khác duyệt", "您创建或提交了此草稿，不能自行审批；需由其他主管/管理员审批"],
   "service_status.PLANNED": ["Chờ thực hiện", "待执行", "amber"],
   "service_status.DONE": ["Đã làm, chờ nghiệm thu", "已执行，待验收", "navy"],
