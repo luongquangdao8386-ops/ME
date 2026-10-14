@@ -282,6 +282,11 @@ test('quét: nhập tay mã TB-0001 tìm thấy; chuỗi lạ báo "Mã này kh�
     await page.waitForSelector('.scanner');
     await page.screenshot({ path: path.join(SHOTS, 'scan-iphone.png') });
     await page.fill('#sc-input', 'tb-0001');
+    // Chữ gõ vào phải nhìn thấy: màu chữ khác hẳn màu nền ô (màn quét nền tối, chữ trắng không được lan vào ô)
+    const look = await page.$eval('#sc-input', (el) => { const s = getComputedStyle(el); return { fg: s.color, fill: s.webkitTextFillColor, bg: s.backgroundColor }; });
+    assert.notEqual(look.fg, look.bg, JSON.stringify(look));
+    assert.notEqual(look.fill, 'rgb(255, 255, 255)', JSON.stringify(look));
+    assert.equal(look.bg, 'rgb(255, 255, 255)', JSON.stringify(look));
     await page.click('#sc-form button');
     // Mã thiết bị → mở thẳng hồ sơ
     await page.waitForFunction(() => (document.querySelector('.code.big') || {}).textContent === 'TB-0001', null, { timeout: 15000 });
