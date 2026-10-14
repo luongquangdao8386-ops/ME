@@ -367,8 +367,10 @@ function projectRow_(ctx, row, sheet) {
   var s = sheet || row.__sheet;
   if (s && COST_FIELDS[s]) {
     var et = Object.keys(ENTITY_TYPES).filter(function (k) { return ENTITY_TYPES[k].sheet === s; })[0];
-    // Dòng con của hợp đồng (ContractEquipment, ContractServices) theo quyền giá của module hợp đồng
-    var mod = et ? ENTITY_TYPES[et].module : (s.indexOf('Contract') === 0 ? 'contracts' : null);
+    // Dòng con của hợp đồng (ContractEquipment, ContractServices) theo quyền giá của module hợp đồng;
+    // lượng dùng vật tư theo module của phiếu (work_type, 4.4.5)
+    var mod = et ? ENTITY_TYPES[et].module : (s.indexOf('Contract') === 0 ? 'contracts' :
+      (s === 'MaterialUsageLines' && WORK_TYPES[row.work_type] ? WORK_TYPES[row.work_type].module : null));
     if (!mod || !canViewCost_(ctx, mod)) {
       COST_FIELDS[s].forEach(function (f) { delete out[f]; });
       out.meta = { cost_hidden: true };

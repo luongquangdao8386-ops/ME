@@ -73,7 +73,11 @@ function translateText_(text, src, tgt) {
 /** Bảng có dịch máy (dịch bù, dịch lại) — trường gốc */
 var MT_SHEETS_ = {
   Equipment: ['name'], Documents: ['title'], Materials: ['name', 'specification'], EquipmentParts: ['function', 'position'],
-  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services']
+  Contracts: ['title'], Locations: ['name'], LookupValues: ['name'], Vendors: ['services'],
+  // Đợt 2 (2.3: bảng "Trường theo module")
+  EquipmentPartEvents: ['position', 'note'], MaintenancePlans: ['title'], ChecklistTemplates: ['label', 'template_name'],
+  WorkOrders: ['title', 'result'], WorkOrderResults: ['note'], Repairs: ['symptom', 'action', 'diagnosis', 'outside_service', 'test_run_note'],
+  RepairTasks: ['task', 'result'], MaterialRequests: ['note'], MaterialRequestLines: ['note'], MaterialUsageLines: ['note']
 };
 
 /**
@@ -157,7 +161,10 @@ var RETRANSLATE_ = {
   LOCATION: { sheet: 'Locations', edit: 'location.edit' },
   VENDOR: { sheet: 'Vendors', edit: 'vendor.edit' },
   LOOKUP: { sheet: 'LookupValues', edit: 'lookup.edit' },
-  DOCUMENT: { sheet: 'Documents', edit: 'doc.upload' }
+  DOCUMENT: { sheet: 'Documents', edit: 'doc.upload' },
+  MAINTENANCE_PLAN: { sheet: 'MaintenancePlans', edit: 'maintenance.plan.edit' },
+  WORK_ORDER: { sheet: 'WorkOrders', edit: 'maintenance.execute' },
+  REPAIR: { sheet: 'Repairs', edit: 'repair.process' }
 };
 
 /** i18n.retranslate {entity_type, entity_id}: dịch lại các trường PENDING của hồ sơ; chỉ người sửa được hồ sơ */

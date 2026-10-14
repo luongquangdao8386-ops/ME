@@ -7,10 +7,10 @@
 var APP_ID = 'ME';
 var SERVER_VERSION = '1.0.0-d1.22';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.0';
+var SCHEMA_VERSION = '1.5.2';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2 (migrateSchema)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 1;       // đợt đang phát hành
+var RELEASED_DOT = 2;       // đợt đang phát hành
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */
@@ -70,6 +70,8 @@ var SETTINGS_DEFAULTS = [
   ['backup_hour', 'INT', 1, false, 1, 'Giờ sao lưu', '备份时间'],
   ['backup_keep_count', 'INT', 8, false, 1, 'Số bản sao lưu giữ lại', '保留备份份数'],
   ['self_approval_exceptions', 'JSON', [], true, 1, 'Ngoại lệ tự duyệt', '自审批例外'],
+  // Đợt 2: phiếu bảo trì theo lịch được tạo trước hạn N ngày (đề xuất mặc định, phiên Đợt 2)
+  ['wo_generate_days_ahead', 'INT', 7, true, 2, 'Tạo phiếu bảo trì trước hạn (ngày)', '提前生成保养工单（天）'],
   ['meter_boundary_window_hours', 'INT', 24, true, 3, 'Cửa sổ chốt chỉ số theo kỳ (giờ)', '抄表周期结算时间窗（小时）'],
   ['reading_self_edit_hours', 'INT', 24, true, 3, 'Thời gian tự sửa chỉ số của mình (giờ)', '本人修改读数时限（小时）']
 ];
@@ -101,7 +103,11 @@ var CODE_PATTERNS = {
   MATERIAL: { prefix: 'VT', digits: 4, yymm: false, manual: true },
   CONTRACT: { prefix: 'HD', digits: 4, yymm: false, manual: false },
   INSPECTION_REQUIREMENT: { prefix: 'KD', digits: 4, yymm: false, manual: false },
-  INSPECTION: { prefix: 'LKD', digits: 3, yymm: true, manual: false }
+  INSPECTION: { prefix: 'LKD', digits: 3, yymm: true, manual: false },
+  MAINTENANCE_PLAN: { prefix: 'KH', digits: 4, yymm: false, manual: false },
+  WORK_ORDER: { prefix: 'BT', digits: 3, yymm: true, manual: false },
+  REPAIR: { prefix: 'SC', digits: 3, yymm: true, manual: false },
+  MATERIAL_REQUEST: { prefix: 'DN', digits: 3, yymm: true, manual: false }
 };
 
 /** Vai trò cấp 2 và module chính (4.1). */
@@ -127,7 +133,18 @@ var ENTITY_TYPES = {
   INSPECTION_TYPE: { module: 'inspections', sheet: 'InspectionTypes', key: 'inspection_type_id', code: 'code', qr: false },
   LOCATION: { module: 'catalog', sheet: 'Locations', key: 'location_id', code: 'location_code', qr: false },
   VENDOR: { module: 'catalog', sheet: 'Vendors', key: 'vendor_id', code: 'vendor_code', qr: false },
-  DOCUMENT: { module: null, sheet: 'Documents', key: 'document_id', code: null, qr: false }
+  DOCUMENT: { module: null, sheet: 'Documents', key: 'document_id', code: null, qr: false },
+  // Đợt 2. Đề nghị vật tư tính module theo work_type (4.4.5): module ghi ở đây chỉ để mặc định
+  MAINTENANCE_PLAN: { module: 'maintenance', sheet: 'MaintenancePlans', key: 'plan_id', code: 'plan_code', qr: true },
+  WORK_ORDER: { module: 'maintenance', sheet: 'WorkOrders', key: 'work_order_id', code: 'work_order_code', qr: true },
+  REPAIR: { module: 'repairs', sheet: 'Repairs', key: 'repair_id', code: 'repair_code', qr: true },
+  MATERIAL_REQUEST: { module: 'maintenance', sheet: 'MaterialRequests', key: 'request_id', code: 'request_code', qr: false, byWork: true }
+};
+
+/** work_type của đề nghị/lượng dùng/sự kiện linh kiện → loại hồ sơ, module quyền (4.4.5) */
+var WORK_TYPES = {
+  WORK_ORDER: { entity: 'WORK_ORDER', module: 'maintenance', sheet: 'WorkOrders', key: 'work_order_id', code: 'work_order_code' },
+  REPAIR: { entity: 'REPAIR', module: 'repairs', sheet: 'Repairs', key: 'repair_id', code: 'repair_code' }
 };
 
 /** Loại tài liệu → phạm vi truy cập (3.10). */
@@ -142,7 +159,10 @@ var COST_FIELDS = {
   Contracts: ['value', 'currency'],
   ContractEquipment: ['price', 'currency'],
   ContractServices: ['cost', 'currency'],
-  Inspections: ['cost', 'currency']
+  Inspections: ['cost', 'currency'],
+  WorkOrders: ['labor_cost', 'other_cost', 'cost_currency'],
+  Repairs: ['labor_cost', 'outside_cost', 'cost_currency'],
+  MaterialUsageLines: ['manual_unit_cost', 'currency', 'inventory_cost_snapshot']
 };
 
 /** Trường không dịch tự động (2.3). Tên trường gốc (không hậu tố _vi/_zh). */
@@ -152,5 +172,8 @@ var NO_MT_FIELDS = {
   Inspections: ['restriction'],
   Contracts: ['scope', 'closed_reason'],
   ContractEquipment: ['service'],
-  ContractServices: ['result']
+  ContractServices: ['result'],
+  // Đợt 2: yêu cầu an toàn nhập tay, có "Gợi ý dịch" (2.3)
+  ChecklistTemplates: ['safety_note'],
+  MaintenancePlans: ['safety_note']
 };

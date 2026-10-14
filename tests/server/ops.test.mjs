@@ -173,7 +173,8 @@ test('sync.bootstrap: user, settings phía client, permissions, records; sync.ch
   assert.ok(b.data.settings.session_days === 30 && b.data.settings.offline_pbkdf2_iterations === 200000);
   assert.equal(b.data.settings.email_hour, undefined, 'khóa Client=Không không gửi xuống');
   assert.ok(b.data.permissions.actions.includes('equipment.create'));
-  assert.ok(!b.data.permissions.actions.includes('maintenance.view'));
+  assert.ok(!b.data.permissions.actions.includes('utility.view'), 'Đợt 3 chưa bật');
+  assert.ok(b.data.permissions.actions.includes('maintenance.view'));
   assert.ok(b.data.permissions.cost_modules.includes('contracts'));
   const cursor = b.data.sync_cursor;
   const ch0 = c.call('sync.changes', { cursor });

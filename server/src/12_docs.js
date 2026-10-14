@@ -33,16 +33,32 @@ function projectDoc_(ctx, d) {
   return o;
 }
 
+/**
+ * Ảnh, tài liệu của phiếu (Đợt 2): người được giao phiếu bảo trì/sửa chữa còn mở (4.4.12 ⁸ "KT: ảnh và file vào phiếu được giao");
+ * người báo sự cố: ảnh hiện trường của phiếu mình báo khi còn Mới báo (repair.report gồm ảnh, 4.4.4).
+ */
+function workDocOk_(ctx, entityType, kind, entity) {
+  if (!entity) return false;
+  if (entityType === 'WORK_ORDER') return entity.assignee_user_id === ctx.user.user_id && !!WO_OPEN_[entity.status];
+  if (entityType === 'REPAIR') {
+    if (repairAssignees_(entity).indexOf(ctx.user.user_id) >= 0 && !!REPAIR_OPEN_[entity.status]) return true;
+    return entity.reported_by === ctx.user.user_id && kind === 'PHOTO_SITE' && entity.status === 'REPORTED';
+  }
+  return false;
+}
+
 /** Điều kiện cấp 2 cho doc.upload (4.4.12 chú thích 8) */
-function docUploadCondOk_(ctx, auth, module, kind, entity) {
+function docUploadCondOk_(ctx, auth, module, kind, entity, entityType) {
   if (!auth.conds.length) return true;
   return auth.conds.some(function (c) {
     if (c === 'SPEC:KY_THUAT') {
+      if (module === 'maintenance' || module === 'repairs') return kind !== 'CONTRACT' && kind !== 'INVOICE' && workDocOk_(ctx, entityType, kind, entity);
       return (module === 'equipment' || module === 'circuits') &&
         ['PHOTO_EQUIPMENT', 'PHOTO_SITE', 'MANUAL', 'DRAWING', 'OTHER'].indexOf(kind) >= 0;
     }
     if (c === 'SPEC:DOC_DIEN_NUOC') return module === 'utilities' && kind === 'PHOTO_METER';
-    if (c === 'OWN:BAO_SU_CO') return module === 'repairs' && entity && entity.reported_by === ctx.user.user_id;
+    // "của mình" = phiếu mình báo, còn ở trạng thái cho sửa (Mới báo) — 4.3
+    if (c === 'OWN:BAO_SU_CO') return module === 'repairs' && !!entity && entity.reported_by === ctx.user.user_id && entity.status === 'REPORTED';
     return false;
   });
 }
@@ -65,10 +81,18 @@ function docUpload_(ctx) {
   if (errs.length) throw validationError_(errs);
 
   var module = et.module;
-  var auth = authorize_(ctx, 'doc.upload', { module: module });
   var entity = findOne_(et.sheet, et.key, p.entity_id);
+  var auth;
+  try {
+    auth = authorize_(ctx, 'doc.upload', { module: module });
+  } catch (e) {
+    // Người báo sự cố (mọi vai trò được báo) gửi ảnh hiện trường của phiếu mình báo
+    if (!(e && e.apiCode === 'FORBIDDEN' && p.entity_type === 'REPAIR' && can_(ctx, 'repair.report', { module: 'repairs' }) &&
+      workDocOk_(ctx, 'REPAIR', p.kind, entity) && entity.reported_by === ctx.user.user_id)) throw e;
+    auth = { conds: [] };
+  }
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
-  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity)) throw apiError_('FORBIDDEN');
+  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity, p.entity_type)) throw apiError_('FORBIDDEN');
   if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
 
   // Đã có thao tác này → không tạo thêm file
@@ -252,10 +276,18 @@ function docAddLink_(ctx) {
   if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
   if (errs.length) throw validationError_(errs);
   var module = et.module;
-  var auth = authorize_(ctx, 'doc.upload', { module: module });
   var entity = findOne_(et.sheet, et.key, p.entity_id);
+  var auth;
+  try {
+    auth = authorize_(ctx, 'doc.upload', { module: module });
+  } catch (e) {
+    // Người báo sự cố (mọi vai trò được báo) gửi ảnh hiện trường của phiếu mình báo
+    if (!(e && e.apiCode === 'FORBIDDEN' && p.entity_type === 'REPAIR' && can_(ctx, 'repair.report', { module: 'repairs' }) &&
+      workDocOk_(ctx, 'REPAIR', p.kind, entity) && entity.reported_by === ctx.user.user_id)) throw e;
+    auth = { conds: [] };
+  }
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
-  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity)) throw apiError_('FORBIDDEN');
+  if (!docUploadCondOk_(ctx, auth, module, p.kind, entity, p.entity_type)) throw apiError_('FORBIDDEN');
   if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
   var tr = applyTranslations_('Documents', ['title'], { title_vi: p.title_vi, title_zh: p.title_zh }, null);
   return executeWrite_(ctx, {

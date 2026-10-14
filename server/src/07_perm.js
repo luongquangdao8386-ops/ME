@@ -37,6 +37,8 @@ var ACTION_TABLE_ = [
   'maintenance.submit|maintenance|E|N ASG N N N N Y Y|offline|2|W',
   'maintenance.accept|maintenance|A|N N N N N N NS NS|pin|2|W',
   'maintenance.cancel|maintenance|E|N OWN N N N N Y Y|net|2|W',
+  // Bổ sung Đợt 2: ghi giờ chạy cho kế hoạch theo giờ (1.4 §5.2 "cần nguồn đọc giờ chạy thực tế"; 4.4.3 không có dòng riêng)
+  'maintenance.hours.record|maintenance|C|N Y N N N N Y Y|offline|2|W',
   // 4.4.4 Sửa chữa
   'repair.view|repairs|V|Y Y Y Y Y Y Y Y|cache|2|R',
   'repair.report|repairs|C|N Y Y Y Y Y Y Y|offline|2|W',

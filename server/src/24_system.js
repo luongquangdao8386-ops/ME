@@ -9,12 +9,13 @@ function auditModule_(a) {
   var pre = act.split('.')[0];
   var map = {
     equipment: 'equipment', part: 'equipment', material: 'warehouse', contract: 'contracts', inspection: 'inspections',
+    maintenance: 'maintenance', repair: 'repairs',
     notify: 'notifications', location: 'catalog', vendor: 'catalog', lookup: 'catalog', glossary: 'catalog',
     user: 'users', auth: 'users', session: 'users', pin: 'users', settings: 'system', permission: 'system', system: 'system', backup: 'system'
   };
   if (map[pre]) return map[pre];
   if (pre === 'alert') return a.entity_type === 'CONTRACT' ? 'contracts' : 'inspections';
-  if (pre === 'doc' || pre === 'qr' || pre === 'i18n' || pre === 'import' || pre === 'export') {
+  if (pre === 'doc' || pre === 'qr' || pre === 'i18n' || pre === 'import' || pre === 'export' || pre === 'matreq' || pre === 'usage' || pre === 'work') {
     var et = ENTITY_TYPES[a.entity_type];
     if (et && et.module) return et.module;
     var sh = SHEETS[a.entity_type];

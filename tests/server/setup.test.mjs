@@ -3,23 +3,23 @@ import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
 import { freshServer } from '../helpers.mjs';
 
-test('setup tạo 31 sheet Đợt 1, Settings, SystemState, 60 dòng RolePermissions', () => {
+test('setup tạo 41 sheet Đợt 1–2, Settings, SystemState, 60 dòng RolePermissions', () => {
   const env = freshServer();
   const g = env.g;
   const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
   const sec = env.ssApp.openById(env.props.getProperty('SECURITY_SPREADSHEET_ID'));
-  assert.equal(biz.getSheets().length, 26);
+  assert.equal(biz.getSheets().length, 36);
   assert.equal(sec.getSheets().length, 5);
   assert.deepEqual(sec.getSheets().map((s) => s.getName()).sort(), ['AuthAttempts', 'RolePermissions', 'Sessions', 'UserScopes', 'Users']);
   assert.ok(biz.getSheetByName('Glossary'));
   assert.equal(biz.getSheetByName('Sheet1'), null);
-  assert.equal(g.SETTINGS_DEFAULTS.length, 50);
+  assert.equal(g.SETTINGS_DEFAULTS.length, 51);
   const settings = env.rows('Settings');
-  assert.equal(settings.length, 48, 'chỉ khóa của Đợt 1');
+  assert.equal(settings.length, 49, 'chỉ khóa của Đợt 1–2');
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
-  assert.equal(st.schema_version, '1.5.0');
+  assert.equal(st.schema_version, '1.5.2');
   assert.equal(st.perm_version, 1);
   assert.equal(st.dataset_epoch, env.props.getProperty('DATASET_EPOCH'));
   assert.match(env.props.getProperty('DATASET_EPOCH'), /^[0-9a-f-]{36}$/);
@@ -44,7 +44,7 @@ test('setup chạy lại không làm gì; migrateSchema chạy nhiều lần v�
   env.g.migrateSchema();
   env.g.migrateSchema();
   assert.equal(env.rows('RolePermissions').length, 60);
-  assert.equal(env.rows('Settings').length, 48);
+  assert.equal(env.rows('Settings').length, 49);
   const keys = env.rows('SystemState').map((r) => r.state_key);
   assert.equal(new Set(keys).size, keys.length, 'không trùng khóa SystemState');
 });
@@ -122,4 +122,31 @@ test('due_revision là chuỗi (vd. VALID_TO:ngày:id), ô định dạng Văn b
   g.insertRows_('Alerts', [{ alert_id: g.uuid_(), entity_type: 'INSPECTION_REQUIREMENT', entity_id: g.uuid_(), due_revision: dr, due_date: '2026-10-07', days_remaining: 30, alert_state: 'OPEN' }]);
   assert.equal(env.rows('Alerts')[0].due_revision, dr);
   assert.equal(g.colType_('due_revision'), 'STRING');
+});
+
+test('nâng THẬT từ Đợt 1 lên Đợt 2: migrateSchema thêm 10 sheet, cột old_material_id, khóa wo_generate_days_ahead; giữ dữ liệu cũ (6.9.1)', () => {
+  const env = loadServer();
+  const g = env.g;
+  g.RELEASED_DOT = 1;
+  env.props.setProperty('ENV', 'THAT');
+  g.setup();
+  const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
+  assert.equal(biz.getSheets().length, 26);
+  assert.equal(biz.getSheetByName('WorkOrders'), null);
+  // Một dòng dữ liệu Đợt 1 để kiểm không mất
+  g.dbReset_();
+  g.withWriteLock_(() => g.insertRows_('Locations', [{ location_id: g.uuid_(), location_code: 'KV-001', name_vi: 'Xưởng A', active: true, record_version: 1 }]));
+  const epoch = env.props.getProperty('DATASET_EPOCH');
+  g.RELEASED_DOT = 2;
+  g.migrateSchema();
+  g.migrateSchema();
+  assert.equal(biz.getSheets().length, 36);
+  for (const n of ['MaintenancePlans', 'ChecklistTemplates', 'WorkOrders', 'WorkOrderResults', 'Repairs', 'RepairTasks', 'MaterialRequests', 'MaterialRequestLines', 'MaterialUsageLines', 'OperatingReadings']) assert.ok(biz.getSheetByName(n), n);
+  const eps = biz.getSheetByName('EquipmentPartEvents');
+  const hdr = eps.getRange(1, 1, 1, eps.getLastColumn()).getValues()[0];
+  assert.ok(hdr.includes('old_material_id'));
+  assert.equal(env.rows('Locations').length, 1);
+  assert.equal(env.props.getProperty('DATASET_EPOCH'), epoch, 'nâng đợt không đổi epoch (nháp, tem giữ nguyên)');
+  assert.ok(env.rows('Settings').some((x) => x.setting_key === 'wo_generate_days_ahead'));
+  assert.equal(g.readState_().map.schema_version, '1.5.2');
 });

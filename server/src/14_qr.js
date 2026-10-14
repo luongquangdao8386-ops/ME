@@ -1,7 +1,8 @@
 /* 14_qr: tra QR (phụ lục 1.5 mục 2.8, 3.4) */
 
 var VIEW_ACTION_BY_MODULE_ = {
-  equipment: 'equipment.view', warehouse: 'material.view', contracts: 'contract.view', inspections: 'inspection.view'
+  equipment: 'equipment.view', warehouse: 'material.view', contracts: 'contract.view', inspections: 'inspection.view',
+  maintenance: 'maintenance.view', repairs: 'repair.view'
 };
 
 /**
@@ -43,7 +44,7 @@ function qrResolve_(ctx) {
  * qr.print {entity_type, ids}: dữ liệu tem (mã, tên, khu vực, qr_key) cho hồ sơ người in được xem; ghi AuditLogs số tem.
  * Tem không có logo, không giá, không PIN/token (6.5.2). Cần mạng (4.4.11).
  */
-var PRINTABLE_ = { EQUIPMENT: 1, MATERIAL: 1, INSPECTION_REQUIREMENT: 1, CONTRACT: 1 };
+var PRINTABLE_ = { EQUIPMENT: 1, MATERIAL: 1, INSPECTION_REQUIREMENT: 1, CONTRACT: 1, MAINTENANCE_PLAN: 1, WORK_ORDER: 1, REPAIR: 1 };
 function qrPrint_(ctx) {
   var p = ctx.req.payload || {};
   var et = ENTITY_TYPES[p.entity_type];
@@ -58,6 +59,18 @@ function qrPrint_(ctx) {
     if (q.entity_type !== p.entity_type || !want[q.entity_id] || !q.active) return;
     items.push({ entity_type: q.entity_type, entity_id: q.entity_id, code: q.code, qr_key: q.qr_key, name_vi: q.label_vi, name_zh: q.label_zh });
   });
+  if ((p.entity_type === 'WORK_ORDER' || p.entity_type === 'REPAIR' || p.entity_type === 'MAINTENANCE_PLAN') && items.length) {
+    var byId = {};
+    readRows_(et.sheet).forEach(function (r) { byId[r[et.key]] = r; });
+    var eqs = {};
+    readRows_('Equipment').forEach(function (e) { eqs[e.equipment_id] = e; });
+    items.forEach(function (it) {
+      var r = byId[it.entity_id] || {};
+      var e = eqs[r.equipment_id] || {};
+      if (p.entity_type === 'REPAIR') { it.name_vi = String(r.symptom_vi || r.symptom_zh || '').slice(0, 60); it.name_zh = String(r.symptom_zh || r.symptom_vi || '').slice(0, 60); }
+      it.equipment_code = e.equipment_code || '';
+    });
+  }
   if (p.entity_type === 'EQUIPMENT' && items.length) {
     var locs = {};
     readRows_('Locations').forEach(function (l) { locs[l.location_id] = l.location_code; });

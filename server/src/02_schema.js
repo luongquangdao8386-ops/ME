@@ -1,4 +1,4 @@
-/* 02_schema: sheet và cột của Đợt 1 (1.4 §10.2, §10.3.1; phụ lục 1.5 mục 3.1, 3.16, 6.4) */
+/* 02_schema: sheet và cột của Đợt 1–2 (1.4 §10.2, §10.3.1; phụ lục 1.5 mục 3.1, 3.16, 6.1, 6.4) */
 
 /**
  * Bộ cột C (1.4 §10.1) cho bảng nghiệp vụ. Thêm `sync_revision` (mốc đồng bộ của dòng,
@@ -43,7 +43,7 @@ var SHEETS = {
       'compatibility_note approved_by position_vi position_zh effective_from removed_at' },
   EquipmentPartEvents: { book: 'B', dot: 1, key: 'event_id', i18n: true,
     cols: 'event_id equipment_id equipment_part_id material_id event_type quantity unit position_vi position_zh occurred_at ' +
-      'work_type work_id usage_line_id actor_user_id note_vi note_zh dataset_epoch sync_revision created_at created_by' },
+      'work_type work_id usage_line_id actor_user_id note_vi note_zh dataset_epoch sync_revision created_at created_by old_material_id' },
   Contracts: { book: 'B', dot: 1, key: 'contract_id', c: true, i18n: true,
     cols: 'contract_id contract_code contract_number title_vi title_zh vendor_id start_date end_date renewal_notice_date ' +
       'value currency owner_user_id scope_vi scope_zh status revision previous_contract_id submitted_by submitted_at ' +
@@ -84,6 +84,45 @@ var SHEETS = {
     cols: 'notification_id dedupe_key run_date recipient_id entity_type entity_id due_revision due_date stage status ' +
       'attempt_at sent_at error_code dataset_epoch alert_id reference_date_kind days_remaining digest_id queued_at attempt_count' },
 
+  // ---- Nghiệp vụ Đợt 2 (10): Bảo trì, Sửa chữa, vật tư trên phiếu (6.1, 6.9.1) ----
+  // Cột ngoài 1.4 §10.2 + 3.16: tên phiếu, bản checklist đã chụp, lý do trả lại/hủy, mốc giao việc, nguồn phiếu,
+  // ghi chú dừng máy (5.1.1 mục 6), giờ chạy lúc làm, đề nghị sửa chữa sinh từ mục không đạt.
+  MaintenancePlans: { book: 'B', dot: 2, key: 'plan_id', c: true, i18n: true,
+    cols: 'plan_id plan_code equipment_id title_vi title_zh interval_type interval_value anchor_date next_due_date ' +
+      'operating_hours_target checklist_template_id assignee_user_id priority estimated_minutes active safety_note_vi safety_note_zh ' +
+      'last_work_order_id last_done_date last_done_hours' },
+  ChecklistTemplates: { book: 'B', dot: 2, key: 'template_item_id', c: true, i18n: true,
+    cols: 'template_item_id template_id revision step_no label_vi label_zh result_type unit min_value max_value required ' +
+      'safety_note_vi safety_note_zh template_name_vi template_name_zh active' },
+  WorkOrders: { book: 'B', dot: 2, key: 'work_order_id', c: true, i18n: true,
+    cols: 'work_order_id work_order_code plan_id equipment_id due_date assignee_user_id status start_at end_at downtime_start_at ' +
+      'downtime_end_at labor_minutes labor_cost other_cost result_vi result_zh approved_by approved_at next_due_date submitted_by ' +
+      'submitted_at overall_result priority cost_currency title_vi title_zh checklist_template_id checklist_revision downtime_note ' +
+      'operating_hours assigned_at returned_reason returned_at cancel_reason cancelled_at source repair_id' },
+  WorkOrderResults: { book: 'B', dot: 2, key: 'result_id', c: true, i18n: true,
+    cols: 'result_id work_order_id template_item_id template_revision step_no label_vi label_zh result_status measured_value unit ' +
+      'note_vi note_zh result_type required min_value max_value safety_note_vi safety_note_zh' },
+  Repairs: { book: 'B', dot: 2, key: 'repair_id', c: true, i18n: true,
+    cols: 'repair_id repair_code equipment_id reported_by reported_at symptom_vi symptom_zh severity priority status ' +
+      'assignee_user_id stopped_at repair_start_at repair_end_at restored_at root_cause_code action_vi action_zh labor_cost ' +
+      'outside_cost acceptance_result approved_by approved_at submitted_by submitted_at assigned_at cost_currency diagnosis_vi ' +
+      'diagnosis_zh vendor_id outside_service_vi outside_service_zh test_run_result test_run_note_vi test_run_note_zh downtime_note ' +
+      'source_work_order_id returned_reason returned_at cancel_reason cancelled_at reopen_reason reopened_at' },
+  RepairTasks: { book: 'B', dot: 2, key: 'repair_task_id', c: true, i18n: true,
+    cols: 'repair_task_id repair_id assignee_user_id start_at end_at task_vi task_zh result_vi result_zh status sort_order' },
+  MaterialRequests: { book: 'B', dot: 2, key: 'request_id', c: true, i18n: true,
+    cols: 'request_id request_code work_type work_id equipment_id location_id warehouse_id requested_by requested_at needed_at status ' +
+      'approved_by approved_at sent_to_warehouse_at note_vi note_zh submitted_at reject_reason cancel_reason' },
+  MaterialRequestLines: { book: 'B', dot: 2, key: 'request_line_id', c: true, i18n: true,
+    cols: 'request_line_id request_id material_id requested_qty unit approved_qty issued_qty_snapshot returned_qty_snapshot ' +
+      'inventory_sync_at status note_vi note_zh sort_order work_type work_id' },
+  MaterialUsageLines: { book: 'B', dot: 2, key: 'usage_line_id', c: true, i18n: true,
+    cols: 'usage_line_id work_type work_id equipment_id material_id request_line_id actual_used_qty scrap_qty unit manual_unit_cost ' +
+      'currency cost_source net_issue_qty_snapshot inventory_cost_snapshot inventory_sync_at recorded_by confirmed_by status ' +
+      'note_vi note_zh recorded_at confirmed_at' },
+  OperatingReadings: { book: 'B', dot: 2, key: 'operating_reading_id', c: true,
+    cols: 'operating_reading_id equipment_id measured_at cumulative_hours reading_user_id note work_order_id is_reset' },
+
   // ---- Bảo mật (5) ----
   Users: { book: 'S', dot: 1, key: 'user_id',
     cols: 'user_id employee_code display_name email role_level active pin_hash salt pin_hash_version failed_attempts ' +
@@ -115,7 +154,14 @@ var TYPE_OVERRIDES_ = {
   sort_order: 'INT', interval_value: 'INT', lead_time_days: 'INT', manufacture_year: 'INT', default_interval_months: 'INT',
   active: 'BOOL', owned_by_app: 'BOOL', must_change_pin: 'BOOL', lot_tracking: 'BOOL', serial_tracking: 'BOOL',
   is_equipment_component: 'BOOL', is_system_owner: 'BOOL', i18n_meta: 'JSON', code: 'CODE', schema_version: 'STRING',
-  phone: 'STRING', email: 'STRING'
+  phone: 'STRING', email: 'STRING',
+  // Đợt 2
+  operating_hours_target: 'NUMBER', estimated_minutes: 'INT', last_done_hours: 'NUMBER', step_no: 'INT', min_value: 'NUMBER',
+  max_value: 'NUMBER', required: 'BOOL', labor_minutes: 'INT', labor_cost: 'NUMBER', other_cost: 'NUMBER', outside_cost: 'NUMBER',
+  checklist_revision: 'INT', operating_hours: 'NUMBER', template_revision: 'INT', measured_value: 'NUMBER',
+  requested_qty: 'NUMBER', approved_qty: 'NUMBER', issued_qty_snapshot: 'NUMBER', returned_qty_snapshot: 'NUMBER',
+  actual_used_qty: 'NUMBER', scrap_qty: 'NUMBER', manual_unit_cost: 'NUMBER', net_issue_qty_snapshot: 'NUMBER',
+  inventory_cost_snapshot: 'NUMBER', cumulative_hours: 'NUMBER', is_reset: 'BOOL', needed_at: 'DATE'
 };
 
 /** Kiểu cột (3.1) suy theo tên. */

@@ -16,8 +16,23 @@ var SYNC_ENTITIES_ = [
   { type: 'INSPECTION_REQUIREMENT', sheet: 'InspectionRequirements', action: 'inspection.view', module: 'inspections', qr: true },
   { type: 'INSPECTION', sheet: 'Inspections', action: 'inspection.view', module: 'inspections', qr: true },
   { type: 'ALERT', sheet: 'Alerts', action: 'alert.view', module: '*alert' },
-  { type: 'DOCUMENT', sheet: 'Documents', action: 'doc.view', module: null }
+  { type: 'DOCUMENT', sheet: 'Documents', action: 'doc.view', module: null },
+  // Đợt 2
+  { type: 'MAINTENANCE_PLAN', sheet: 'MaintenancePlans', action: 'maintenance.view', module: 'maintenance', qr: true, dot: 2 },
+  { type: 'CHECKLIST_ITEM', sheet: 'ChecklistTemplates', action: 'maintenance.view', module: 'maintenance', dot: 2 },
+  { type: 'WORK_ORDER', sheet: 'WorkOrders', action: 'maintenance.view', module: 'maintenance', qr: true, dot: 2 },
+  { type: 'WO_RESULT', sheet: 'WorkOrderResults', action: 'maintenance.view', module: 'maintenance', dot: 2 },
+  { type: 'OPERATING_READING', sheet: 'OperatingReadings', action: 'maintenance.view', module: 'maintenance', dot: 2 },
+  { type: 'REPAIR', sheet: 'Repairs', action: 'repair.view', module: 'repairs', qr: true, dot: 2 },
+  { type: 'REPAIR_TASK', sheet: 'RepairTasks', action: 'repair.view', module: 'repairs', dot: 2 },
+  // Đề nghị, lượng dùng: module theo work_type của dòng (4.4.5)
+  { type: 'MATERIAL_REQUEST', sheet: 'MaterialRequests', action: null, module: '*work', dot: 2 },
+  { type: 'MATERIAL_REQUEST_LINE', sheet: 'MaterialRequestLines', action: null, module: '*work', dot: 2 },
+  { type: 'MATERIAL_USAGE', sheet: 'MaterialUsageLines', action: null, module: '*work', dot: 2 }
 ];
+
+/** Action xem theo module của phiếu (WORK_ORDER → maintenance.view, REPAIR → repair.view) */
+var WORK_VIEW_ACTION_ = { maintenance: 'maintenance.view', repairs: 'repair.view' };
 
 /** Dòng → bản ghi gửi client; null nếu không được xem */
 function syncProject_(ctx, ent, row, qm, costCache) {
@@ -30,6 +45,14 @@ function syncProject_(ctx, ent, row, qm, costCache) {
     if (!costCache[mod].view) return null;
     if (row.access_scope === 'COST_VIEW' && !costCache[mod].cost) return null;
     return projectDoc_(ctx, row);
+  }
+  if (ent.module === '*work') {
+    var wt = WORK_TYPES[row.work_type];
+    if (!wt) return null;
+    var ck = 'work:' + wt.module;
+    if (!(ck in costCache)) costCache[ck] = can_(ctx, WORK_VIEW_ACTION_[wt.module], { module: wt.module });
+    if (!costCache[ck]) return null;
+    return projectRow_(ctx, row, ent.sheet);
   }
   if (ent.type === 'ALERT') {
     // Cảnh báo đã đóng → xóa ở máy; module theo loại hồ sơ
@@ -46,7 +69,9 @@ function syncProject_(ctx, ent, row, qm, costCache) {
 
 function visibleEntities_(ctx) {
   return SYNC_ENTITIES_.filter(function (ent) {
+    if (ent.dot && ent.dot > RELEASED_DOT) return false;
     if (!ent.module) return true;
+    if (ent.module === '*work') return can_(ctx, 'maintenance.view', { module: 'maintenance' }) || can_(ctx, 'repair.view', { module: 'repairs' });
     if (ent.module === '*alert') return can_(ctx, ent.action, { module: 'inspections' }) || can_(ctx, ent.action, { module: 'contracts' });
     return can_(ctx, ent.action, { module: ent.module });
   });

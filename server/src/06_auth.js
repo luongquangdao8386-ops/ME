@@ -594,7 +594,12 @@ function userDirectory_() {
   return m;
 }
 
-var NAME_FIELDS_ = { owner_user_id: 'owner_name', updated_by: 'updated_by_name', submitted_by: 'submitted_by_name', approved_by: 'approved_by_name', created_by: 'created_by_name' };
+var NAME_FIELDS_ = {
+  owner_user_id: 'owner_name', updated_by: 'updated_by_name', submitted_by: 'submitted_by_name', approved_by: 'approved_by_name', created_by: 'created_by_name',
+  // Đợt 2: người làm, người báo, người đề nghị/ghi/xác nhận (thẻ Công việc, phiếu)
+  assignee_user_id: 'assignee_name', reported_by: 'reported_by_name', requested_by: 'requested_by_name', recorded_by: 'recorded_by_name',
+  confirmed_by: 'confirmed_by_name', reading_user_id: 'reading_user_name', actor_user_id: 'actor_name'
+};
 
 /** Tên hiển thị của người phụ trách/người sửa gắn vào bản ghi gửi client */
 function annotateNames_(o) {
