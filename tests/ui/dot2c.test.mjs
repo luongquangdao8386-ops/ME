@@ -421,3 +421,43 @@ test('iPhone KT: gõ ô này rồi chạm sang ô khác (phiếu sửa và phi�
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('web: phiếu sửa máy không dừng đã Hoàn thành → mốc Hoạt động lại ghi "Không dừng máy" (không phải "Chưa có"); phiếu có dừng máy thì vẫn "Chưa có" tới khi ghi giờ', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  const eq = uuid();
+  assert.equal(c.write('equipment.create', { equipment_id: eq, name_vi: 'Máy nén khí 01' }).ok, true);
+  const kt = userClient(env, 'U-KT', 2, '583016', 'KY_THUAT');
+  const ktId = env.rows('Users').find((u) => u.employee_code === 'U-KT').user_id;
+  const c3 = userClient(env, 'U-C3', 3, '730194');
+  const run = (rid, stopped) => {
+    assert.equal(kt.write('repair.report', { repair_id: rid, equipment_id: eq, symptom_vi: 'Áp cao', severity: 'MEDIUM', machine_stopped: stopped }).ok, true);
+    let r = env.rows('Repairs').find((x) => x.repair_id === rid);
+    assert.equal(c.write('repair.assign', { repair_id: rid, assignee_user_id: ktId }, { expected_version: r.record_version }).ok, true);
+    r = env.rows('Repairs').find((x) => x.repair_id === rid);
+    const t0 = env.g.isoVN_(new env.clock.Date());
+    const p = kt.write('repair.process', { repair_id: rid, repair_start_at: t0, repair_end_at: t0, test_run_result: 'PASS', ...(stopped ? { downtime_note: 'Chờ phụ tùng' } : {}) }, { expected_version: r.record_version });
+    assert.equal(p.ok, true, JSON.stringify(p));
+    const s = kt.write('repair.submit', { repair_id: rid }, { expected_version: p.record_version });
+    assert.equal(s.ok, true, JSON.stringify(s));
+    const a = c3.write('repair.accept', { repair_id: rid, decision: 'PASS' }, { expected_version: s.record_version, reauth_token: c3.call('auth.reauth', { pin: '730194' }).data.reauth_token });
+    assert.equal(a.ok, true, JSON.stringify(a));
+  };
+  const noStop = uuid(), stop = uuid();
+  run(noStop, false);
+  run(stop, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/repairs/${noStop}`);
+    await page.waitForFunction(() => ((document.querySelector('.view') || {}).textContent || '').includes('Hoàn thành · 已完成'), null, { timeout: 15000 });
+    assert.deepEqual(await page.$$eval('.timeline li', (els) => els.map((e) => e.className)), ['done', 'done', 'done', 'done', 'na', 'done']);
+    assert.ok((await page.textContent('.timeline li.na')).includes('Không dừng máy · 未停机'));
+    await go(page, `#/repairs/${stop}`);
+    const code2 = env.rows('Repairs').find((x) => x.repair_id === stop).repair_code;
+    await page.waitForFunction((cd) => ((document.querySelector('.code.big') || {}).textContent || '') === cd, code2, { timeout: 15000 });
+    assert.deepEqual(await page.$$eval('.timeline li', (els) => els.map((e) => e.className)), ['done', 'done', 'done', 'done', 'todo', 'done']);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

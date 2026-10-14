@@ -410,7 +410,11 @@ export async function renderRepair(view, ctx) {
     ${nextStepHtml(next, 'top')}
   </section>
   <section class="card"><h3>${bi('rp.milestones')}</h3><ul class="list timeline">
-    ${timeline.map(([k, t]) => `<li class="${t ? 'done' : 'todo'}"><span class="dot"></span><span>${bi('rp.ms.' + k)}</span><strong>${t ? esc(fmtDateTime(t)) : `<span class="muted">${bi('field.not_set')}</span>`}</strong></li>`).join('')}
+    ${timeline.map(([k, t]) => {
+      // Máy không dừng: mốc Hoạt động lại không áp dụng (không tự điền mốc, C9) — ghi rõ thay vì "Chưa có"
+      if (!t && k === 'restored_at' && !r.stopped_at) return `<li class="na"><span class="dot"></span><span>${bi('rp.ms.' + k)}</span><strong><span class="muted">${bi('rp.ms.not_stopped')}</span></strong></li>`;
+      return `<li class="${t ? 'done' : 'todo'}"><span class="dot"></span><span>${bi('rp.ms.' + k)}</span><strong>${t ? esc(fmtDateTime(t)) : `<span class="muted">${bi('field.not_set')}</span>`}</strong></li>`;
+    }).join('')}
     </ul>${r.stopped_at ? `<p class="muted small">${bi('rp.stopped_at')}: ${esc(fmtDateTime(r.stopped_at))}${r.restored_at ? '' : ` · ${bi('rp.machine_down')}`}</p>` : ''}</section>
   ${!localNew && (['IN_PROGRESS', 'PENDING_ACCEPTANCE', 'COMPLETED'].includes(r.status) || canProc) ? `<section class="card exec-card" id="rp-exec">
     <h3>${bi('rp.processing')}</h3>
