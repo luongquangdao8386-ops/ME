@@ -629,7 +629,7 @@ export async function renderWorkOrder(view, ctx) {
     return `<div class="cl-item${stv === 'FAIL' ? ' fail' : ''}" data-field="results[${esc(r.result_id)}]" id="res-${esc(r.result_id)}">
       <div class="cl-title"><span class="cl-no">${esc(r.step_no)}</span><span>${biName(r, 'label')}${r.required === false ? ` <span class="muted small">(${bi('mt.optional')})</span>` : ''}</span>${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div>
       ${r.safety_note_vi || r.safety_note_zh ? `<div class="cl-safety">${bi('mt.safety')}: ${biName(r, 'safety_note')}</div>` : ''}
-      ${r.result_type === 'NUMBER' ? `<div class="cl-num-row"><input class="inp num" data-mv="${esc(r.result_id)}" inputmode="decimal" value="${esc(mv === '' ? '' : String(mv))}" ${dis} aria-label="${esc(nameText(r, 'label'))}"><span class="unit">${esc(r.unit || '')}</span><span class="muted small">${rangeText(r)}</span>${out ? badge('mt.out_of_range') : ''}</div>` : ''}
+      ${r.result_type === 'NUMBER' ? `<div class="cl-num-row"><input class="inp num" data-mv="${esc(r.result_id)}" inputmode="decimal" value="${esc(mv === '' ? '' : String(mv))}" ${dis} aria-label="${esc(nameText(r, 'label'))}"><span class="unit">${esc(r.unit || '')}</span><span class="muted small">${rangeText(r)}</span><span class="mv-out"${out ? '' : ' hidden'}>${badge('mt.out_of_range')}</span></div>` : ''}
       <div class="segs">${btn('PASS')}${btn('FAIL')}${r.required === false ? btn('NA') : ''}</div>
       <input class="inp cl-note" data-note="${esc(r.result_id)}" type="text" maxlength="500" placeholder="${esc(biText(r.result_type === 'TEXT' ? 'mt.record_text' : 'field.note'))}" value="${esc(r.note_vi || r.note_zh || '')}" ${dis}>
       ${(r.note_vi && r.note_zh && r.i18n_meta && r.i18n_meta.note && r.i18n_meta.note.state === 'MACHINE') ? `<div class="muted small">${esc(r.i18n_meta.note.src === 'vi' ? r.note_zh : r.note_vi)} <span class="tag mt">${bi('tag.machine_translated')}</span></div>` : ''}
@@ -717,6 +717,26 @@ export async function renderWorkOrder(view, ctx) {
     // Có mục Không đạt → Kết quả chung chỉ được Không đạt (C7)
     if (v === 'FAIL') await setField('overall_result', 'FAIL');
     repaint();
+  }));
+  // Đang gõ số đo (iPhone: bàn phím số không có nút Xong, ô chỉ "change" khi chạm ra ngoài): báo ngay ngoài giới hạn,
+  // tự chọn Không đạt và Kết quả chung Không đạt, lưu nháp — không vẽ lại để bàn phím không đóng
+  $$('[data-mv]', view).forEach((i) => i.addEventListener('input', async () => {
+    const id = i.dataset.mv;
+    const r = results.find((x) => x.result_id === id);
+    const n = parseNumberInput(i.value);
+    if (n.error || n.value === null) return;
+    const fail = outOfRange(r, n.value);
+    const card = $(`#res-${CSS.escape(id)}`, view);
+    card.classList.toggle('fail', fail);
+    const mo = $('.mv-out', card); if (mo) mo.hidden = !fail;
+    const want = fail ? 'FAIL' : (r.result_status === 'FAIL' && !outOfRange(r, Number(r.measured_value)) ? 'FAIL' : 'PASS');
+    $$('[data-res]', card).forEach((b) => { const on = b.dataset.v === want; b.className = 'seg' + (on ? ' on s-' + b.dataset.v.toLowerCase() : ''); });
+    await setRes(id, 'measured_value', n.value);
+    await setRes(id, 'result_status', want);
+    if (fail) {
+      await setField('overall_result', 'FAIL');
+      $$('[data-overall]', view).forEach((b) => { const on = b.dataset.overall === 'FAIL'; b.className = 'seg' + (on ? ' on s-fail' : ''); if (b.dataset.overall === 'PASS') b.disabled = true; });
+    }
   }));
   $$('[data-mv]', view).forEach((i) => i.addEventListener('change', async () => {
     const id = i.dataset.mv;

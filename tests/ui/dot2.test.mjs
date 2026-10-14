@@ -95,6 +95,10 @@ test('iPhone KT: Công việc → phiếu bảo trì; mất mạng vẫn ghi che
     await page.waitForSelector(`[data-res="${res[0].result_id}"][data-v="PASS"].on`);
     // Số đo ngoài giới hạn → tự Không đạt, Kết quả chung Không đạt (C7); nút Đạt chung bị khóa
     await page.fill(`[data-mv="${res[1].result_id}"]`, '9,5');
+    // Chưa rời ô (iPhone không có nút Xong): vẫn báo ngay Không đạt, ngoài giới hạn, ô vẫn đang nhập
+    await page.waitForSelector(`[data-res="${res[1].result_id}"][data-v="FAIL"].on`);
+    assert.ok(await page.$eval(`#res-${res[1].result_id} .mv-out`, (el) => !el.hidden));
+    assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.dataset.mv), res[1].result_id);
     await page.dispatchEvent(`[data-mv="${res[1].result_id}"]`, 'change');
     await page.waitForSelector(`[data-res="${res[1].result_id}"][data-v="FAIL"].on`);
     assert.ok((await page.textContent(`#res-${res[1].result_id}`)).includes('Ngoài giới hạn'));
