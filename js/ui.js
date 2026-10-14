@@ -1,5 +1,5 @@
 // Giao diện dùng chung và các màn đăng nhập (CM-01/WEB-CM-01), đổi PIN, mở khóa ngoại tuyến
-import { bi, biText, esc, L, execUrl, EXEC_FIXED, isValidExecUrl, ls, resMsg, session, fmtDateTime, deviceInfo } from './core.js';
+import { bi, biText, esc, L, execUrl, EXEC_FIXED, isValidExecUrl, ls, resMsg, session, fmtDateTime, deviceInfo, NS } from './core.js';
 import { login, changePin, offlineUnlock, getVerifier, pinWeakReason, isSharedDevice, isIosSafariTab } from './auth.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -64,6 +64,30 @@ export const ICON = {
 
 /* ---------------- Thông báo ngắn, hộp thoại ---------------- */
 let toastTimer = null;
+/**
+ * Tải lại bản mới khi app chạy lẫn tệp cũ và mới (vd ngay sau khi phát hành, CDN còn trả tệp cũ): xóa cache vỏ app của
+ * trang này (không đụng trang kia), gỡ Service Worker, làm mới bộ nhớ đệm trình duyệt của các tệp đã tải rồi mở lại.
+ * Nháp chưa gửi (IndexedDB) và phiên đăng nhập giữ nguyên.
+ */
+export async function reloadFresh() {
+  try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => k.startsWith(NS + '-shell-')).map((k) => caches.delete(k))); } catch (e) { /* bỏ qua */ }
+  try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.unregister(); } catch (e) { /* bỏ qua */ }
+  try {
+    const base = location.origin + location.pathname.replace(/[^/]*$/, '');
+    const urls = [...new Set(performance.getEntriesByType('resource').map((x) => x.name.split('#')[0]).filter((u) => u.startsWith(base) && /\.(m?js|css|json|webmanifest)(\?|$)/.test(u)))];
+    await Promise.all(urls.map((u) => fetch(u, { cache: 'reload' }).catch(() => null)));
+  } catch (e) { /* bỏ qua */ }
+  location.reload();
+}
+
+/** Nút "Tải lại bản mới" dưới thông báo lỗi trên máy */
+export function reloadFreshHtml() {
+  return `<p class="muted small">${bi('err.reload_hint')}</p><button type="button" class="btn primary" data-reload-fresh>${bi('err.reload_new')}</button>`;
+}
+export function wireReloadFresh(root) {
+  root.querySelectorAll('[data-reload-fresh]').forEach((b) => b.addEventListener('click', () => { b.disabled = true; reloadFresh(); }));
+}
+
 /** Lên đầu trang (vẽ lại cùng màn không tự cuộn, vd sang trang danh sách kế tiếp) */
 export function toTop() {
   window.scrollTo(0, 0);

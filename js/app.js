@@ -4,7 +4,7 @@ import { getMeta, pullChanges, queueItems, flushQueue } from './sync.js';
 import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
-import { toast, dialog } from './ui.js';
+import { toast, dialog, reloadFreshHtml, wireReloadFresh } from './ui.js';
 import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
 
 export const app = {
@@ -60,7 +60,8 @@ async function renderRoute() {
     await m.route.handler(view, { params: m.params, query: queryParams(), shell: pageShell, app, seq, isCurrent: () => seq === renderSeq });
   } catch (e) {
     if (seq !== renderSeq) return;
-    view.innerHTML = `<div class="card"><p class="banner warn">${bi('err.client')}: ${esc(e && e.message)}</p></div>`;
+    view.innerHTML = `<div class="card"><p class="banner warn">${bi('err.client')}: ${esc(e && e.message)}</p>${reloadFreshHtml()}</div>`;
+    wireReloadFresh(view);
     console.error(e);
   }
 }
@@ -73,9 +74,12 @@ export async function updateSyncStatus() {
   const problems = mine.filter((o) => o.state === 'CONFLICT' || o.state === 'REJECTED').length;
   app.shell.setSync({ offline: app.offline || !navigator.onLine, lastSync: await getMeta('last_sync'), queued: mine.length - problems, problems });
   // Số việc chờ tôi nghiệm thu/duyệt trên nút Công việc (C3/C4, Đợt 2)
+  // (phần phụ: lỗi ở đây — vd tệp cũ chưa có hàm — không được làm hỏng khởi động app)
   if (RELEASED_DOT >= 2) {
-    const { pendingForMe } = await import('./work.js');
-    if (app.shell) app.shell.setBadge('work', (await pendingForMe().catch(() => [])).length);
+    try {
+      const m = await import('./work.js');
+      if (app.shell && typeof app.shell.setBadge === 'function' && typeof m.pendingForMe === 'function') app.shell.setBadge('work', (await m.pendingForMe()).length);
+    } catch (e) { console.warn(e); }
   }
 }
 

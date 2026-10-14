@@ -3,7 +3,7 @@ import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN, applyEnvTitle
 import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding, serverBound, bindServer } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
-import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $ } from './ui.js';
+import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $, reloadFreshHtml, wireReloadFresh } from './ui.js';
 import { app, enterApp, syncNow } from './app.js';
 import { stopRouter } from './router.js';
 import { invalidate } from './data.js';
@@ -254,5 +254,7 @@ async function isTestServer() {
 }
 
 start().catch((e) => {
-  root.innerHTML = `<div class="page narrow"><p class="banner warn">${esc(e && e.message)}</p></div>`;
+  root.innerHTML = `<div class="page narrow"><p class="banner warn">${esc(e && e.message)}</p>${reloadFreshHtml()}</div>`;
+  wireReloadFresh(root);
+  console.error(e);
 });

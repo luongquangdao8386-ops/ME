@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import fs from 'node:fs';
 import { openApp, SHOTS } from './harness.mjs';
 import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
 
@@ -511,5 +512,29 @@ test('C3 (web): trang chủ có ô "Chờ bạn xử lý" (phiếu sửa chờ n
     assert.equal(await page.locator('.pending-me').count(), 0);
     assert.equal(await page.locator('.bnav-item[data-nav="work"] .nav-badge').count(), 0);
     assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('lẫn bản (tệp work.js cũ chưa có hàm mới, như CDN trả tệp cũ ngay sau phát hành): app vẫn khởi động; màn lỗi có nút "Tải lại bản mới" → tải lại đúng bản, chạy bình thường', async () => {
+  const { env } = setup();
+  userClient(env, 'U-C3', 3, '730194');
+  const cur = fs.readFileSync(path.join(process.cwd(), 'js/work.js'), 'utf8');
+  const stale = cur.replace('export async function pendingForMe(', 'async function pendingForMeOld(').replace('export function pendingPanelHtml(', 'function pendingPanelHtmlOld(');
+  assert.notEqual(stale, cur);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    let serveStale = true;
+    await page.route(/\/js\/work\.js(\?.*)?$/, (route) => (serveStale ? route.fulfill({ status: 200, contentType: 'text/javascript', body: stale }) : route.continue()));
+    await login(page, 'U-C3', '730194');
+    // Khởi động và trang chủ vẫn chạy (không có ô Chờ bạn xử lý, không có số), không màn lỗi toàn app
+    assert.equal(await page.locator('.pending-me').count(), 0);
+    // Màn cần hàm mới (Công việc) lỗi → có nút Tải lại bản mới
+    await go(page, '#/work');
+    await page.waitForSelector('[data-reload-fresh]', { timeout: 15000 });
+    serveStale = false;
+    await page.click('[data-reload-fresh]');
+    await page.waitForFunction(() => document.querySelector('.view') && !document.querySelector('[data-reload-fresh]') && document.querySelector('.group-title, .wk-counts'), null, { timeout: 20000 });
+    assert.equal(await page.locator('[data-reload-fresh]').count(), 0);
   } finally { await app.close(); }
 });

@@ -1,7 +1,7 @@
 // Service Worker của M&E — phạm vi thư mục của trang (/ME/ THẬT, /ME-thu/ THỬ); chỉ quản lý cache của chính trang này
 // (me-shell-* ở /ME/, me_thu-shell-* ở /ME-thu/ — cùng quy tắc storageNs trong js/core.js), không xóa cache của trang kia.
-const VERSION = '1.0.0-d2.8';
-const BUILD_HASH = '3d920e3618a0'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const VERSION = '1.0.0-d2.9';
+const BUILD_HASH = '6c5c9fb05a0f'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
@@ -19,8 +19,19 @@ const FILES = [
   'assets/brand/logo57-tile.svg', 'assets/bg/factory.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
 ];
 
+// Tải vỏ app từ máy chủ gốc theo mã bản (?v=BUILD_HASH, lưu dưới tên tệp thường): ngay sau khi phát hành, CDN của
+// GitHub Pages có thể còn trả tệp cũ vài phút → không có ?v thì cache bản mới lẫn tệp cũ (vd app.js mới + work.js cũ).
+// Một tệp lỗi → cài đặt thất bại, giữ bản đang chạy, trình duyệt thử lại lần mở sau.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES.map((f) => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(SHELL);
+    await Promise.all(FILES.map(async (f) => {
+      const r = await fetch(new Request(f + (f.includes('?') ? '&' : '?') + 'v=' + BUILD_HASH, { cache: 'reload' }));
+      if (!r.ok) throw new Error('precache ' + f + ' ' + r.status);
+      await c.put(new Request(f), r);
+    }));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {

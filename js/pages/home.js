@@ -144,8 +144,10 @@ async function todayWorkHtml() {
 /** Ô "Chờ bạn xử lý" (C3/C4, Đợt 2): phiếu chờ nghiệm thu, đề nghị vật tư chờ duyệt */
 async function pendingHtml() {
   if (!dot2()) return '';
-  const { pendingForMe, pendingPanelHtml } = await import('../work.js');
-  return pendingPanelHtml(await pendingForMe());
+  try {
+    const m = await import('../work.js');
+    return typeof m.pendingForMe === 'function' ? m.pendingPanelHtml(await m.pendingForMe()) : '';
+  } catch (e) { console.warn(e); return ''; }
 }
 
 export async function renderHome(view, { shell }) {

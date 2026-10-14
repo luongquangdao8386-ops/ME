@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d2.8 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d2.9 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
