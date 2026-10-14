@@ -1,5 +1,5 @@
 // Giao diện dùng chung và các màn đăng nhập (CM-01/WEB-CM-01), đổi PIN, mở khóa ngoại tuyến
-import { bi, biText, esc, L, execUrl, isValidExecUrl, ls, resMsg, session, fmtDateTime, deviceInfo } from './core.js';
+import { bi, biText, esc, L, execUrl, EXEC_FIXED, isValidExecUrl, ls, resMsg, session, fmtDateTime, deviceInfo } from './core.js';
 import { login, changePin, offlineUnlock, getVerifier, pinWeakReason, isSharedDevice, isIosSafariTab } from './auth.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -120,7 +120,9 @@ export function brandHtml() {
     <div class="brand-text"><div class="brand-name">M&amp;E</div><div class="brand-sub">机电管理</div></div></div>`;
 }
 
+/** Ô nhập link /exec tạm: chỉ khi config.js để trống (máy thử của người code); THỬ/THẬT có link cố định, không cho đổi */
 function serverUrlBlock() {
+  if (EXEC_FIXED) return '';
   const cur = execUrl();
   return `<details class="server-url" ${cur ? '' : 'open'}>
     <summary>${bi('server_url')}${cur ? '' : ` <span class="tag warn">${bi('server_url_missing')}</span>`}</summary>
@@ -195,7 +197,7 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
   const el = h(`<div class="login-screen">
     <div class="login-hero">${brandHtml()}</div>
     <form class="login-card" novalidate>
-      <h1>${bi('login')}</h1>
+      <h1>${bi('login')}${ls.get('env') === 'THU' ? ` <span class="tag env">${bi('env_test')}</span>` : ''}</h1>
       ${reason ? `<p class="banner warn">${reason}</p>` : ''}
       ${isIosSafariTab() ? `<p class="banner info">${bi('safari_tab')}</p>` : ''}
       <label for="emp">${bi('employee_code')}</label>
@@ -216,16 +218,18 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
   const last = ls.get('last_employee_code');
   if (last) $('#emp', el).value = last;
   $('#forgot', el).addEventListener('click', () => { $('#forgot-help', el).hidden = false; });
-  $('#save-url', el).addEventListener('click', () => {
-    const u = $('#exec-url', el).value.trim();
-    if (!isValidExecUrl(u)) { $('#url-err', el).hidden = false; return; }
-    ls.set('exec_url', u);
-    $('#url-err', el).hidden = true;
-    toast(bi('save') + ' ✓', 'ok');
-    renderLogin(root, { onLoggedIn, onMustChange });
-  });
-  // Enter trong ô link /exec = Lưu (không gửi form đăng nhập)
-  $('#exec-url', el).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#save-url', el).click(); } });
+  if ($('#save-url', el)) {
+    $('#save-url', el).addEventListener('click', () => {
+      const u = $('#exec-url', el).value.trim();
+      if (!isValidExecUrl(u)) { $('#url-err', el).hidden = false; return; }
+      ls.set('exec_url', u);
+      $('#url-err', el).hidden = true;
+      toast(bi('save') + ' ✓', 'ok');
+      renderLogin(root, { onLoggedIn, onMustChange });
+    });
+    // Enter trong ô link /exec = Lưu (không gửi form đăng nhập)
+    $('#exec-url', el).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#save-url', el).click(); } });
+  }
   const pinInp = $('#pin', el);
   pinInp.addEventListener('input', () => { pinInp.value = pinInp.value.replace(/\D/g, '').slice(0, 6); });
   // Một lần bấm là đủ: nút giữ trạng thái đang chạy (và bỏ qua bấm thêm) cho tới khi vào hẳn app

@@ -135,6 +135,11 @@ export async function openResolved(r) {
 
 function registerRoutes() {
   const lazy = (mod, fn) => async (view, ctx) => { const m = await import(mod); return m[fn](view, ctx); };
+  // Bàn thử PoC và tem thử chỉ có ở máy chủ THỬ (6.7: gỡ ở THẬT); máy chủ THẬT cũng trả FEATURE_NOT_ENABLED cho poc.*
+  const testOnly = (fn) => async (view, ctx) => {
+    if ((await bootData()).env !== 'THU') { navigate('/', { replace: true }); return; }
+    return fn(view, ctx);
+  };
   route('/', lazy('./pages/home.js', 'renderHome'), { nav: 'home' });
   route('/work', lazy('./pages/misc.js', 'renderComingSoon'), { nav: 'work' });
   route('/alerts', lazy('./pages/alerts.js', 'renderAlerts'), { nav: 'alerts' });
@@ -142,7 +147,7 @@ function registerRoutes() {
   route('/account', lazy('./pages/account.js', 'renderAccount'), { nav: 'account' });
   route('/account/drafts', lazy('./pages/drafts.js', 'renderDrafts'), { nav: 'account' });
   route('/account/conflict/:op', lazy('./pages/drafts.js', 'renderConflict'), { nav: 'account' });
-  route('/poc', lazy('./pages/misc.js', 'renderPocPage'), { nav: 'account' });
+  route('/poc', testOnly(lazy('./pages/misc.js', 'renderPocPage')), { nav: 'account' });
   route('/equipment', lazy('./pages/equipment.js', 'renderEquipmentList'), { nav: 'equipment' });
   route('/equipment/new', lazy('./pages/equipment.js', 'renderEquipmentForm'), { nav: 'equipment' });
   route('/equipment/:id', lazy('./pages/equipment.js', 'renderEquipment'), { nav: 'equipment' });
@@ -174,7 +179,7 @@ function registerRoutes() {
   route('/qr/:type/:id', lazy('./pages/misc.js', 'renderQrView'), { nav: '' });
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
   route('/excel/:key', lazy('./pages/excel.js', 'renderExcel'), { nav: '' });
-  route('/labels', async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }, { nav: 'account' });
+  route('/labels', testOnly(async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }), { nav: 'account' });
   for (const m of MODULES) if (m.dot > 1) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
   route('/r/:key', async (view, ctx) => {
     const r = await resolveScan({ kind: 'qr', key: ctx.params.key });

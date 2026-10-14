@@ -1,8 +1,21 @@
 // Cấu hình phía app (phụ lục 1.5 mục 2.4). Chỉ 4 giá trị, không có bí mật.
-// EXEC_URL: dán link /exec sau khi triển khai Apps Script (hoặc nhập tạm ở màn đăng nhập khi thử PoC).
-window.ME_CONFIG = {
-  APP_BASE_URL: 'https://luongquangdao8386-ops.github.io/ME/',
-  EXEC_URL: 'https://script.google.com/macros/s/AKfycbx1VfL34FkUruqbza59AzLrKWvNhd3YC9UkKGnQC5sooaqA6VKn9XCwuAxAhBYOpMYh/exec',
-  API_CONTRACT_VERSION: '1.0',
-  BUILD_VERSION: '1.0.0-d1.20'
-};
+// Cùng một mã chạy ở hai trang; app chọn máy chủ theo thư mục của trang:
+//   /ME/     THẬT — repo ME, nhánh main (APP_BASE_URL chính thức, in trên tem QR)
+//   /ME-thu/ THỬ  — repo ME-thu (bản sao mã), chỉ dữ liệu mẫu
+// Trang khác (máy thử của người code): để trống, nhập link /exec tạm ở màn đăng nhập.
+(function () {
+  var THU = 'https://script.google.com/macros/s/AKfycbx1VfL34FkUruqbza59AzLrKWvNhd3YC9UkKGnQC5sooaqA6VKn9XCwuAxAhBYOpMYh/exec';
+  var SITES = {
+    // Chưa có link /exec THẬT: tạm trỏ máy chủ THỬ (đổi khi dựng xong THẬT, HUONG_DAN Phần F)
+    '/ME/': { base: 'https://luongquangdao8386-ops.github.io/ME/', exec: THU },
+    '/ME-thu/': { base: 'https://luongquangdao8386-ops.github.io/ME-thu/', exec: THU }
+  };
+  var m = /^\/[^/]+\//.exec(location.pathname);
+  var site = (m && SITES[m[0]]) || { base: '', exec: '' };
+  window.ME_CONFIG = {
+    APP_BASE_URL: site.base,
+    EXEC_URL: site.exec,
+    API_CONTRACT_VERSION: '1.0',
+    BUILD_VERSION: '1.0.0-d1.21'
+  };
+})();

@@ -1,5 +1,6 @@
 // Lõi phía app: cấu hình, UUID, định dạng, nhãn song ngữ, IndexedDB, gọi máy chủ.
 // Mọi tên lưu trữ có tiền tố me (phụ lục 1.5 mục 2.1): IndexedDB me_*, Cache me-*, localStorage me.*
+// THỬ (/ME-thu/) và THẬT (/ME/) cùng origin github.io: tiền tố theo đường dẫn trang (storageNs) để hai app không đụng nhau.
 
 import { DICT } from './dict.js';
 
@@ -8,19 +9,44 @@ export const APP_BASE_URL = CFG.APP_BASE_URL || (location.origin + location.path
 export const BUILD_VERSION = CFG.BUILD_VERSION || '0.0.0';
 export const API_CONTRACT_VERSION = CFG.API_CONTRACT_VERSION || '1.0';
 
+/**
+ * Tiền tố bộ nhớ theo thư mục đầu của đường dẫn: /ME/ → "me" (giữ tên cũ), /ME-thu/ → "me_thu".
+ * Thư mục không bắt đầu bằng "me" (máy thử cục bộ) dùng "me". sw.js tính cùng quy tắc.
+ */
+export function storageNs(pathname) {
+  const m = /^\/([^/]+)\//.exec(pathname || '');
+  const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
+  return seg.startsWith('me') ? seg : 'me';
+}
+export const NS = storageNs(location.pathname);
+/** Tên thật của IndexedDB: me_auth → me_thu_auth ở trang THỬ */
+export function dbName(name) { return NS === 'me' ? name : name.replace(/^me_/, NS + '_'); }
+
 /* ---------------- localStorage an toàn (khóa me.*) ---------------- */
+const KP = NS + '.';
 export const ls = {
-  get(k) { try { return localStorage.getItem('me.' + k); } catch (e) { return null; } },
-  set(k, v) { try { localStorage.setItem('me.' + k, v); } catch (e) { /* bỏ qua */ } },
-  del(k) { try { localStorage.removeItem('me.' + k); } catch (e) { /* bỏ qua */ } }
+  get(k) { try { return localStorage.getItem(KP + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(KP + k, v); } catch (e) { /* bỏ qua */ } },
+  del(k) { try { localStorage.removeItem(KP + k); } catch (e) { /* bỏ qua */ } }
 };
 export const ss = {
-  get(k) { try { return sessionStorage.getItem('me.' + k); } catch (e) { return null; } },
-  set(k, v) { try { sessionStorage.setItem('me.' + k, v); } catch (e) { /* bỏ qua */ } },
-  del(k) { try { sessionStorage.removeItem('me.' + k); } catch (e) { /* bỏ qua */ } }
+  get(k) { try { return sessionStorage.getItem(KP + k); } catch (e) { return null; } },
+  set(k, v) { try { sessionStorage.setItem(KP + k, v); } catch (e) { /* bỏ qua */ } },
+  del(k) { try { sessionStorage.removeItem(KP + k); } catch (e) { /* bỏ qua */ } }
 };
 
-/** Link /exec: config.js trước; khi thử PoC cho phép nhập tạm (me.exec_url) */
+/** Tên tab và tên gợi ý khi thêm vào Màn hình chính: máy chủ THỬ thêm chữ THỬ để không nhầm với app THẬT trên cùng iPhone */
+export function applyEnvTitle(env) {
+  const t = env === 'THU' ? 'M&E THỬ' : 'M&E';
+  try {
+    const m = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (m) m.setAttribute('content', t);
+    if (/^M&E( THỬ)?$/.test(document.title)) document.title = t; // trong app, tiêu đề tab là tên màn (shell.js)
+  } catch (e) { /* bỏ qua */ }
+}
+
+/** Link /exec cố định trong config.js; chỉ khi config.js để trống (máy thử của người code) mới cho nhập tạm (me.exec_url) */
+export const EXEC_FIXED = !!CFG.EXEC_URL;
 export function execUrl() {
   return CFG.EXEC_URL || ls.get('exec_url') || '';
 }
@@ -161,7 +187,7 @@ const dbCache = {};
 function openDb(name) {
   if (dbCache[name]) return dbCache[name];
   const p = new Promise((resolve, reject) => {
-    const req = indexedDB.open(name, DBS[name].v);
+    const req = indexedDB.open(dbName(name), DBS[name].v);
     req.onupgradeneeded = () => {
       const db = req.result;
       DBS[name].stores.forEach((s) => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s); });

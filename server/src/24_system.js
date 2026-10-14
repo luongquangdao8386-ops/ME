@@ -304,6 +304,9 @@ function recordTriggerRun_(fn, startMs) {
   } catch (e) { /* không chặn trigger */ }
 }
 
+var TEMP_PROP_KEYS_ = ['SETUP_OWNER_CODE', 'SETUP_OWNER_NAME', 'SETUP_OWNER_TEMP_PIN', 'OWNER_RESET_TEMP_PIN', 'POC_RESET_CODE', 'POC_RESET_TEMP_PIN', 'RESTORE_SOURCE_ID'];
+var TEST_PROP_KEYS_ = ['TEST_TODAY', 'TEST_SESSION_SECONDS', 'TEST_MT_FAIL'];
+
 /** Kết quả kiểm tra: [{key, ok: 'OK'|'WARN', value, note}] */
 function healthRows_() {
   var rows = [];
@@ -315,6 +318,9 @@ function healthRows_() {
   add('server_version', true, SERVER_VERSION);
   add('dataset_epoch', !!props.dataset_epoch, String(props.dataset_epoch || '').slice(0, 8));
   add('env', true, envName_());
+  // Khóa đặt tay tạm thời phải được xóa sau khi dùng; ở THẬT không được còn khóa giả lập TEST_*
+  var leftover = TEMP_PROP_KEYS_.concat(isTestEnv_() ? [] : TEST_PROP_KEYS_).filter(function (k) { return prop_(k) !== null && prop_(k) !== ''; });
+  add('temp_props', !leftover.length, leftover.join(', '), leftover.length ? 'Xóa ở Cài đặt dự án → Thuộc tính tập lệnh' : '');
   add('maintenance', !props.maintenance_mode, props.maintenance_mode ? 'ON' : 'OFF');
   var trig = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
   var missing = TRIGGER_FUNCS_.filter(function (f) { return trig.indexOf(f) < 0; });

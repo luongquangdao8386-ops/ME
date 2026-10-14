@@ -1,7 +1,14 @@
-// Service Worker của M&E — phạm vi /ME/; chỉ quản lý cache tên me-shell-* (phụ lục 1.5 mục 2.1)
-const VERSION = '1.0.0-d1.20';
-const BUILD_HASH = '265ebd9777f1'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
-const SHELL = 'me-shell-' + VERSION + '-' + BUILD_HASH;
+// Service Worker của M&E — phạm vi thư mục của trang (/ME/ THẬT, /ME-thu/ THỬ); chỉ quản lý cache của chính trang này
+// (me-shell-* ở /ME/, me_thu-shell-* ở /ME-thu/ — cùng quy tắc storageNs trong js/core.js), không xóa cache của trang kia.
+const VERSION = '1.0.0-d1.21';
+const BUILD_HASH = '676d19d8e0f6'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const NS = (() => {
+  const m = /^\/([^/]+)\//.exec(self.location.pathname);
+  const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
+  return seg.startsWith('me') ? seg : 'me';
+})();
+const PREFIX = NS + '-shell-';
+const SHELL = PREFIX + VERSION + '-' + BUILD_HASH;
 const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
   'js/main.js', 'js/core.js', 'js/dict.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/poc.js', 'js/scan.js', 'js/media.js', 'js/offline-files.js', 'js/labels.js', 'js/qr-worker.js',
@@ -17,7 +24,7 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k.startsWith('me-shell-') && k !== SHELL).map((k) => caches.delete(k))))
+    .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== SHELL).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

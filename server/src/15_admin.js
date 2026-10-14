@@ -43,9 +43,12 @@ function setup() {
     log_('Đã cài đặt trước đó — không làm gì. Muốn thêm sheet/cột thì chạy migrateSchema.');
     return;
   }
-  if (!props.getProperty('ENV')) props.setProperty('ENV', 'THU');
-  var env = props.getProperty('ENV');
-  if (env !== 'THU' && env !== 'THAT') throw new Error('ENV phải là THU hoặc THAT');
+  // ENV đặt tay trước setup (3.14): quên đặt ở dự án THẬT thì THẬT chạy như THỬ (TEST_*, Bàn thử PoC) — nên bắt buộc
+  var env = String(props.getProperty('ENV') || '').trim();
+  if (env !== 'THU' && env !== 'THAT') {
+    throw new Error('Chưa đặt thuộc tính ENV (hoặc sai). Cài đặt dự án → Thuộc tính tập lệnh → thêm ENV = THAT (máy chủ dùng thật) hoặc THU (máy chủ thử), rồi chạy lại setup.');
+  }
+  props.setProperty('ENV', env);
   adminSetupSecrets();
   var suffix = env === 'THU' ? '_THU' : '';
   var parent = DriveApp.createFolder(NAME_PREFIX + 'HeThong' + suffix);
@@ -182,6 +185,36 @@ function adminSetupOwner() {
   ['SETUP_OWNER_CODE', 'SETUP_OWNER_NAME', 'SETUP_OWNER_TEMP_PIN'].forEach(delProp_);
   if (created === 'EXISTS') log_('Đã có owner đang hoạt động — không tạo thêm. Đã xóa 3 khóa SETUP_OWNER_*.');
   else log_('Đã tạo owner ' + code + ' (cấp 4). Đăng nhập bằng PIN tạm trong 72 giờ, app sẽ bắt đổi PIN. Đã xóa 3 khóa SETUP_OWNER_*.');
+}
+
+/**
+ * Owner quên PIN (cả THỬ lẫn THẬT): trong app không ai được động tới owner trừ chính owner (4.4.16 ⁹),
+ * nên người giữ tài khoản Google M&E cấp PIN tạm từ trình soạn. Đặt OWNER_RESET_TEMP_PIN (6 số) rồi chạy hàm này;
+ * khóa tự xóa ngay, không ghi PIN vào log. Owner đăng nhập bằng PIN tạm trong 72 giờ và phải đổi PIN; mọi phiên cũ bị thu hồi.
+ */
+function adminResetOwnerPin() {
+  if (!prop_('BUSINESS_SPREADSHEET_ID')) throw new Error('Chưa setup — chạy setup trước.');
+  var pin = trimStr_(prop_('OWNER_RESET_TEMP_PIN'));
+  delProp_('OWNER_RESET_TEMP_PIN');
+  if (!pin) throw new Error('Thiếu OWNER_RESET_TEMP_PIN (6 số) trong Thuộc tính tập lệnh.');
+  dbReset_();
+  var code = withWriteLock_(function () {
+    var owners = readRows_('Users').filter(function (u) { return u.is_system_owner && Number(u.role_level) === 4; });
+    if (!owners.length) throw new Error('Chưa có owner — dùng adminSetupOwner.');
+    if (owners.length > 1) throw new Error('Có hơn một owner — sửa tay sheet Users trước.');
+    var u = owners[0];
+    var weak = pinWeakReason_(pin, u.employee_code, null);
+    if (weak) throw new Error('PIN tạm không hợp lệ hoặc quá dễ đoán (' + weak + '). Chọn 6 số khác.');
+    var rec = newPinRecord_(pin);
+    bumpAuthVersion_(u, {
+      pin_hash: rec.pin_hash, salt: rec.salt, pin_hash_version: rec.pin_hash_version, must_change_pin: true,
+      temp_pin_expires_at: isoVN_(new Date(now_().getTime() + setting_('temp_pin_hours') * 3600000)),
+      failed_attempts: 0, failed_window_started_at: '', locked_until: '', active: true
+    });
+    writeAudit_({ user_id: SYSTEM_USER, action: 'user.resetPin', entity_type: 'USER', entity_id: u.user_id, before_json: null, after_json: { temp_pin_issued: true, by: 'adminResetOwnerPin' }, auth_basis: 'OWNER' });
+    return u.employee_code;
+  });
+  log_('Đã cấp PIN tạm cho owner ' + code + ' (hạn 72 giờ). Mọi phiên cũ của owner đã bị thu hồi; đăng nhập rồi đổi PIN ngay. Đã xóa OWNER_RESET_TEMP_PIN.');
 }
 
 var TRIGGER_FUNCS_ = ['sendExpiryDigest', 'runBackgroundJobs', 'backupData'];

@@ -4,13 +4,14 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d1.20';
+export const APP_VERSION = '1.0.0-d1.21';
 
 export const uuid = () => crypto.randomUUID();
 
 /** Máy chủ đã setup + owner (PIN tạm) */
-export function freshServer() {
+export function freshServer({ envName = 'THU' } = {}) {
   const env = loadServer();
+  env.props.setProperty('ENV', envName);
   env.g.setup();
   env.props.setProperty('SETUP_OWNER_CODE', OWNER_CODE);
   env.props.setProperty('SETUP_OWNER_NAME', 'Chủ hệ thống');

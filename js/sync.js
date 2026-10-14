@@ -1,5 +1,5 @@
 // Đồng bộ: bootstrap, changes, hàng chờ offline (phụ lục 1.5 mục 3.15, 1.4 §14)
-import { api, session, idb, uuid, isoNowVN, todayVN } from './core.js';
+import { api, session, idb, ls, uuid, isoNowVN, todayVN, applyEnvTitle } from './core.js';
 import { pruneOfflineFiles } from './offline-files.js';
 
 const STOP_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'SYSTEM_MAINTENANCE', 'MUST_CHANGE_PIN', 'CLIENT_UPDATE_REQUIRED', 'QUOTA_EXCEEDED']);
@@ -29,6 +29,8 @@ export async function bootstrap({ onPage } = {}) {
   session.settings = first.settings || {};
   session.settings.__today_offset_days = todayOffset(first.server_today);
   await setMeta('bootstrap', { user: first.user, subroles: first.subroles, settings: first.settings, permissions: first.permissions, env: first.env, server_version: first.server_version });
+  ls.set('env', first.env || '');
+  applyEnvTitle(first.env);
   await setMeta('cursor', cursor);
   await setMeta('epoch', session.epoch);
   await setMeta('last_sync', isoNowVN());

@@ -1,6 +1,6 @@
 // Khởi động app M&E: Service Worker, phiên, mở offline (2.5), đăng nhập, vào khung app
-import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN } from './core.js';
-import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData } from './auth.js';
+import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN, applyEnvTitle } from './core.js';
+import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
 import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $ } from './ui.js';
@@ -9,6 +9,7 @@ import { stopRouter } from './router.js';
 import { invalidate } from './data.js';
 
 const root = document.getElementById('app');
+applyEnvTitle(ls.get('env'));
 
 // Ghi lại vi phạm CSP (NT1-08, P-15)
 window.__meCsp = [];
@@ -176,8 +177,10 @@ import('./core.js').then(({ onApiEvent }) => onApiEvent(async (r) => {
 
 async function start() {
   const hash = location.hash || '';
-  if (hash.startsWith('#/labels')) { await loadSession(); const { renderLabels } = await import('./poc.js'); return renderLabels(root); }
+  if (hash.startsWith('#/labels') && await isTestServer()) { await loadSession(); const { renderLabels } = await import('./poc.js'); return renderLabels(root); }
   await loadSession();
+  // Trang đã đổi máy chủ (THỬ → THẬT): dữ liệu của máy chủ cũ không dùng được nữa
+  if (await checkServerBinding()) { applyEnvTitle(''); return showLogin(bi('auth.server_changed')); }
   const boot = await getMeta('bootstrap');
   if (boot) { session.settings = boot.settings || {}; if (!session.user) session.user = boot.user; }
   // Máy dùng chung mà không còn phiên: xóa cache nghiệp vụ của người trước (2.5)
@@ -238,9 +241,15 @@ async function start() {
   await goApp(false); // enterApp tự gửi nháp của người này ở nền
 }
 
-window.addEventListener('hashchange', () => {
-  if (location.hash.startsWith('#/labels') && !app.shell) import('./poc.js').then((m) => m.renderLabels(root));
+window.addEventListener('hashchange', async () => {
+  if (location.hash.startsWith('#/labels') && !app.shell && await isTestServer()) import('./poc.js').then((m) => m.renderLabels(root));
 });
+
+/** Trang tem thử (PoC) chỉ mở khi máy đã từng kết nối máy chủ THỬ */
+async function isTestServer() {
+  const b = await getMeta('bootstrap');
+  return !!b && b.env === 'THU';
+}
 
 start().catch((e) => {
   root.innerHTML = `<div class="page narrow"><p class="banner warn">${esc(e && e.message)}</p></div>`;

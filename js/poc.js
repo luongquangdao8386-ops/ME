@@ -1,7 +1,7 @@
 // Bàn thử Bước 0 — PoC (phụ lục 1.5 mục 6.2). Mỗi mục ghi kết quả + số đo; xuất báo cáo để gửi lại.
 import {
   api, rawPost, envelope, session, idb, ls, uuid, bi, biText, esc, resMsg, fmtNumber, fmtDateTime, fmtDate, isoNowVN, todayVN,
-  deviceInfo, execUrl, BUILD_VERSION, APP_BASE_URL, b64url
+  deviceInfo, execUrl, BUILD_VERSION, APP_BASE_URL, b64url, NS
 } from './core.js';
 import { bootstrap, pullChanges, getRecords, getMeta, setMeta, enqueue, queueItems, doneItems, flushQueue, upsertLocal, exportBackup } from './sync.js';
 import { pbkdf2, getVerifier, isIosSafariTab } from './auth.js';
@@ -615,7 +615,7 @@ async function p15inventory() {
   out('P-15', `IndexedDB: ${esc(dbs.join(', ') || '(trình duyệt không liệt kê)')}`);
   const regs = navigator.serviceWorker ? await navigator.serviceWorker.getRegistrations() : [];
   out('P-15', `Service Worker: ${esc(regs.map((r) => new URL(r.scope).pathname).join(', ') || '—')}`);
-  const foreign = caches_.filter((c) => !c.startsWith('me-')).length + dbs.filter((d) => d && !d.startsWith('me_')).length;
+  const foreign = caches_.filter((c) => !c.startsWith('me')).length + dbs.filter((d) => d && !d.startsWith('me')).length;
   const prev = results['P-15'] ? results['P-15'].metrics : {};
   const m = { ...prev, csp_violations: csp.length, other_app_storage: foreign, sw_scopes: regs.map((r) => new URL(r.scope).pathname) };
   await rec('P-15', csp.length ? 'fail' : (m.marker_ok ? 'pass' : 'info'), `CSP ${csp.length ? '✗ ' + csp.length + ' vi phạm' : '✓'}, dữ liệu app khác trên cùng origin: ${foreign}, mốc sau khi đăng xuất Cơ Điện: ${m.marker_ok ? '✓' : m.marker_ok === false ? '✗' : '—'}`, m);
@@ -624,14 +624,14 @@ async function p15mark() {
   const v = uuid();
   ls.set('p15_marker', v);
   await idb.put('me_poc', 'meta', 'p15_marker', v);
-  if (window.caches) { const c = await caches.open('me-p15'); await c.put('p15-marker', new Response(v)); }
+  if (window.caches) { const c = await caches.open(NS + '-p15'); await c.put('p15-marker', new Response(v)); }
   out('P-15', `Đã ghi mốc ${esc(v.slice(0, 8))}. Giờ mở app Cơ Điện trên cùng máy/trình duyệt, đăng xuất ở đó, rồi quay lại bấm "Kiểm tra mốc".`);
 }
 async function p15check() {
   const v = ls.get('p15_marker');
   const i = await idb.get('me_poc', 'meta', 'p15_marker').catch(() => null);
   let c = null;
-  if (window.caches) { const cc = await caches.open('me-p15'); const r = await cc.match('p15-marker'); c = r ? await r.text() : null; }
+  if (window.caches) { const cc = await caches.open(NS + '-p15'); const r = await cc.match('p15-marker'); c = r ? await r.text() : null; }
   const ok = !!v && v === i && v === c;
   out('P-15', `Mốc: localStorage ${v ? '✓' : '✗'} · IndexedDB ${i === v && v ? '✓' : '✗'} · Cache ${c === v && v ? '✓' : '✗'}`);
   const prev = results['P-15'] ? results['P-15'].metrics : {};
@@ -779,7 +779,7 @@ const POC_ORDER = ['P-01', 'P-02', 'P-03', 'P-04', 'P-05', 'P-06', 'P-07', 'P-08
 /* ================= Vẽ trang ================= */
 /** Mã băm vỏ app đang chạy (tên cache me-shell-<bản>-<mã băm>) để biết máy đã nhận bản mới chưa */
 async function shellHash() {
-  try { const k = (await caches.keys()).find((x) => x.startsWith('me-shell-')); return k ? k.split('-').pop() : ''; } catch (e) { return ''; }
+  try { const k = (await caches.keys()).find((x) => x.startsWith(NS + '-shell-')); return k ? k.split('-').pop() : ''; } catch (e) { return ''; }
 }
 
 export async function renderPoc(main, { isOwner, offline }) {

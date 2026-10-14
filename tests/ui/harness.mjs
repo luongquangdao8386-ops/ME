@@ -10,18 +10,25 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 export const EXEC = 'https://script.google.com/macros/s/TESTONLY_fake_deployment_id_000/exec';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 
-export function startStatic() {
+/** config(site, src): nội dung config.js cho trang site ('ME' | 'ME-thu'); mặc định mọi link /exec → EXEC giả */
+export function startStatic({ config = null } = {}) {
   return new Promise((resolve) => {
     const srv = http.createServer((req, res) => {
       const u = new URL(req.url, 'http://x');
-      if (!u.pathname.startsWith('/ME/')) { res.writeHead(404); res.end(); return; }
-      let p = decodeURIComponent(u.pathname.slice(4)) || 'index.html';
+      // /ME/ (THẬT) và /ME-thu/ (THỬ) phục vụ cùng một mã như hai trang GitHub Pages
+      const site = /^\/(ME|ME-thu)\//.exec(u.pathname);
+      if (!site) { res.writeHead(404); res.end(); return; }
+      let p = decodeURIComponent(u.pathname.slice(site[0].length)) || 'index.html';
       if (p.endsWith('/')) p += 'index.html';
       const f = path.join(ROOT, p);
       if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); res.end('nf'); return; }
       res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream', 'cache-control': 'no-store' });
       // config.js trỏ tới /exec thật: trong test thay bằng link giả để mọi request đi vào máy chủ giả lập
-      if (p === 'config.js') { res.end(fs.readFileSync(f, 'utf8').replace(/EXEC_URL: '[^']*'/, `EXEC_URL: '${EXEC}'`)); return; }
+      if (p === 'config.js') {
+        const src = fs.readFileSync(f, 'utf8');
+        res.end(config ? config(site[1], src) : src.replace(/https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec/g, EXEC));
+        return;
+      }
       fs.createReadStream(f).pipe(res);
     });
     srv.listen(0, '127.0.0.1', () => resolve({ srv, base: `http://127.0.0.1:${srv.address().port}/ME/` }));
