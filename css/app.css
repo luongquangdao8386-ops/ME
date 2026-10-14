@@ -677,6 +677,15 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 @keyframes flash-ring { 0%, 60% { box-shadow: 0 0 0 4px rgba(192,57,43,0.55); } 100% { box-shadow: none; } }
 [data-field] { scroll-margin-top: 80px; }
 
+/* việc chờ tôi (C3/C4): số trên nút Công việc, ô Chờ bạn xử lý, dòng nhắc trong danh sách */
+.bnav-item, .side-item { position: relative; }
+.nav-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; font-variant-numeric: tabular-nums; }
+.side-item .nav-badge { position: static; margin-left: auto; }
+.pending-me .list li { padding: 0; }
+.pending-me .link-row { gap: 8px; flex-wrap: wrap; padding: 8px 0; }
+.pending-me .link-row .code { color: #1F5FBF; text-decoration: underline; }
+.pending-banner .link { display: inline; margin: 0 0 0 6px; padding: 0; min-height: 0; }
+
 /* mục còn thiếu để Gửi nghiệm thu: ngay dưới nút, bấm từng mục để tới ô */
 .issue-box { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; background: #FFF4D6; color: var(--amber); }
 .issue-box > .link { display: block; margin: 0; padding: 4px 0; min-height: 0; text-align: left; font-weight: 700; color: var(--amber); }

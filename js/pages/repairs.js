@@ -15,7 +15,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayRepair, localCreations, repairSubmitIssues, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, pickCached, REPAIR_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList
+  queueWork, mergeExecPayload, workerPick, pickCached, REPAIR_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList, repairSelfPeople, pendingForMe
 } from '../work.js';
 
 const st = { filter: 'OPEN', sev: '', q: '', page: 0 };
@@ -64,7 +64,9 @@ export async function renderRepairList(view, ctx) {
   const sevRank = (r) => SEVERITIES.indexOf(r.severity);
   const list = base.filter((r) => !FILTERS[st.filter] || FILTERS[st.filter].includes(r.status))
     .sort((a, b) => (st.filter === 'OPEN' ? sevRank(a) - sevRank(b) : 0) || String(b.reported_at || '').localeCompare(String(a.reported_at || '')));
-  const toolbar = `<div class="toolbar">
+  // Phiếu chờ tôi nghiệm thu nằm ở bộ lọc khác: nhắc ngay đầu danh sách (trưởng bộ phận mở Sửa chữa thấy "Đang mở 0")
+  const waitMe = st.filter === 'PENDING_ACCEPTANCE' ? 0 : (await pendingForMe()).filter((x) => x.kind === 'REPAIR').length;
+  const toolbar = `${waitMe ? `<p class="banner warn pending-banner">${bi('wk.pending_banner', { N: waitMe })} <button type="button" class="link small" data-f="PENDING_ACCEPTANCE">${bi('btn.view')}</button></p>` : ''}<div class="toolbar">
     <div class="search"><span>${ICON.search}</span><input id="rp-q" type="search" value="${esc(st.q)}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>
     <div class="chips">${Object.keys(FILTERS).map((k) => `<button type="button" class="chip${st.filter === k ? ' on' : ''}" data-f="${k}">${bi('rp.filter.' + k)} <span class="count">${count(k)}</span></button>`).join('')}</div>
     <div class="chips">${['', ...SEVERITIES].map((s) => `<button type="button" class="chip${st.sev === s ? ' on' : ''}" data-sev="${s}">${s ? bi('severity.' + s) : bi('rp.sev_all')}</button>`).join('')}</div>
@@ -323,7 +325,7 @@ export async function renderRepair(view, ctx) {
   const online = navigator.onLine;
   const usageData = localNew ? { usage: [] } : await workMatData('REPAIR', r);
   const issues = repairSubmitIssues(r, tasks);
-  const notSelf = ![r.reported_by, r.submitted_by, ...assignees].includes(u);
+  const notSelf = !repairSelfPeople(r, tasks0).includes(u);
   const showAccept = r.status === 'PENDING_ACCEPTANCE' && !r._local_submit && p.accept && notSelf;
   const queuedDocs = ops.filter((o) => o.action === 'doc.upload' && o.parent_id === r.repair_id && o.state !== 'REJECTED');
   const canEditReport = p.edit && r.status === 'REPORTED' && (lead || r.reported_by === u);

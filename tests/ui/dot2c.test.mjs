@@ -461,3 +461,55 @@ test('web: phiếu sửa máy không dừng đã Hoàn thành → mốc Hoạt �
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('C3 (web): trang chủ có ô "Chờ bạn xử lý" (phiếu sửa chờ nghiệm thu, đề nghị vật tư chờ duyệt), nút Công việc có số, Sửa chữa nhắc khi đang lọc "Đang mở"; KT (của mình) không bị nhắc', async () => {
+  const { env, c, kt, ktId, rid } = setup();
+  const mat = uuid();
+  assert.equal(c.write('material.create', { material_id: mat, name_vi: 'Lọc gió', base_unit: 'cái', is_equipment_component: false }).ok, true);
+  let r = env.rows('Repairs')[0];
+  assert.equal(c.write('repair.assign', { repair_id: rid, assignee_user_id: ktId }, { expected_version: r.record_version }).ok, true);
+  r = env.rows('Repairs')[0];
+  const t0 = env.g.isoVN_(new env.clock.Date());
+  let p = kt.write('repair.process', { repair_id: rid, repair_start_at: t0, repair_end_at: t0, restored_at: t0, test_run_result: 'PASS' }, { expected_version: r.record_version });
+  assert.equal(p.ok, true, JSON.stringify(p));
+  const req = uuid();
+  assert.equal(kt.write('matreq.create', { request_id: req, work_type: 'REPAIR', work_id: rid, lines: [{ request_line_id: uuid(), material_id: mat, requested_qty: 1 }] }).ok, true);
+  assert.equal(kt.write('matreq.submit', { request_id: req }, { expected_version: 1 }).ok, true);
+  p = kt.write('repair.submit', { repair_id: rid }, { expected_version: p.record_version });
+  assert.equal(p.ok, true, JSON.stringify(p));
+  const scCode = env.rows('Repairs')[0].repair_code, dnCode = env.rows('MaterialRequests')[0].request_code;
+  userClient(env, 'U-C3', 3, '730194');
+  const web = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = web;
+    await login(page, 'U-C3', '730194');
+    await page.waitForSelector('.pending-me', { timeout: 15000 });
+    const box = await page.textContent('.pending-me');
+    assert.ok(box.includes('Chờ bạn xử lý') && box.includes(scCode) && box.includes('Phiếu sửa chữa chờ nghiệm thu') && box.includes(dnCode) && box.includes('Đề nghị vật tư chờ duyệt'), box);
+    await page.waitForFunction(() => ((document.querySelector('.side-item[data-nav="work"] .nav-badge') || {}).textContent || '') === '2');
+    // Sửa chữa: đang lọc "Đang mở" → nhắc có phiếu chờ nghiệm thu, bấm Xem → lọc Chờ nghiệm thu
+    await go(page, '#/repairs');
+    await page.waitForSelector('.pending-banner');
+    assert.ok((await page.textContent('.pending-banner')).includes('Có 1 phiếu chờ bạn nghiệm thu'));
+    await page.click('.pending-banner [data-f="PENDING_ACCEPTANCE"]');
+    await page.waitForSelector('.chip.on[data-f="PENDING_ACCEPTANCE"]');
+    assert.equal(await page.locator('.pending-banner').count(), 0);
+    assert.ok((await page.textContent('.view')).includes(scCode));
+    // Bấm dòng trên trang chủ → mở đúng phiếu, có nút nghiệm thu
+    await go(page, '#/');
+    await page.waitForSelector('.pending-me');
+    await page.click(`.pending-me a[href="#/repairs/${rid}"]`);
+    await page.waitForSelector('#rp-accept', { timeout: 15000 });
+    assert.deepEqual(web.consoleErrors, []);
+  } finally { await web.close(); }
+  // KT: phiếu và đề nghị là của mình → không nhắc, không có số
+  const app = await openApp({ env, ...IPHONE });
+  try {
+    const { page } = app;
+    await login(page, 'U-KT', '583016');
+    await page.waitForTimeout(800);
+    assert.equal(await page.locator('.pending-me').count(), 0);
+    assert.equal(await page.locator('.bnav-item[data-nav="work"] .nav-badge').count(), 0);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

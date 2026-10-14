@@ -141,6 +141,13 @@ async function todayWorkHtml() {
     ${dot2() ? '' : `<p class="muted dim-line">${bi('home.wo_coming')} — ${bi('tag.coming_soon')}</p>`}</section>`;
 }
 
+/** Ô "Chờ bạn xử lý" (C3/C4, Đợt 2): phiếu chờ nghiệm thu, đề nghị vật tư chờ duyệt */
+async function pendingHtml() {
+  if (!dot2()) return '';
+  const { pendingForMe, pendingPanelHtml } = await import('../work.js');
+  return pendingPanelHtml(await pendingForMe());
+}
+
 export async function renderHome(view, { shell }) {
   shell.setScreen({ title: 'nav.home', home: true });
   const wide = isWide();
@@ -148,7 +155,7 @@ export async function renderHome(view, { shell }) {
   const html = `<div class="home">
     <div class="home-hero">${brandHtml()}<div class="home-who">${esc(u.display_name || '')} · ${esc(fmtDate(today()))}</div></div>
     <div class="home-body${wide ? ' wide' : ''}">
-      <div class="home-left">${await weekHtml()}${await deadlinesHtml()}</div>
+      <div class="home-left">${await pendingHtml()}${await weekHtml()}${await deadlinesHtml()}</div>
       <div class="home-right">${await gridHtml()}</div>
       ${wide ? `<div class="home-bottom">${await todayWorkHtml()}</div>` : ''}
     </div></div>`;

@@ -4,7 +4,7 @@ import { ICON, toTop, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { navigate } from '../router.js';
 import { can, roleLevel } from '../data.js';
-import { workItems, statusBadge, prioBadges, workTitle, eqText } from '../work.js';
+import { workItems, statusBadge, prioBadges, workTitle, eqText, pendingForMe, pendingPanelHtml } from '../work.js';
 
 const GROUPS = ['OVERDUE', 'TODAY', 'UPCOMING', 'PENDING_ACCEPTANCE'];
 const filt = { scope: null, kind: 'ALL', q: '', page: 0 };
@@ -72,7 +72,8 @@ export async function renderWork(view, ctx) {
         <div class="rec-badges">${prioBadges(x.rec, x.kind)} ${x.local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`).join('')}</div>`;
     }).join('');
   }
-  view.innerHTML = toolbar + `<div class="wk-counts muted small">${GROUPS.map((g) => `${bi('wk.group.' + g)}: <strong>${count(g)}</strong>`).join(' · ')}</div>` + body;
+  // Việc chờ tôi nghiệm thu/duyệt (C3/C4) lên đầu — số trên nút Công việc chỉ tới đây
+  view.innerHTML = pendingPanelHtml(await pendingForMe()) + toolbar + `<div class="wk-counts muted small">${GROUPS.map((g) => `${bi('wk.group.' + g)}: <strong>${count(g)}</strong>`).join(' · ')}</div>` + body;
   const again = () => renderWork(view, ctx);
   let tm = null;
   $('#wk-q', view).addEventListener('input', (e) => { filt.q = e.target.value; filt.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#wk-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });

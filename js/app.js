@@ -72,6 +72,11 @@ export async function updateSyncStatus() {
   const mine = q.filter((o) => o.user_id === (session.user && session.user.user_id) && o.dataset_epoch === session.epoch);
   const problems = mine.filter((o) => o.state === 'CONFLICT' || o.state === 'REJECTED').length;
   app.shell.setSync({ offline: app.offline || !navigator.onLine, lastSync: await getMeta('last_sync'), queued: mine.length - problems, problems });
+  // Số việc chờ tôi nghiệm thu/duyệt trên nút Công việc (C3/C4, Đợt 2)
+  if (RELEASED_DOT >= 2) {
+    const { pendingForMe } = await import('./work.js');
+    if (app.shell) app.shell.setBadge('work', (await pendingForMe().catch(() => [])).length);
+  }
 }
 
 let syncing = null;

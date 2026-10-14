@@ -131,6 +131,17 @@ export function mountShell(root, { env, onScan }) {
       if (hash !== screenHash) { screenHash = hash; view.scrollTop = 0; window.scrollTo(0, 0); }
     },
     setBackHandler(fn) { onBack = fn; },
+    /** Số trên nút điều hướng (Công việc: việc chờ tôi nghiệm thu/duyệt); 0 thì ẩn */
+    setBadge(key, n) {
+      $$(`[data-nav="${key}"]`, el).forEach((x) => {
+        let b = x.querySelector('.nav-badge');
+        if (!n) { if (b) b.remove(); return; }
+        if (!b) { b = document.createElement('span'); b.className = 'nav-badge'; x.appendChild(b); }
+        b.textContent = n > 99 ? '99+' : String(n);
+        b.setAttribute('aria-label', biText('wk.pending_count', { N: n }));
+        b.title = biText('wk.pending_count', { N: n });
+      });
+    },
     setActive(key) {
       $$('[data-nav]', el).forEach((x) => x.classList.toggle('active', x.dataset.nav === key));
     },

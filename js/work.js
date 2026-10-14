@@ -160,6 +160,67 @@ export function wireIssueList(view) {
   }));
 }
 
+/* ---------------- Không tự nghiệm thu (4.6) và việc chờ tôi ---------------- */
+
+/** Người không được nghiệm thu phiếu bảo trì: người được giao, người gửi, người lập (trừ SYSTEM), người sửa kết quả checklist */
+export function woSelfPeople(w, results) {
+  return [w.assignee_user_id, w.submitted_by, w.created_by === 'SYSTEM' ? '' : w.created_by,
+    ...results.filter((r) => r.updated_by && r.updated_by !== r.created_by).map((r) => r.updated_by)].filter(Boolean);
+}
+/** Người không được nghiệm thu phiếu sửa: người báo, người gửi, người phụ trách, người làm việc con */
+export function repairSelfPeople(r, tasks) {
+  return [r.reported_by, r.submitted_by, r.assignee_user_id, ...tasks.map((t) => t.assignee_user_id)].filter(Boolean);
+}
+
+/**
+ * Việc đang chờ tôi (C3/C4): phiếu BT/SC chờ nghiệm thu mà tôi được nghiệm thu, đề nghị vật tư chờ duyệt không phải của tôi.
+ * Đếm từ dữ liệu trên máy (đồng bộ xong là mới). Trả [{kind, code, sub, href, at}] cũ trước.
+ */
+export async function pendingForMe() {
+  const u = uid();
+  if (!u) return [];
+  const [cw, cr, cm] = [await can('maintenance.accept'), await can('repair.accept'), await can('matreq.approve')];
+  if (!cw && !cr && !cm) return [];
+  const eqs = await mapOf('EQUIPMENT');
+  const eqText0 = (id) => { const e = eqs.get(id); return e ? e.equipment_code : ''; };
+  const out = [];
+  const wos = await recs('WORK_ORDER');
+  const reps = await recs('REPAIR');
+  if (cw) {
+    const res = await recs('WO_RESULT');
+    for (const w of wos) {
+      if (w.status !== 'PENDING_ACCEPTANCE' || woSelfPeople(w, res.filter((r) => r.work_order_id === w.work_order_id)).includes(u)) continue;
+      out.push({ kind: 'WO', code: w.work_order_code, sub: eqText0(w.equipment_id), href: '/maintenance/wo/' + w.work_order_id, at: w.submitted_at || '' });
+    }
+  }
+  if (cr) {
+    const tasks = (await recs('REPAIR_TASK')).filter((t) => !t.archived_at);
+    for (const r of reps) {
+      if (r.status !== 'PENDING_ACCEPTANCE' || repairSelfPeople(r, tasks.filter((t) => t.repair_id === r.repair_id)).includes(u)) continue;
+      out.push({ kind: 'REPAIR', code: r.repair_code, sub: eqText0(r.equipment_id), href: '/repairs/' + r.repair_id, at: r.submitted_at || '' });
+    }
+  }
+  if (cm) {
+    for (const q of await recs('MATERIAL_REQUEST')) {
+      if (q.status !== 'PENDING_APPROVAL' || q.archived_at || q.requested_by === u || q.created_by === u) continue;
+      const w = q.work_type === 'REPAIR' ? reps.find((x) => x.repair_id === q.work_id) : wos.find((x) => x.work_order_id === q.work_id);
+      if (!w) continue;
+      const href = q.work_type === 'REPAIR' ? '/repairs/' + q.work_id : '/maintenance/wo/' + q.work_id;
+      out.push({ kind: 'MATREQ', code: q.request_code, sub: [w.repair_code || w.work_order_code, eqText0(w.equipment_id)].filter(Boolean).join(' · '), href, at: q.submitted_at || q.requested_at || '' });
+    }
+  }
+  return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+}
+
+/** Ô "Chờ bạn xử lý" (trang chủ, Công việc): mỗi dòng bấm tới phiếu có nút nghiệm thu/duyệt */
+export function pendingPanelHtml(items) {
+  if (!items.length) return '';
+  const label = { WO: 'wk.pending.wo', REPAIR: 'wk.pending.repair', MATREQ: 'wk.pending.matreq' };
+  return `<section class="card pending-me"><div class="card-head"><h2>${bi('wk.pending_me')} <span class="badge t-amber">${items.length}</span></h2></div>
+    <ul class="list">${items.slice(0, 8).map((x) => `<li><a class="link-row row" href="#${esc(x.href)}"><span class="code">${esc(x.code)}</span><span>${bi(label[x.kind])}</span>${x.sub ? `<span class="muted small">${esc(x.sub)}</span>` : ''}</a></li>`).join('')}</ul>
+    ${items.length > 8 ? `<p class="muted small">${bi('wk.pending_more', { N: items.length - 8 })}</p>` : ''}</section>`;
+}
+
 /* ---------------- Bước tiếp theo trên phiếu ---------------- */
 
 /**

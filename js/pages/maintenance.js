@@ -17,7 +17,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayWorkOrder, localCreations, woSubmitIssues, outOfRange, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList
+  queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList, woSelfPeople, pendingForMe
 } from '../work.js';
 
 const INTERVALS = ['DAY', 'MONTH', 'OPERATING_HOURS'];
@@ -121,7 +121,8 @@ async function woTab(wide) {
   const t = today();
   const list = base.filter((w) => !WO_FILTERS[st.woFilter] || WO_FILTERS[st.woFilter].includes(w.status))
     .sort((a, b) => (st.woFilter === 'COMPLETED' || st.woFilter === 'CANCELLED' ? String(b.due_date).localeCompare(String(a.due_date)) : String(a.due_date).localeCompare(String(b.due_date))) || String(a.work_order_code).localeCompare(String(b.work_order_code)));
-  const chips = `<div class="chips">${Object.keys(WO_FILTERS).map((k) => `<button type="button" class="chip${st.woFilter === k ? ' on' : ''}" data-wof="${k}">${bi('mt.filter.' + k)} <span class="count">${count(k)}</span></button>`).join('')}</div>
+  const waitMe = st.woFilter === 'PENDING_ACCEPTANCE' ? 0 : (await pendingForMe()).filter((x) => x.kind === 'WO').length;
+  const chips = `${waitMe ? `<p class="banner warn pending-banner">${bi('wk.pending_banner', { N: waitMe })} <button type="button" class="link small" data-wof="PENDING_ACCEPTANCE">${bi('btn.view')}</button></p>` : ''}<div class="chips">${Object.keys(WO_FILTERS).map((k) => `<button type="button" class="chip${st.woFilter === k ? ' on' : ''}" data-wof="${k}">${bi('mt.filter.' + k)} <span class="count">${count(k)}</span></button>`).join('')}</div>
     <p class="muted small">${bi('field.total', { N: list.length })}</p>`;
   if (!list.length) return chips + `<div class="card empty-state">${ICON.maintenance}<p class="muted">${bi('field.no_records')}</p></div>`;
   const overdue = (w) => WO_OPEN.has(w.status) && w.status !== 'PENDING_ACCEPTANCE' && daysBetween(t, w.due_date) < 0;
@@ -616,7 +617,7 @@ export async function renderWorkOrder(view, ctx) {
   const online = navigator.onLine;
   const usageData = await workMatData('WO', w);
   const chk = woSubmitIssues(w, results, usageData.usage);
-  const notSelf = ![w.assignee_user_id, w.submitted_by, w.created_by === 'SYSTEM' ? '' : w.created_by, ...results0.filter((r) => r.updated_by && r.updated_by !== r.created_by).map((r) => r.updated_by)].includes(u);
+  const notSelf = !woSelfPeople(w, results0).includes(u);
   const showAccept = w.status === 'PENDING_ACCEPTANCE' && !w._local_submit && p.accept && notSelf;
   // Bước tiếp theo: ai bấm gì; phiếu Nháp/Đã giao việc thì checklist và khung Thực hiện còn khóa tới khi bấm Bắt đầu làm
   const who = w.assignee_name || biText('field.not_set');
