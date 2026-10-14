@@ -110,12 +110,32 @@ async function previewFile(view, key, sheets, file, repaint) {
 /** Ghi lô theo khúc: khúc đầu hỏi PIN, khúc sau không hỏi (trong 30 phút) */
 async function commitBatch(repaint) {
   const id = state.batch;
+  const again = async () => {
+    let x = await writeOnline('import.commit', { import_batch_id: id });
+    if (x.code === 'REAUTH_REQUIRED') x = await writeWithPin('import.commit', { import_batch_id: id });
+    return x;
+  };
   let r = await writeWithPin('import.commit', { import_batch_id: id });
-  while (r.ok && r.data && r.data.status === 'PARTIAL' && r.data.remaining > 0) {
-    state.summary = { ...state.summary, ...r.data };
-    state.progress = bi('excel.committing', { N: r.data.committed, T: r.data.total_rows }); repaint();
-    r = await writeOnline('import.commit', { import_batch_id: id });
-    if (r.code === 'REAUTH_REQUIRED') r = await writeWithPin('import.commit', { import_batch_id: id });
+  for (let round = 0; round < 300; round++) {
+    if (r.ok && r.data && r.data.status === 'PARTIAL' && r.data.remaining > 0) {
+      state.summary = { ...state.summary, ...r.data };
+      state.progress = bi('excel.committing', { N: r.data.committed, T: r.data.total_rows }); repaint();
+      r = await again();
+      continue;
+    }
+    // Lượt ghi quá thời gian chờ (mạng chậm, máy chủ còn đang ghi): chờ lô hết "Đang ghi" rồi ghi tiếp, không bỏ dở
+    if (!r.ok && ['UNKNOWN_RESULT', 'NETWORK_ERROR', 'SERVER_BUSY'].includes(r.code) && navigator.onLine) {
+      state.progress = bi('excel.waiting_server'); repaint();
+      let s = null;
+      for (let i = 0; i < 24; i++) {
+        await new Promise((res) => setTimeout(res, 5000));
+        const q = await api('import.errors', { import_batch_id: id }, { retry: true });
+        if (q.ok) { s = q.data; if (s.status !== 'COMMITTING') break; }
+      }
+      if (s && ['PARTIAL', 'COMMITTING'].includes(s.status)) { r = await again(); continue; }
+      if (s && s.status === 'COMMITTED') r = { ok: true, data: s };
+    }
+    break;
   }
   state.progress = '';
   if (r.ok) { state.summary = { ...state.summary, ...r.data }; await afterCommit(); toast(bi('excel.committed', { N: r.data.committed }), 'ok'); } else if (r.code !== 'REAUTH_REQUIRED') await handleWriteError(r);

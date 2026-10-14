@@ -581,6 +581,7 @@ function importSummary_(ctx, b, reload, extra) {
     if (Object.keys(diff).length) changes.push({ sheet: np.s, row_number: r.row_number, code: cur[sh.code || 'code'] || '', diff: diff });
   });
   out.changes = changes;
+  if (['COMMITTING', 'PARTIAL', 'COMMITTED'].indexOf(b.status) >= 0) out.committed = rows.filter(function (r) { return r.validation_status === 'COMMITTED'; }).length;
   return out;
 }
 
@@ -797,6 +798,13 @@ function importCommit_(ctx) {
   assertImportCommit_(ctx, t.module);
   if (b0.dataset_epoch !== sysProps_().dataset_epoch) throw validationError_([fieldError_('import_batch_id', 'TEMPLATE_EPOCH')]);
   var rows0 = findAll_('ImportRows', 'import_batch_id', b0.import_batch_id);
+  // Gửi lại sau khi mất phản hồi mà lô đã xong: trả kết quả, không báo lỗi
+  if (b0.status === 'COMMITTED' && b0.approved_by === ctx.user.user_id) {
+    var done0 = projectBatch_(ctx, b0);
+    done0.committed = rows0.filter(function (r) { return r.validation_status === 'COMMITTED'; }).length;
+    done0.failed = 0; done0.remaining = 0; done0.continue_token = null; done0.errors = [];
+    return done0;
+  }
   var sensitive = batchSensitive_(t, rows0);
   // Mở hoặc tiếp tục lô
   withWriteLock_(function () {
@@ -832,6 +840,24 @@ function importCommit_(ctx) {
     var cid = (r.normalized_payload_json.r || {}).contract_id;
     if (byEntity[cid] && byEntity[cid].normalized_payload_json.s === 'contracts') (ceByContract[cid] = ceByContract[cid] || []).push(r);
   });
+  // Bỏ qua trước, một lượt cho cả lô: dòng sửa mà giá trị trùng hồ sơ hiện tại (đọc mỗi bảng một lần, ghi trạng thái một khối).
+  // Lô kiểm tra từ bản cũ (chưa có bước bỏ qua) hoặc hồ sơ đã được sửa giống file cũng xong nhanh.
+  var tableCache = {};
+  var curOf = function (sh, id) {
+    if (!tableCache[sh.table]) { var m = {}; readRows_(sh.table).forEach(function (x) { m[x[sh.id]] = x; }); tableCache[sh.table] = m; }
+    return tableCache[sh.table][id] || null;
+  };
+  var skipped = [];
+  pending.forEach(function (r) {
+    if (r.action !== 'UPDATE') return;
+    var sh = t.sheets.filter(function (s) { return s.name === r.normalized_payload_json.s; })[0];
+    if (!sh) return;
+    if (sh.table === 'Contracts' && (ceByContract[r.entity_id] || []).length) return; // hợp đồng ghi cùng thiết bị của nó
+    if (sh.table === 'ContractEquipment' && ceByContract[(r.normalized_payload_json.r || {}).contract_id]) return;
+    if (importRowUnchanged_(sh, r, curOf(sh, r.entity_id))) { r.validation_status = 'SKIPPED'; r.error_text = ''; r.committed_at = ''; skipped.push(r); }
+  });
+  if (skipped.length) withWriteLock_(function () { writeRowsBulk_('ImportRows', skipped); });
+  pending = pending.filter(function (r) { return r.validation_status === 'OK'; });
   MT_DEFER_ = true;
   try {
     var progressed = true;
@@ -851,12 +877,8 @@ function importCommit_(ctx) {
           err = JSON.stringify([{ field: '', code: 'DEPENDENCY_FAILED' }]);
         } else try {
           dbReset_();
-          // Lô kiểm tra từ bản cũ (trước khi có bước bỏ qua) hoặc hồ sơ đã được sửa giống file: không ghi lại
-          if (r.action === 'UPDATE' && !(group && group.length) && importRowUnchanged_(sh, r, findOne_(sh.table, sh.id, r.entity_id))) status = 'SKIPPED';
-          else {
-            commitImportRow_(ctx, t, b1, sh, r, importer, group);
-            status = 'COMMITTED';
-          }
+          commitImportRow_(ctx, t, b1, sh, r, importer, group);
+          status = 'COMMITTED';
         } catch (e) {
           status = 'FAILED';
           var code = e && e.apiCode ? e.apiCode : 'INTERNAL_ERROR';

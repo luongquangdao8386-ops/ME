@@ -171,6 +171,25 @@ test('xuất rồi nhập lại nguyên trạng: dòng không đổi bỏ qua (�
   assert.deepEqual(ids.map((id) => env.rows('Equipment').find((e) => e.equipment_id === id).record_version), [1, 2, 1]);
 });
 
+test('lô dở kiểu cũ 150 dòng không đổi (trạng thái OK) → một lần bấm Nhập dữ liệu là xong (bỏ qua một lượt, không tính vào 100 dòng/lượt)', () => {
+  const { env, c } = setup();
+  const rows = Array.from({ length: 150 }, (_, i) => row('glossary', i + 3, { term_vi: 'Thuật ngữ ' + i, term_zh: '术语' + i }));
+  const r = preview(c, 'glossary', rows);
+  let cm = c.call('import.commit', { import_batch_id: r.batch }, { operation_id: uuid(), reauth_token: c.reauth() });
+  while (cm.data.status === 'PARTIAL') cm = c.call('import.commit', { import_batch_id: r.batch }, { operation_id: uuid() });
+  assert.equal(cm.data.status, 'COMMITTED');
+  const ex = c.call('export.xlsx', { template_key: 'glossary' }).data.sheets[0];
+  const rows2 = ex.rows.map((rw, i) => { const v = Object.fromEntries(ex.keys.map((k, j) => [k, rw[j]])); delete v.i18n_machine_fields; return row('glossary', i + 3, v); });
+  const r2 = preview(c, 'glossary', rows2);
+  assert.equal(r2.data.update_count, 0, 'nhập lại nguyên trạng: không có dòng Cập nhật');
+  env.g.dbReset_();
+  env.g.withWriteLock_(() => env.rows('ImportRows').filter((x) => x.import_batch_id === r2.batch).forEach((x) => env.g.writeCells_('ImportRows', x.__row, { validation_status: 'OK' })));
+  const one = c.call('import.commit', { import_batch_id: r2.batch }, { operation_id: uuid(), reauth_token: c.reauth() });
+  assert.equal(one.data.status, 'COMMITTED', JSON.stringify(one.data).slice(0, 300));
+  assert.equal(one.data.committed, 0);
+  assert.ok(env.rows('Glossary').every((g) => g.record_version === 1));
+});
+
 test('lô nhạy cảm (kiểm định): HĐ nhập + gửi duyệt; HĐ không commit; C4 nhập thì không tự commit; C3 commit (PIN) = duyệt → APPROVED, hạn hiện hành, nhắc hạn', () => {
   const { env, c } = setup();
   const eq = uuid(), type = uuid(), req = uuid();

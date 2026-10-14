@@ -963,6 +963,7 @@
   "excel.choose_file": ["Chọn tệp .xlsx để nhập", "选择要导入的.xlsx文件"],
   "excel.reading": ["Đang đọc tệp…", "正在读取文件…"],
   "excel.sending": ["Đang gửi kiểm tra {N}/{T} dòng…", "正在提交校验 {N}/{T} 行…"],
+  "excel.waiting_server": ["Máy chủ còn đang ghi, chờ rồi ghi tiếp…", "服务器仍在写入，稍候继续…"],
   "excel.committing": ["Đang ghi {N}/{T} dòng…", "正在写入 {N}/{T} 行…"],
   "excel.summary": ["Kết quả kiểm tra", "校验结果"],
   "excel.add": ["Thêm mới", "新增"],

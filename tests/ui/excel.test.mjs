@@ -158,3 +158,28 @@ test('iPhone HĐ: lô hợp đồng (nhạy cảm) → gửi duyệt; web C4 m�
     assert.deepEqual(app2.consoleErrors, []);
   } finally { await app2.close(); }
 });
+
+test('web C4: ghi lô 150 dòng mà các lượt ghi đều mất phản hồi (máy chủ vẫn ghi) → app chờ, xem lại lô rồi ghi tiếp tới "Đã nhập", không báo lỗi', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  const rows = Array.from({ length: 150 }, (_, i) => ({ sheet: 'glossary', row_number: i + 3, values: { term_vi: 'Thuật ngữ ' + i, term_zh: '术语' + i } }));
+  const batch = uuid();
+  const r = c.write('import.preview', { import_batch_id: batch, template_key: 'glossary', chunk_index: 0, chunk_count: 1, total_rows: 150, source_sha256: 'a'.repeat(64), rows });
+  assert.equal(r.data.status, 'READY', JSON.stringify(r.data.errors));
+  const app = await openApp({ env, ...WEB, fault: (req, n) => (req.action === 'import.commit' && n >= 2 && n <= 5 ? 'EXEC_THEN_AS_GET' : null) });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, '#/excel/glossary');
+    await page.waitForSelector('[data-batch]', { timeout: 15000 });
+    await page.click('[data-batch]');
+    await page.waitForSelector('#x-commit');
+    await page.click('#x-commit');
+    await pin(page);
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Đã nhập · 已导入'), null, { timeout: 60000 });
+    assert.equal(env.rows('Glossary').length, 150);
+    assert.equal(env.rows('ImportBatches')[0].status, 'COMMITTED');
+    assert.equal(await page.locator('.toast.err, .toast-err').count(), 0);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
