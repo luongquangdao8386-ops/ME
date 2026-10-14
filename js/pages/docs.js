@@ -6,6 +6,7 @@ import { afterCommit } from '../app.js';
 import { enqueue } from '../sync.js';
 import { processPhoto, uploadDoc, downloadDoc, shareFileNow, isTouchMobile } from '../media.js';
 import { writeOnline, busy } from '../form.js';
+import { offlineFiles, offlineFilesAllowed, saveOfflineFile, removeOfflineFile, fileOf } from '../offline-files.js';
 
 const FILE_KINDS = {
   EQUIPMENT: ['MANUAL', 'DRAWING', 'CERTIFICATE', 'OTHER'], MATERIAL: ['MANUAL', 'DRAWING', 'OTHER'],
@@ -37,6 +38,21 @@ export async function docsTabHtml(type, rec) {
   const canArch = canSync(b, 'doc.archive');
   const lvl = Number(session.user && session.user.role_level) || 0;
   const mineOk = (d) => lvl >= 3 || d.created_by === uid;
+  // Tài liệu đã lưu để xem ngoại tuyến (2.6); máy dùng chung không có nút lưu
+  const offOk = offlineFilesAllowed();
+  const off = new Map((await offlineFiles()).map((v) => [v.document_id, v]));
+  const offBtns = (d) => {
+    if (!offOk || d.storage_kind === 'LINK') return '';
+    const v = off.get(d.document_id);
+    if (!v) return `<button type="button" class="btn tiny" data-offsave="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${ICON.download}<span>${bi('btn.download_offline')}</span></button>`;
+    return `<button type="button" class="btn tiny primary" data-offopen="${esc(d.document_id)}">${ICON.file}<span>${bi('btn.open')}</span></button>
+      ${v.stale && online ? `<button type="button" class="btn tiny" data-offsave="${esc(d.document_id)}">${ICON.download}<span>${bi('btn.download_offline')}</span></button>` : ''}
+      <button type="button" class="btn tiny" data-offdel="${esc(d.document_id)}">${bi('btn.remove_offline')}</button>`;
+  };
+  const offBadge = (d) => {
+    const v = off.get(d.document_id);
+    return v ? ` · <span class="badge t-green">${bi('doc.offline_saved')}</span>${v.stale ? ` <span class="badge t-amber">${bi('doc.offline_stale')}</span>` : ''}` : '';
+  };
   return `
     ${photos.length ? `<div class="photos">${photos.map((d) => `<figure class="photo" data-doc="${esc(d.document_id)}">
       ${d.drive_sharing_state === 'LINK_SHARED' && d.drive_file_id ? `<a href="${esc(photoSrc(d, 1600))}" target="_blank" rel="noopener noreferrer"><img src="${esc(photoSrc(d))}" alt="${esc(nameText(d, 'title'))}" loading="lazy" referrerpolicy="no-referrer"></a>`
@@ -49,11 +65,12 @@ export async function docsTabHtml(type, rec) {
         </span></figcaption></figure>`).join('')}</div>` : ''}
     ${files.length ? `<ul class="list docs">${files.map((d) => `<li data-doc="${esc(d.document_id)}">
       <div class="doc-line">${ICON[d.storage_kind === 'LINK' ? 'link' : 'file']}<div class="doc-main"><strong>${biName(d, 'title')}</strong>
-        <div class="muted small">${bi('doc_kind.' + d.kind)} · ${esc(fmtDate(d.document_date))}${d.size_bytes ? ' · ' + fmtNumber(Math.ceil(d.size_bytes / 1024)) + ' KB' : ''} · ${badge('doc_scope.' + d.access_scope)}</div></div></div>
+        <div class="muted small">${bi('doc_kind.' + d.kind)} · ${esc(fmtDate(d.document_date))}${d.size_bytes ? ' · ' + fmtNumber(Math.ceil(d.size_bytes / 1024)) + ' KB' : ''} · ${badge('doc_scope.' + d.access_scope)}${offBadge(d)}</div></div></div>
       <div class="row doc-act">
         ${d.storage_kind === 'LINK' ? `<a class="btn tiny" href="${esc(d.external_url)}" target="_blank" rel="noopener noreferrer">${bi('doc.link_open')}</a>`
           : `<button type="button" class="btn tiny" data-dl="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${ICON.download}<span>${bi('btn.download')}</span></button>
-             <button type="button" class="btn tiny primary" data-open="${esc(d.document_id)}" hidden>${bi('btn.open_save')}</button>`}
+             <button type="button" class="btn tiny primary" data-open="${esc(d.document_id)}" hidden>${bi('btn.open_save')}</button>
+             ${offBtns(d)}`}
         ${canArch && mineOk(d) ? `<button type="button" class="btn tiny" data-arch="${esc(d.document_id)}" ${online ? '' : 'disabled'} aria-label="${esc(biText('btn.remove'))}">${ICON.trash}</button>` : ''}
       </div></li>`).join('')}</ul>` : ''}
     ${!docs.length ? `<p class="muted">${bi('doc.none')}</p>` : ''}
@@ -137,6 +154,22 @@ export function wireDocsTab(tb, type, rec, repaint) {
     if (open && isTouchMobile()) { open.hidden = false; open.focus(); } else shareFileNow(d.file);
   }));
   $$('[data-open]', tb).forEach((b) => b.addEventListener('click', () => { const f = files[b.dataset.open]; if (f) shareFileNow(f); }));
+  // Ngoại tuyến: nạp sẵn tệp đã lưu để nút Mở gọi share ngay trong lần chạm (iPhone, 2.6)
+  const offFiles = {};
+  offlineFiles().then((list) => list.forEach((v) => { offFiles[v.document_id] = fileOf(v); })).catch(() => {});
+  $$('[data-offopen]', tb).forEach((b) => b.addEventListener('click', () => { const f = offFiles[b.dataset.offopen]; if (f) shareFileNow(f); }));
+  $$('[data-offsave]', tb).forEach((b) => b.addEventListener('click', async () => {
+    busy(b, true);
+    const doc = (await recs('DOCUMENT')).find((x) => x.document_id === b.dataset.offsave);
+    const d = await downloadDoc(b.dataset.offsave);
+    if (!d.ok) { busy(b, false); toast(d.res && d.res.errors && d.res.errors[0] && d.res.errors[0].code === 'FILE_TOO_LARGE' ? bi('doc.too_large') : esc(resMsg(d.res)), 'err'); return; }
+    const sv = await saveOfflineFile(doc || { document_id: b.dataset.offsave }, d.file, d.file_version);
+    busy(b, false);
+    if (!sv.ok) { toast(bi(sv.code === 'OFFLINE_FULL' ? 'doc.offline_full' : 'sync.need_network', { N: session.settings.offline_files_max_mb || 100 }), 'err'); return; }
+    toast(bi('doc.offline_saved'), 'ok');
+    repaint();
+  }));
+  $$('[data-offdel]', tb).forEach((b) => b.addEventListener('click', async () => { await removeOfflineFile(b.dataset.offdel); repaint(); }));
   $$('[data-priv]', tb).forEach((b) => b.addEventListener('click', async () => {
     const ok = await dialog({ title: bi('btn.set_private'), body: `<p>${bi('doc.set_private_confirm')}</p>`, actions: [{ label: bi('btn.cancel'), value: false }, { label: bi('btn.set_private'), kind: 'primary', value: true }] });
     if (!ok) return;

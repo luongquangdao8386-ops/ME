@@ -1,5 +1,6 @@
 // Đồng bộ: bootstrap, changes, hàng chờ offline (phụ lục 1.5 mục 3.15, 1.4 §14)
 import { api, session, idb, uuid, isoNowVN, todayVN } from './core.js';
+import { pruneOfflineFiles } from './offline-files.js';
 
 const STOP_CODES = new Set(['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'SYSTEM_MAINTENANCE', 'MUST_CHANGE_PIN', 'CLIENT_UPDATE_REQUIRED', 'QUOTA_EXCEEDED']);
 /** Không biết thao tác đã ghi hay chưa */
@@ -30,6 +31,8 @@ export async function bootstrap() {
   await setMeta('cursor', cursor);
   await setMeta('epoch', session.epoch);
   await setMeta('last_sync', isoNowVN());
+  // Tệp ngoại tuyến của tài liệu không còn quyền xem / đã gỡ bị xóa (2.6)
+  await pruneOfflineFiles(acc.DOCUMENT || []).catch(() => {});
   return { ok: true, data: first };
 }
 
@@ -68,7 +71,7 @@ export async function pullChanges() {
   let cursor = await getMeta('cursor');
   if (cursor === null || cursor === undefined) return bootstrap();
   const boot = await getMeta('bootstrap');
-  let applied = 0;
+  let applied = 0, docsChanged = false;
   for (let guard = 0; guard < 20; guard++) {
     const r = await api('sync.changes', { cursor, limit: 500 }, { retry: true });
     if (!r.ok) return r;
@@ -77,6 +80,7 @@ export async function pullChanges() {
     if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap();
     const byType = {};
     for (const ch of r.data.changes) (byType[ch.entity_type] = byType[ch.entity_type] || []).push(ch);
+    if (byType.DOCUMENT) docsChanged = true;
     for (const [type, chs] of Object.entries(byType)) {
       const list = await getRecords(type);
       const map = new Map(list.map((x) => [keyOf(type, x), x]));
@@ -98,6 +102,7 @@ export async function pullChanges() {
     if (!r.data.has_more) break;
   }
   await setMeta('last_sync', isoNowVN());
+  if (docsChanged) await pruneOfflineFiles(await getRecords('DOCUMENT')).catch(() => {});
   return { ok: true, applied };
 }
 

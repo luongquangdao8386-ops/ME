@@ -1,10 +1,10 @@
 // Service Worker của M&E — phạm vi /ME/; chỉ quản lý cache tên me-shell-* (phụ lục 1.5 mục 2.1)
-const VERSION = '1.0.0-d1.14';
-const BUILD_HASH = 'ece8643cba62'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const VERSION = '1.0.0-d1.15';
+const BUILD_HASH = 'f14d48103339'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const SHELL = 'me-shell-' + VERSION + '-' + BUILD_HASH;
 const FILES = [
   './', 'index.html', 'config.js', 'manifest.webmanifest', 'css/app.css',
-  'js/main.js', 'js/core.js', 'js/dict.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/poc.js', 'js/scan.js', 'js/media.js', 'js/labels.js', 'js/qr-worker.js',
+  'js/main.js', 'js/core.js', 'js/dict.js', 'js/auth.js', 'js/sync.js', 'js/ui.js', 'js/poc.js', 'js/scan.js', 'js/media.js', 'js/offline-files.js', 'js/labels.js', 'js/qr-worker.js',
   'js/router.js', 'js/data.js', 'js/shell.js', 'js/app.js', 'js/form.js',
   'js/pages/home.js', 'js/pages/alerts.js', 'js/pages/account.js', 'js/pages/drafts.js', 'js/pages/misc.js', 'js/pages/equipment.js', 'js/pages/materials.js', 'js/pages/docs.js', 'js/pages/inspections.js', 'js/pages/contracts.js', 'js/pages/gmail.js', 'js/pages/admin.js', 'js/pages/catalog.js', 'js/pages/excel.js', 'js/xlsx.js', 'js/excel-link.js',
   'vendor/jsQR-1.4.0.js', 'vendor/qrcode-generator-2.0.4.mjs',

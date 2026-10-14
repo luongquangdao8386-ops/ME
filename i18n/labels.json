@@ -68,6 +68,7 @@
   "btn.download": ["Tải về", "下载"],
   "btn.open_save": ["Mở / Lưu", "打开/保存"],
   "btn.download_offline": ["Tải để xem ngoại tuyến", "下载以离线查看"],
+  "btn.remove_offline": ["Bỏ lưu ngoại tuyến", "取消离线保存"],
   "btn.set_private": ["Đặt riêng tư", "设为私有"],
   "btn.suggest_translation": ["Gợi ý dịch", "翻译建议"],
   "btn.retranslate": ["Dịch lại", "重新翻译"],
@@ -693,6 +694,8 @@
   "doc.none": ["Chưa có tài liệu", "暂无文件"],
   "doc.uploading": ["Đang tải lên…", "正在上传…"],
   "doc.offline_saved": ["Đã lưu để xem ngoại tuyến", "已保存以便离线查看"],
+  "doc.offline_stale": ["Bản lưu đã cũ — tải lại khi có mạng", "离线副本已过期——联网后重新下载"],
+  "doc.offline_full": ["Bộ nhớ ngoại tuyến đã đầy (tối đa {N} MB): bỏ lưu bớt tài liệu", "离线存储已满（最多{N} MB）：请移除部分文件"],
 
   "err.network": ["Không kết nối được máy chủ", "无法连接服务器"],
   "err.unknown_result": ["Chưa rõ kết quả, đang hỏi lại máy chủ", "结果未知，正在向服务器确认"],

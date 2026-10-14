@@ -93,7 +93,7 @@ export async function downloadDoc(documentId) {
   if (!r.ok) return { ok: false, res: r, retried, ms: Math.round(performance.now() - t0) };
   const bytes = b64ToBytes(r.data.content_b64);
   const file = new File([bytes], r.data.file_name, { type: r.data.mime_type });
-  return { ok: true, file, url: URL.createObjectURL(file), ms: Math.round(performance.now() - t0), bytes: bytes.length, server_ms: r.server_ms, retried };
+  return { ok: true, file, url: URL.createObjectURL(file), ms: Math.round(performance.now() - t0), bytes: bytes.length, server_ms: r.server_ms, retried, file_version: r.data.file_version };
 }
 
 /** Máy cảm ứng (iPhone/iPad/Android) mới dùng bảng Chia sẻ; máy tính tải thẳng bằng <a download> (2.6) */
