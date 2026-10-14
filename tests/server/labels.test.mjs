@@ -36,3 +36,15 @@ test('màn hình Đợt 1 lấy chữ từ từ điển, không viết cứng c�
   }
   assert.deepEqual(hits, []);
 });
+
+test('mọi khóa nhãn viết cố định trong mã app (bi/biText/badge/key) có trong từ điển', () => {
+  const labels = JSON.parse(fs.readFileSync(path.join(ROOT, 'i18n', 'labels.json'), 'utf8'));
+  const dir = path.join(ROOT, 'js');
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.js') && f !== 'dict.js').concat(fs.readdirSync(path.join(dir, 'pages')).map((f) => 'pages/' + f));
+  const missing = new Set();
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const m of src.matchAll(/\b(?:bi|biText|badge)\(\s*'([a-z][a-z0-9_]*\.[A-Za-z0-9_.]+)'\s*[,)]/g)) if (!labels[m[1]]) missing.add(`${f}: ${m[1]}`);
+  }
+  assert.deepEqual([...missing], []);
+});

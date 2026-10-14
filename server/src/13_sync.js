@@ -110,6 +110,7 @@ function syncBootstrap_(ctx) {
     out.settings = clientSettings_();
     out.permissions = permissionSummary_(ctx);
     out.server_version = SERVER_VERSION;
+    out.released_dot = releasedDot_();
     out.env = envName_();
     out.server_today = todayVN_();
   }

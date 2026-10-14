@@ -1,7 +1,8 @@
 // HOME-01 / WEB-HOME-01: logo 57 + M&E/机电管理 trên nền nhà máy, lịch tuần, thẻ hạn, lưới 9 mục, bảng Công việc hôm nay (6.6)
 import { bi, biText, esc, fmtDate, badge, biName, nameText, session } from '../core.js';
 import { brandHtml, ICON } from '../ui.js';
-import { MODULES, RELEASED_DOT, isWide } from '../shell.js';
+import * as shellMod from '../shell.js';
+const { MODULES, isWide } = shellMod;
 import { recs, mapOf, deadlineItems, today, weekStart, addDays, weekday, dueSort, daysBetween } from '../data.js';
 
 const COUNT_TYPE = { equipment: 'EQUIPMENT', warehouse: 'MATERIAL', contracts: 'CONTRACT', inspections: 'INSPECTION_REQUIREMENT' };
@@ -75,7 +76,7 @@ async function gridHtml() {
   const counts = {};
   for (const [k, type] of Object.entries(COUNT_TYPE)) counts[k] = (await recs(type)).length;
   return `<section class="grid9" aria-label="${esc(biText('menu.title'))}">${MODULES.map((m) => {
-    const soon = m.dot > RELEASED_DOT;
+    const soon = m.dot > shellMod.RELEASED_DOT;
     if (soon) {
       return `<button type="button" class="tile dim" aria-disabled="true" data-soon="1">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span><span class="soon">${bi('tag.coming_soon')}</span></button>`;
     }

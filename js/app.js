@@ -1,7 +1,7 @@
 // Điều khiển app sau đăng nhập: khung, định tuyến, đồng bộ nền, quét QR (phụ lục 1.5 mục 6.3)
 import { bi, esc, session, resMsg } from './core.js';
 import { getMeta, pullChanges, queueItems, flushQueue } from './sync.js';
-import { mountShell, isWide, MODULES } from './shell.js';
+import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
 import { toast, dialog } from './ui.js';
@@ -20,7 +20,7 @@ export const app = {
 export function entityPath(type, id) {
   return {
     EQUIPMENT: '/equipment/', MATERIAL: '/materials/', INSPECTION_REQUIREMENT: '/inspections/', INSPECTION: '/inspections/record/',
-    CONTRACT: '/contracts/'
+    CONTRACT: '/contracts/', MAINTENANCE_PLAN: '/maintenance/plans/', WORK_ORDER: '/maintenance/wo/', REPAIR: '/repairs/'
   }[type] + encodeURIComponent(id);
 }
 
@@ -136,12 +136,31 @@ export async function openResolved(r) {
 function registerRoutes() {
   const lazy = (mod, fn) => async (view, ctx) => { const m = await import(mod); return m[fn](view, ctx); };
   // Bàn thử PoC và tem thử chỉ có ở máy chủ THỬ (6.7: gỡ ở THẬT); máy chủ THẬT cũng trả FEATURE_NOT_ENABLED cho poc.*
+  // Màn của đợt máy chủ chưa chạy (vd vừa cập nhật app mà máy chủ chưa dán Code.gs mới): giữ màn "Sắp có"
+  const soonOr = (dot, fn) => async (view, ctx) => {
+    if (RELEASED_DOT < dot) { const m = await import('./pages/misc.js'); return m.renderComingSoon(view, ctx); }
+    return fn(view, ctx);
+  };
   const testOnly = (fn) => async (view, ctx) => {
     if ((await bootData()).env !== 'THU') { navigate('/', { replace: true }); return; }
     return fn(view, ctx);
   };
   route('/', lazy('./pages/home.js', 'renderHome'), { nav: 'home' });
-  route('/work', lazy('./pages/misc.js', 'renderComingSoon'), { nav: 'work' });
+  route('/work', soonOr(2, lazy('./pages/work.js', 'renderWork')), { nav: 'work' });
+  // Đợt 2: Bảo trì (MT-01..03, WEB-MT-01), Sửa chữa (RP-01..03, WEB-RP-01)
+  route('/maintenance', soonOr(2, lazy('./pages/maintenance.js', 'renderMaintenance')), { nav: 'maintenance' });
+  route('/maintenance/plans/new', soonOr(2, lazy('./pages/maintenance.js', 'renderPlanForm')), { nav: 'maintenance' });
+  route('/maintenance/plans/:id', soonOr(2, lazy('./pages/maintenance.js', 'renderPlan')), { nav: 'maintenance' });
+  route('/maintenance/plans/:id/edit', soonOr(2, lazy('./pages/maintenance.js', 'renderPlanForm')), { nav: 'maintenance' });
+  route('/maintenance/checklists', soonOr(2, lazy('./pages/maintenance.js', 'renderChecklists')), { nav: 'maintenance' });
+  route('/maintenance/checklists/new', soonOr(2, lazy('./pages/maintenance.js', 'renderChecklistForm')), { nav: 'maintenance' });
+  route('/maintenance/checklists/:id', soonOr(2, lazy('./pages/maintenance.js', 'renderChecklistForm')), { nav: 'maintenance' });
+  route('/maintenance/wo/new', soonOr(2, lazy('./pages/maintenance.js', 'renderWoForm')), { nav: 'maintenance' });
+  route('/maintenance/wo/:id', soonOr(2, lazy('./pages/maintenance.js', 'renderWorkOrder')), { nav: 'maintenance' });
+  route('/repairs', soonOr(2, lazy('./pages/repairs.js', 'renderRepairList')), { nav: 'repairs' });
+  route('/repairs/new', soonOr(2, lazy('./pages/repairs.js', 'renderReportForm')), { nav: 'repairs' });
+  route('/repairs/:id', soonOr(2, lazy('./pages/repairs.js', 'renderRepair')), { nav: 'repairs' });
+  route('/repairs/:id/edit', soonOr(2, lazy('./pages/repairs.js', 'renderReportForm')), { nav: 'repairs' });
   route('/alerts', lazy('./pages/alerts.js', 'renderAlerts'), { nav: 'alerts' });
   route('/alerts/month', lazy('./pages/alerts.js', 'renderMonth'), { nav: 'alerts' });
   route('/account', lazy('./pages/account.js', 'renderAccount'), { nav: 'account' });
@@ -180,7 +199,7 @@ function registerRoutes() {
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
   route('/excel/:key', lazy('./pages/excel.js', 'renderExcel'), { nav: '' });
   route('/labels', testOnly(async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }), { nav: 'account' });
-  for (const m of MODULES) if (m.dot > 1) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
+  for (const m of MODULES) if (m.dot > 2) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
   route('/r/:key', async (view, ctx) => {
     const r = await resolveScan({ kind: 'qr', key: ctx.params.key });
     if (r.qr_state === 'OK') { navigate(entityPath(r.entity_type, r.entity_id), { replace: true }); return; }
@@ -196,6 +215,7 @@ export async function enterApp(root, { offline = false } = {}) {
   app.offline = offline;
   invalidate();
   const b = await bootData();
+  setReleasedDot(b);
   if (!routesReady) { registerRoutes(); routesReady = true; }
   app.shell = mountShell(root, { env: b.env, onScan: scanAndOpen });
   app.shell.setSessionWarn(session.expires_at, () => app.onRelogin && app.onRelogin());

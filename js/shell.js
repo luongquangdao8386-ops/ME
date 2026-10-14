@@ -3,7 +3,16 @@ import { bi, biText, esc, fmtDate, fmtDateTime, session, badge, L } from './core
 import { ICON, h, $, $$, toast } from './ui.js';
 import { isIosSafariTab } from './auth.js';
 
-export const RELEASED_DOT = 1;
+/**
+ * Đợt máy chủ đang chạy (bootstrap.released_dot). Máy chủ cũ không gửi khóa này: suy từ quyền (có maintenance.view → Đợt 2).
+ * Mục của đợt sau vẫn hiện đúng chỗ nhưng mờ + "Sắp có" (6.6).
+ */
+export let RELEASED_DOT = 1;
+export function setReleasedDot(b) {
+  const acts = (b && b.permissions && b.permissions.actions) || [];
+  RELEASED_DOT = Number(b && b.released_dot) || (acts.includes('maintenance.view') || acts.includes('repair.view') ? 2 : 1);
+  return RELEASED_DOT;
+}
 
 /** 9 mục theo từ điển 3.4, đúng thứ tự lưới 3 × 3 của HOME-01 */
 export const MODULES = [
