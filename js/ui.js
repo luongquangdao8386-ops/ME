@@ -64,6 +64,13 @@ export const ICON = {
 
 /* ---------------- Thông báo ngắn, hộp thoại ---------------- */
 let toastTimer = null;
+/** Lên đầu trang (vẽ lại cùng màn không tự cuộn, vd sang trang danh sách kế tiếp) */
+export function toTop() {
+  window.scrollTo(0, 0);
+  const v = document.getElementById('view');
+  if (v) v.scrollTop = 0;
+}
+
 export function toast(html, kind = '') {
   const el = $('#toast');
   el.className = 'show ' + kind;

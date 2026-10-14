@@ -260,6 +260,9 @@ export async function workPerms() {
 
 /** Danh sách người nhận việc (C3/C4 có user.pickList) */
 let pickCache = null;
+/** Danh sách người làm đã tải (không gọi mạng); null nếu chưa có */
+export const pickCached = () => pickCache;
+
 export async function workerPick() {
   if (pickCache) return pickCache;
   const { api } = await import('./core.js');

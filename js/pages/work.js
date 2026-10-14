@@ -1,6 +1,6 @@
 // Công việc · 工单 (iPhone nav 2, menu web) — 5.2: lọc Của tôi / Trong phạm vi, loại, nhóm theo hạn; thẻ iPhone, bảng web
 import { bi, biText, esc, fmtDate, fmtDateTime, badge } from '../core.js';
-import { ICON, $, $$ } from '../ui.js';
+import { ICON, toTop, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { navigate } from '../router.js';
 import { can, roleLevel } from '../data.js';
@@ -80,6 +80,6 @@ export async function renderWork(view, ctx) {
   $$('[data-kind]', view).forEach((b) => b.addEventListener('click', () => { filt.kind = b.dataset.kind; filt.page = 0; again(); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));
   const prev = $('#wk-prev', view), next = $('#wk-next', view);
-  if (prev) prev.addEventListener('click', () => { filt.page = Math.max(0, filt.page - 1); again(); });
-  if (next) next.addEventListener('click', () => { filt.page++; again(); });
+  if (prev) prev.addEventListener('click', () => { filt.page = Math.max(0, filt.page - 1); again().then(toTop); });
+  if (next) next.addEventListener('click', () => { filt.page++; again().then(toTop); });
 }

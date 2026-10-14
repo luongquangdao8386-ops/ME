@@ -170,3 +170,64 @@ test('iPhone KT: phiếu sửa được giao → Bắt đầu sửa → mất m�
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('iPhone KT: phiếu đang sửa — chọn Nguyên nhân gốc, bấm "Bây giờ", chạy thử Đạt: trang vẽ lại nhưng giữ nguyên chỗ đang xem (không nhảy về đầu trang); phiếu bảo trì bấm Đạt/Không đạt cũng vậy', async () => {
+  const { env, c, kt, ktId, eq, rid } = setup();
+  assert.equal(c.write('lookup.edit', { value_id: uuid(), group_key: 'CAUSE', code: 'CO-01', name_vi: 'Van an toàn kẹt' }).ok, true);
+  let r0 = env.rows('Repairs')[0];
+  assert.equal(c.write('repair.assign', { repair_id: rid, assignee_user_id: ktId }, { expected_version: r0.record_version }).ok, true);
+  r0 = env.rows('Repairs')[0];
+  assert.equal(kt.write('repair.process', { repair_id: rid, repair_start_at: env.g.isoVN_(new env.clock.Date()) }, { expected_version: r0.record_version }).ok, true);
+  // Phiếu bảo trì dài (8 bước) đang làm, giao KT
+  const tpl = uuid();
+  assert.equal(c.write('maintenance.checklist.edit', { template_id: tpl, template_name_vi: 'Kiểm tra máy nén', items: Array.from({ length: 8 }, (_, i) => ({ label_vi: `Bước kiểm tra ${i + 1}`, result_type: 'PASS_FAIL', required: true })) }).ok, true);
+  const wo = uuid();
+  assert.equal(c.write('maintenance.wo.create', { work_order_id: wo, equipment_id: eq, title_vi: 'Bảo dưỡng máy nén', assignee_user_id: ktId, checklist_template_id: tpl }).ok, true);
+  assert.equal(kt.write('maintenance.execute', { work_order_id: wo, start_at: env.g.isoVN_(new env.clock.Date()) }, { expected_version: 1 }).ok, true);
+  const app = await openApp({ env, ...IPHONE });
+  const scrollY = () => page.evaluate(() => Math.round(window.scrollY));
+  const { page } = app;
+  try {
+    await login(page, 'U-KT', '583016');
+    await go(page, `#/repairs/${rid}`);
+    await page.waitForSelector('#rp-submit');
+    // Cuộn tới ô Nguyên nhân gốc (giữa màn), chọn → vẽ lại (nút Lưu bật) mà vị trí cuộn không đổi
+    await page.$eval('#f-root_cause_code', (el) => el.scrollIntoView({ block: 'center' }));
+    const y0 = await scrollY();
+    assert.ok(y0 > 300, `đã cuộn xuống (${y0})`);
+    await page.selectOption('#f-root_cause_code', 'CO-01');
+    await page.waitForSelector('#rp-save:not([disabled])');
+    await page.waitForFunction(() => document.querySelector('#f-root_cause_code').value === 'CO-01');
+    assert.ok(Math.abs((await scrollY()) - y0) <= 2, `giữ chỗ đang xem sau khi chọn nguyên nhân: ${y0} → ${await scrollY()}`);
+    // Bây giờ (Kết thúc sửa)
+    await page.$eval('[data-now="repair_end_at"]', (el) => el.scrollIntoView({ block: 'center' }));
+    const y1 = await scrollY();
+    await page.click('[data-now="repair_end_at"]');
+    await page.waitForFunction(() => document.querySelector('#f-re').value !== '');
+    assert.ok(Math.abs((await scrollY()) - y1) <= 2, `giữ chỗ sau Bây giờ: ${y1} → ${await scrollY()}`);
+    // Chạy thử Đạt
+    await page.$eval('[data-test="PASS"]', (el) => el.scrollIntoView({ block: 'center' }));
+    const y2 = await scrollY();
+    await page.click('[data-test="PASS"]');
+    await page.waitForSelector('[data-test="PASS"].on');
+    assert.ok(Math.abs((await scrollY()) - y2) <= 2, `giữ chỗ sau Chạy thử Đạt: ${y2} → ${await scrollY()}`);
+    // Sang màn khác vẫn lên đầu trang
+    await go(page, `#/maintenance/wo/${wo}`);
+    await page.waitForSelector('#wo-submit');
+    assert.equal(await scrollY(), 0, 'màn mới mở ở đầu trang');
+    // Phiếu bảo trì: bấm Đạt ở bước cuối (cuối trang) → giữ chỗ
+    const last = env.rows('WorkOrderResults').filter((x) => x.work_order_id === wo).sort((a, b) => b.step_no - a.step_no)[0];
+    await page.$eval(`[data-res="${last.result_id}"][data-v="PASS"]`, (el) => el.scrollIntoView({ block: 'center' }));
+    const y3 = await scrollY();
+    assert.ok(y3 > 300, `đã cuộn xuống (${y3})`);
+    await page.click(`[data-res="${last.result_id}"][data-v="PASS"]`);
+    await page.waitForSelector(`[data-res="${last.result_id}"][data-v="PASS"].on`);
+    await page.waitForSelector('#wo-save:not([disabled])');
+    assert.ok(Math.abs((await scrollY()) - y3) <= 2, `giữ chỗ trên phiếu bảo trì: ${y3} → ${await scrollY()}`);
+    // Bấm lại nút Công việc (màn khác) → đầu trang
+    await page.click('.bnav-item[data-nav="work"]');
+    await page.waitForSelector('.group-title');
+    assert.equal(await scrollY(), 0);
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

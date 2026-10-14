@@ -648,6 +648,12 @@ export async function renderWorkOrder(view, ctx) {
       ${(r.note_vi && r.note_zh && r.i18n_meta && r.i18n_meta.note && r.i18n_meta.note.state === 'MACHINE') ? `<div class="muted small">${esc(r.i18n_meta.note.src === 'vi' ? r.note_zh : r.note_vi)} <span class="tag mt">${bi('tag.machine_translated')}</span></div>` : ''}
       <div class="ferr small"></div></div>`;
   };
+  // Ảnh trước/sau: người được giao (hoặc C3/C4) khi phiếu còn mở. Dựng sẵn trước khi thay nội dung màn để lúc vẽ lại
+  // (đổi ô, lưu) trang không ngắn lại giữa chừng → giữ nguyên chỗ đang xem
+  const docsHtml = localNew ? `<p class="muted small">${bi('mt.local_new_note')}</p>` : await docsTabHtml('WORK_ORDER', w, {
+    canUpload: (await can('doc.upload')) && (lead || mineAssigned) && WO_OPEN.has(w.status),
+    photoButtons: ['mt.photo_before', 'mt.photo_after'].map(photoButton)
+  });
   view.innerHTML = `<section class="card">
     ${ov.rejected.length ? `<p class="banner warn">${bi('mt.has_rejected')} <a href="#/account/drafts">${bi('draft.title')}</a></p>` : ''}
     ${ov.blocked ? `<p class="banner warn">${bi('mt.blocked')}</p>` : ''}
@@ -702,22 +708,13 @@ export async function renderWorkOrder(view, ctx) {
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="wo-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="wo-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
     ${!(executing && started) && !showAccept ? nextStepHtml(next, 'exec') : ''}
   </section>
-  <section class="card tab-body"><h3>${bi('mt.photos')}</h3>${queuedDocs ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs })}</p>` : ''}<div id="wo-docs"></div></section>
+  <section class="card tab-body"><h3>${bi('mt.photos')}</h3>${queuedDocs ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs })}</p>` : ''}<div id="wo-docs">${docsHtml}</div></section>
   ${localNew ? '' : await workMatHtml('WO', w)}
   <section class="card"><h3>${bi('mt.timeline')}</h3><ul class="list timeline">
     ${[['mt.tl.created', w.created_at], ['mt.tl.assigned', w.assigned_at], ['mt.start_at', w.start_at], ['mt.end_at', w.end_at], ['mt.tl.submitted', w.submitted_at], ['mt.tl.accepted', w.approved_at]]
       .map(([k, t]) => `<li class="${t ? 'done' : 'todo'}"><span class="dot"></span><span>${bi(k)}</span><strong>${t ? esc(fmtDateTime(t)) : `<span class="muted">${bi('field.not_set')}</span>`}</strong></li>`).join('')}</ul></section>`;
   const repaint = () => renderWorkOrder(view, ctx);
-  // Ảnh trước/sau: người được giao (hoặc C3/C4) khi phiếu còn mở
-  const docBox = $('#wo-docs', view);
-  if (localNew) docBox.innerHTML = `<p class="muted small">${bi('mt.local_new_note')}</p>`;
-  else {
-    docBox.innerHTML = await docsTabHtml('WORK_ORDER', w, {
-      canUpload: (await can('doc.upload')) && (lead || mineAssigned) && WO_OPEN.has(w.status),
-      photoButtons: ['mt.photo_before', 'mt.photo_after'].map(photoButton)
-    });
-    wireDocsTab(docBox, 'WORK_ORDER', w, repaint);
-  }
+  if (!localNew) wireDocsTab($('#wo-docs', view), 'WORK_ORDER', w, repaint);
   if (!localNew) wireWorkMat(view, 'WO', w, repaint);
   const on = (id, fn) => { const el = $('#' + id, view); if (el) el.addEventListener('click', fn); };
   // ----- Nháp form -----

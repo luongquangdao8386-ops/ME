@@ -1,7 +1,7 @@
 // Sửa chữa (Đợt 2): RP-01 danh sách, RP-03 báo sự cố (cả offline, ảnh hiện trường), RP-02 chi tiết: 6 mốc (C9), phân công,
 // xử lý, việc con, chạy thử, gửi nghiệm thu, nghiệm thu không tự duyệt, hủy, mở lại; vật tư MAT-03; WEB-RP-01 (1.4 §5.3, phụ lục 4.4.4)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, toTop, dialog, h, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -15,7 +15,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayRepair, localCreations, repairSubmitIssues, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, REPAIR_OPEN, nextStepHtml, wireNextStep
+  queueWork, mergeExecPayload, workerPick, pickCached, REPAIR_OPEN, nextStepHtml, wireNextStep
 } from '../work.js';
 
 const st = { filter: 'OPEN', sev: '', q: '', page: 0 };
@@ -102,8 +102,8 @@ export async function renderRepairList(view, ctx) {
   $$('[data-sev]', view).forEach((b) => b.addEventListener('click', () => { st.sev = b.dataset.sev; st.page = 0; again(); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));
   const prev = $('#rp-prev', view), next = $('#rp-next', view);
-  if (prev) prev.addEventListener('click', () => { st.page = Math.max(0, st.page - 1); again(); });
-  if (next) next.addEventListener('click', () => { st.page++; again(); });
+  if (prev) prev.addEventListener('click', () => { st.page = Math.max(0, st.page - 1); again().then(toTop); });
+  if (next) next.addEventListener('click', () => { st.page++; again().then(toTop); });
   let tm = null;
   $('#rp-q', view).addEventListener('input', (e) => { st.q = e.target.value; st.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#rp-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
 }
@@ -348,7 +348,9 @@ export async function renderRepair(view, ctx) {
   };
   const causes = (await recs('LOOKUP')).filter((l) => l.group_key === 'CAUSE' && (l.active !== false || l.code === r.root_cause_code)).sort((a, b) => String(a.code).localeCompare(String(b.code)));
   const vendors = (await recs('VENDOR')).filter((x) => !x.archived_at && (x.active !== false || x.vendor_id === r.vendor_id)).sort((a, b) => String(a.vendor_code).localeCompare(String(b.vendor_code)));
-  const users = processing && online && p.pick ? await workerPick().catch(() => []) : [];
+  // Danh sách người (việc con): không chờ mạng mỗi lần vẽ lại; lấy khi mở hộp thoại, có sẵn thì dùng để hiện tên
+  const users = processing && online && p.pick ? (pickCached() || []) : [];
+  const pickUsers = async () => (processing && navigator.onLine && p.pick ? workerPick().catch(() => []) : []);
   const taskRow = (t) => {
     const who = t.assignee_name || (users.find((x) => x.user_id === t.assignee_user_id) || {}).display_name || (t.assignee_user_id === u ? biText('rp.me') : '');
     const editable = processing && (lead || t.assignee_user_id === u || !t.assignee_user_id || t._new);
@@ -362,6 +364,14 @@ export async function renderRepair(view, ctx) {
       <div class="ferr small"></div></li>`;
   };
   const timeline = [['reported_at', r.reported_at], ['assigned_at', r.assigned_at], ['repair_start_at', r.repair_start_at], ['repair_end_at', r.repair_end_at], ['restored_at', r.restored_at], ['approved_at', r.approved_at]];
+  // Ảnh/tài liệu: người được giao (hoặc C3/C4) khi phiếu còn mở; người báo thêm ảnh hiện trường khi còn Mới báo.
+  // Dựng sẵn trước khi thay nội dung màn để lúc vẽ lại (chọn nguyên nhân, Bây giờ…) trang không ngắn lại → giữ chỗ đang xem
+  const docWork = p.upload && REPAIR_OPEN.has(r.status) && (lead || mineAssigned);
+  const docReporter = p.report && r.status === 'REPORTED' && r.reported_by === u;
+  const docsHtml = localNew ? `<p class="muted small">${bi('rp.local_new_note')}</p>` : await docsTabHtml('REPAIR', r, {
+    canUpload: docWork || docReporter, photoOnly: !docWork && docReporter,
+    photoButtons: [{ key: 'rp.add_photo', ...photoLabel() }]
+  });
   view.innerHTML = `<section class="card">
     ${ov.rejected.length ? `<p class="banner warn">${bi('mt.has_rejected')} <a href="#/account/drafts">${bi('draft.title')}</a></p>` : ''}
     ${ov.blocked ? `<p class="banner warn">${bi('mt.blocked')}</p>` : ''}
@@ -427,22 +437,10 @@ export async function renderRepair(view, ctx) {
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="rp-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="rp-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
     ${!processing && !showAccept ? nextStepHtml(next, 'exec') : ''}
   </section>` : ''}
-  <section class="card tab-body"><h3>${bi('rp.photos')}</h3>${queuedDocs.length ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs.length })}</p>${queuedPhotoThumbs(queuedDocs)}` : ''}<div id="rp-docs"></div></section>
+  <section class="card tab-body"><h3>${bi('rp.photos')}</h3>${queuedDocs.length ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs.length })}</p>${queuedPhotoThumbs(queuedDocs)}` : ''}<div id="rp-docs">${docsHtml}</div></section>
   ${localNew ? '' : await workMatHtml('REPAIR', r)}`;
   const repaint = () => renderRepair(view, ctx);
-  // Ảnh/tài liệu: người được giao (hoặc C3/C4) khi phiếu còn mở; người báo thêm ảnh hiện trường khi còn Mới báo
-  const docBox = $('#rp-docs', view);
-  if (localNew) docBox.innerHTML = `<p class="muted small">${bi('rp.local_new_note')}</p>`;
-  else {
-    const open = REPAIR_OPEN.has(r.status);
-    const work = p.upload && open && (lead || mineAssigned);
-    const reporter = p.report && r.status === 'REPORTED' && r.reported_by === u;
-    docBox.innerHTML = await docsTabHtml('REPAIR', r, {
-      canUpload: work || reporter, photoOnly: !work && reporter,
-      photoButtons: [{ key: 'rp.add_photo', ...photoLabel() }]
-    });
-    wireDocsTab(docBox, 'REPAIR', r, repaint);
-  }
+  if (!localNew) wireDocsTab($('#rp-docs', view), 'REPAIR', r, repaint);
   if (!localNew) wireWorkMat(view, 'REPAIR', r, repaint);
   const on = (id, fn) => { const el = $('#' + id, view); if (el) el.addEventListener('click', fn); };
   // ----- Nháp form -----
@@ -474,14 +472,14 @@ export async function renderRepair(view, ctx) {
     }));
     const ed = $('[data-tedit]', li);
     if (ed) ed.addEventListener('click', async () => {
-      const res = await taskDialog(t, users);
+      const res = await taskDialog(t, await pickUsers());
       if (!res) return;
       if (res._drop) { delete draft.tasks[id]; await saveDraft(); } else await setTask(id, res);
       repaint();
     });
   });
   on('rp-task-add', async () => {
-    const res = await taskDialog(null, users);
+    const res = await taskDialog(null, await pickUsers());
     if (!res) return;
     await setTask(uuid(), { ...res, _new: true, status: 'PENDING' });
     repaint();

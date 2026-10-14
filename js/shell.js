@@ -88,13 +88,18 @@ export function mountShell(root, { env, onScan }) {
   </div>`);
   root.replaceChildren(el);
   const view = $('#view', el);
-  let backTarget = null, onBack = null;
+  let backTarget = null, onBack = null, screenHash = null;
 
   el.addEventListener('click', (e) => {
     const soon = e.target.closest('[data-soon]');
     if (soon) { e.preventDefault(); comingSoon(); return; }
     const nb = e.target.closest('.bnav-item[data-path]');
-    if (nb) { e.preventDefault(); import('./router.js').then((r) => r.navigate(nb.dataset.path)); }
+    if (nb) {
+      e.preventDefault();
+      // Bấm lại nút của màn đang mở: lên đầu trang (vẽ lại cùng màn không tự cuộn)
+      if (location.hash === '#' + nb.dataset.path) { view.scrollTop = 0; window.scrollTo(0, 0); }
+      import('./router.js').then((r) => r.navigate(nb.dataset.path));
+    }
   });
   $('#bnav-scan', el).addEventListener('click', () => onScan && onScan());
   $('#side-scan', el).addEventListener('click', () => onScan && onScan());
@@ -121,8 +126,9 @@ export function mountShell(root, { env, onScan }) {
         b.addEventListener('click', a.onClick);
         box.appendChild(b);
       });
-      view.scrollTop = 0;
-      window.scrollTo(0, 0);
+      // Sang màn khác (đổi địa chỉ) thì lên đầu trang; vẽ lại cùng màn (chọn ô, Bây giờ, Lưu, đồng bộ xong) giữ chỗ đang xem
+      const hash = location.hash || '#/';
+      if (hash !== screenHash) { screenHash = hash; view.scrollTop = 0; window.scrollTo(0, 0); }
     },
     setBackHandler(fn) { onBack = fn; },
     setActive(key) {
