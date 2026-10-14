@@ -271,3 +271,32 @@ test('reauth: PIN sai tăng bộ đếm, PIN đúng xóa bộ đếm; đổi PIN
   assert.equal(c.call('auth.reauth', { pin: OWNER_PIN }).code, 'AUTH_FAILED');
   assert.equal(c.call('auth.reauth', { pin: '715926' }).ok, true);
 });
+
+test('auth.login gửi lại cùng login_id (mất phản hồi) → cùng kết quả, không thêm phiên, không tính thêm lần sai', () => {
+  const env = freshServer();
+  addUser(env, 'NV-300', 2, '482916');
+  const c = makeClient(env);
+  const lid = uuid();
+  const a = c.call('auth.login', { employee_code: 'NV-300', pin: '482916', device_label: 'test', login_id: lid });
+  const b = c.call('auth.login', { employee_code: 'NV-300', pin: '482916', device_label: 'test', login_id: lid });
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, true);
+  assert.equal(b.data.token, a.data.token);
+  const uid = a.data.user.user_id;
+  assert.equal(env.rows('Sessions').filter((s) => s.user_id === uid).length, 1);
+  // login_id mới = lần đăng nhập mới
+  const n = c.call('auth.login', { employee_code: 'NV-300', pin: '482916', device_label: 'test', login_id: uuid() });
+  assert.notEqual(n.data.token, a.data.token);
+  // Sai PIN gửi lại cùng login_id chỉ tính một lần
+  const bad = uuid();
+  assert.equal(c.call('auth.login', { employee_code: 'NV-300', pin: '111333', login_id: bad }).code, 'AUTH_FAILED');
+  assert.equal(c.call('auth.login', { employee_code: 'NV-300', pin: '111333', login_id: bad }).code, 'AUTH_FAILED');
+  const u = env.rows('Users').find((x) => x.employee_code === 'NV-300');
+  assert.equal(Number(u.failed_attempts), 1);
+  // Cùng login_id nhưng PIN khác: không dùng lại kết quả cũ
+  assert.equal(c.call('auth.login', { employee_code: 'NV-300', pin: '111444', login_id: lid }).code, 'AUTH_FAILED');
+  // Máy khác dùng lại login_id: không nhận token của máy kia
+  const other = makeClient(env).call('auth.login', { employee_code: 'NV-300', pin: '482916', login_id: lid });
+  assert.equal(other.ok, true);
+  assert.notEqual(other.data.token, a.data.token);
+});

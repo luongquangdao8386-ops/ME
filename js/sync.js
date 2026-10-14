@@ -10,11 +10,12 @@ export async function getMeta(k) { return idb.get('me_data', 'meta', k).catch(()
 export async function setMeta(k, v) { return idb.put('me_data', 'meta', k, v); }
 export async function getRecords(type) { return (await idb.get('me_data', 'records', type).catch(() => null)) || []; }
 
-/** Tải dữ liệu ban đầu theo quyền, chia trang */
-export async function bootstrap() {
+/** Tải dữ liệu ban đầu theo quyền, chia trang. onPage(n) trước mỗi trang (màn chờ hiện tiến độ) */
+export async function bootstrap({ onPage } = {}) {
   let pageToken = null, cursor = null, first = null;
   const acc = {};
   for (let guard = 0; guard < 50; guard++) {
+    if (onPage) { try { onPage(guard + 1); } catch (e) { /* bỏ qua */ } }
     const r = await api('sync.bootstrap', pageToken ? { page_token: pageToken, sync_cursor: cursor } : {}, { retry: true });
     if (!r.ok) return r;
     if (!first) first = r.data;
@@ -66,18 +67,21 @@ export async function upsertLocal(type, rec) {
   await idb.put('me_data', 'records', type, list);
 }
 
-/** Lấy thay đổi theo cursor; perm_version đổi thì bootstrap lại */
-export async function pullChanges() {
+/**
+ * Lấy thay đổi theo cursor; perm_version đổi thì bootstrap lại.
+ * first: kết quả sync.changes đã gọi sẵn từ đúng cursor đang lưu (lần hỏi máy chủ khi mở app) → không gọi lại trang đầu.
+ */
+export async function pullChanges({ first = null, onPage } = {}) {
   let cursor = await getMeta('cursor');
-  if (cursor === null || cursor === undefined) return bootstrap();
+  if (cursor === null || cursor === undefined) return bootstrap({ onPage });
   const boot = await getMeta('bootstrap');
   let applied = 0, docsChanged = false;
   for (let guard = 0; guard < 20; guard++) {
-    const r = await api('sync.changes', { cursor, limit: 500 }, { retry: true });
+    const r = guard === 0 && first && first.ok ? first : await api('sync.changes', { cursor, limit: 500 }, { retry: true });
     if (!r.ok) return r;
-    if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return bootstrap();
+    if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return bootstrap({ onPage });
     // Máy chủ lên phiên bản mới: tải lại quyền và cài đặt (action mới có trong danh sách quyền)
-    if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap();
+    if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap({ onPage });
     const byType = {};
     for (const ch of r.data.changes) (byType[ch.entity_type] = byType[ch.entity_type] || []).push(ch);
     if (byType.DOCUMENT) docsChanged = true;

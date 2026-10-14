@@ -130,6 +130,65 @@ function serverUrlBlock() {
   </details>`;
 }
 
+/* ---------------- Màn chờ mở app (không logo, 1.4 §3.5) ---------------- */
+const BOOT_STEPS = ['auth.step_connect', 'auth.step_data', 'auth.step_open'];
+
+/**
+ * Ảnh nhà máy + lời chào + 3 bước (kết nối máy chủ → cập nhật dữ liệu → mở trang chủ), thanh tiến độ, số giây chờ.
+ * pin: hiện nút Mở bằng PIN (máy có verifier). Trả {step(n), page(n), slow(), hidePin()}
+ */
+export function renderBoot(root, { name = '', code = '', pin = false, onPin } = {}) {
+  const el = h(`<div class="boot-screen">
+    <div class="boot-photo" aria-hidden="true"></div>
+    <div class="boot-card" role="status">
+      ${name ? `<p class="boot-hello">${bi('auth.hello')}</p><p class="boot-name"><strong>${esc(name)}</strong>${code ? `<span class="boot-code"> · ${esc(code)}</span>` : ''}</p>` : ''}
+      <ol class="boot-steps">${BOOT_STEPS.map((k, i) => `<li data-step="${i + 1}"><span class="st-ico" aria-hidden="true">${ICON.check}</span><span class="st-text">${bi(k)}</span></li>`).join('')}</ol>
+      <div class="boot-bar" aria-hidden="true"><span></span></div>
+      <p class="boot-meta"><span class="boot-hint" hidden>${bi('auth.server_slow')}</span><span class="boot-secs"></span></p>
+      ${pin ? `<div class="boot-pin-box"><button type="button" class="btn block boot-pin" id="open-pin">${ICON.lock}<span>${bi('auth.open_with_pin')}</span></button>
+        <p class="boot-pin-note">${bi('auth.pin_skip_wait')}</p></div>` : ''}
+    </div></div>`);
+  root.replaceChildren(el);
+  const pinBtn = $('#open-pin', el);
+  if (pinBtn) pinBtn.addEventListener('click', () => onPin && onPin());
+  const bar = $('.boot-bar span', el), secs = $('.boot-secs', el);
+  const t0 = performance.now();
+  let cur = 0, floor = 0, shown = 0, stepAt = t0;
+  // Tiến độ ước lượng: mỗi bước tiến dần về mốc của bước đó, không đầy 100% trước khi xong
+  const CAP = [0, 55, 90, 100];
+  const tick = () => {
+    if (!el.isConnected) { clearInterval(timer); return; }
+    const t = (performance.now() - stepAt) / 1000;
+    shown = Math.min(100, floor + (CAP[cur] - floor) * (1 - Math.exp(-t / 4)));
+    bar.style.width = shown.toFixed(1) + '%';
+    const n = Math.floor((performance.now() - t0) / 1000);
+    secs.innerHTML = n >= 2 ? bi('auth.seconds', { N: n }) : '';
+  };
+  const timer = setInterval(tick, 250);
+  const ctl = {
+    step(n) {
+      if (n <= cur) return;
+      floor = shown;
+      cur = n; stepAt = performance.now();
+      $$('.boot-steps li', el).forEach((li) => {
+        const k = Number(li.dataset.step);
+        li.className = k < n ? 'done' : k === n ? 'active' : '';
+      });
+      if (n >= 2) ctl.hidePin();
+      tick();
+    },
+    /** Tải dữ liệu nhiều phần (bootstrap): hiện "phần N" ở bước 2 */
+    page(n) {
+      const li = $('.boot-steps li[data-step="2"] .st-text', el);
+      if (li && n > 1) li.innerHTML = bi('auth.loading_page', { N: n });
+    },
+    slow() { $('.boot-hint', el).hidden = false; },
+    hidePin() { const b = $('.boot-pin-box', el); if (b) b.hidden = true; }
+  };
+  ctl.step(1);
+  return ctl;
+}
+
 /* ---------------- Màn đăng nhập ---------------- */
 export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
   const wide = window.matchMedia('(min-width: 900px)').matches;
@@ -145,6 +204,7 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
       ${pinField('pin', bi('pin6'))}
       <label class="check"><input type="checkbox" id="shared" ${isSharedDevice() ? 'checked' : ''}><span>${bi('shared_device')}</span></label>
       <button type="submit" class="btn primary block" id="login-btn">${bi('login')}</button>
+      <p class="login-status" id="login-status" aria-live="polite" hidden></p>
       <button type="button" class="link" id="forgot">${bi('forgot_pin')}</button>
       <p class="muted center" id="forgot-help" hidden>${bi('forgot_pin_help')}</p>
       <p class="err" id="login-err" role="alert"></p>
@@ -168,8 +228,13 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
   $('#exec-url', el).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#save-url', el).click(); } });
   const pinInp = $('#pin', el);
   pinInp.addEventListener('input', () => { pinInp.value = pinInp.value.replace(/\D/g, '').slice(0, 6); });
+  // Một lần bấm là đủ: nút giữ trạng thái đang chạy (và bỏ qua bấm thêm) cho tới khi vào hẳn app
+  let inFlight = false;
+  const statusEl = $('#login-status', el);
+  const status = (key, vars) => { statusEl.hidden = !key; statusEl.innerHTML = key ? `<span class="spinner tiny" aria-hidden="true"></span><span>${bi(key, vars)}</span>` : ''; };
   $('form', el).addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (inFlight) return;
     const err = $('#login-err', el);
     err.textContent = '';
     const code = $('#emp', el).value.trim().toUpperCase();
@@ -181,18 +246,30 @@ export function renderLogin(root, { onLoggedIn, onMustChange, reason } = {}) {
     if (!code) { $('#emp', el).focus(); return; }
     if (!/^\d{6}$/.test(pin)) { err.innerHTML = bi('pin_format'); return; }
     const btn = $('#login-btn', el);
-    btn.disabled = true; btn.classList.add('busy');
+    const busy = (on) => { inFlight = on; btn.disabled = on; btn.classList.toggle('busy', on); if (!on) status(null); };
+    busy(true);
+    status('auth.checking_pin');
     let r;
     try {
-      r = await login(code, pin, $('#shared', el).checked);
+      r = await login(code, pin, $('#shared', el).checked, { onStatus: (k) => status('auth.' + k) });
     } catch (e) {
       r = { ok: false, code: 'CLIENT_ERROR', message_vi: 'Lỗi trên máy: ' + (e && e.message), message_zh: '本机错误' };
-    } finally {
-      btn.disabled = false; btn.classList.remove('busy');
     }
-    if (r.ok) { ls.set('last_employee_code', code); onLoggedIn && onLoggedIn(r); return; }
-    if (r.code === 'MUST_CHANGE_PIN') { ls.set('last_employee_code', code); onMustChange && onMustChange(pin); return; }
-    pinInp.value = '';
+    try {
+      if (r.ok) {
+        ls.set('last_employee_code', code);
+        status('auth.loading_data');
+        if (onLoggedIn) await onLoggedIn(r, { status });
+        return;
+      }
+      if (r.code === 'MUST_CHANGE_PIN') { ls.set('last_employee_code', code); onMustChange && onMustChange(pin); return; }
+    } finally {
+      // Màn đăng nhập vẫn còn (vào app lỗi): cho bấm lại
+      if (el.isConnected) busy(false);
+    }
+    busy(false);
+    // Mất mạng / máy chủ không trả lời: giữ PIN để chỉ cần bấm lại; sai PIN thì xóa
+    if (r.code !== 'NETWORK_ERROR' && r.code !== 'SERVER_BUSY') pinInp.value = '';
     err.textContent = resMsg(r);
   });
 }
@@ -253,14 +330,25 @@ export async function renderUnlock(root, { onUnlocked, onLogin } = {}) {
   $('#u-login', el).addEventListener('click', () => onLogin && onLogin());
   if (!v) return;
   const inp = $('#upin', el);
-  inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 6); });
+  const form = $('form', el);
+  let inFlight = false;
+  // Nhập đủ 6 số là tự mở (như màn khóa iPhone), không phải bấm nút
+  inp.addEventListener('input', () => {
+    inp.value = inp.value.replace(/\D/g, '').slice(0, 6);
+    if (inp.value.length === 6 && !inFlight) { if (form.requestSubmit) form.requestSubmit(); else $('#u-btn', el).click(); }
+  });
   inp.focus();
-  $('form', el).addEventListener('submit', async (ev) => {
+  form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (inFlight) return;
     const err = $('#u-err', el);
+    if (!/^\d{6}$/.test(inp.value)) { err.innerHTML = bi('pin_format'); inp.focus(); return; }
+    const btn = $('#u-btn', el);
+    inFlight = true; btn.disabled = true; btn.classList.add('busy');
     const t0 = performance.now();
     let r;
     try { r = await offlineUnlock(inp.value); } catch (e) { r = { ok: false, error: e && e.message }; }
+    finally { inFlight = false; btn.disabled = false; btn.classList.remove('busy'); }
     inp.value = '';
     if (r.error) { err.textContent = 'Lỗi trên máy · 本机错误: ' + r.error; return; }
     if (r.ok) { onUnlocked && onUnlocked({ expired: r.expired, ms: Math.round(performance.now() - t0) }); return; }

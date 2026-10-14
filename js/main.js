@@ -1,9 +1,9 @@
 // Khởi động app M&E: Service Worker, phiên, mở offline (2.5), đăng nhập, vào khung app
-import { api, session, ls, ss, bi, biText, esc, execUrl, resMsg, isoNowVN } from './core.js';
+import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN } from './core.js';
 import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
-import { renderLogin, renderChangePin, renderUnlock, toast, dialog, $ } from './ui.js';
+import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $ } from './ui.js';
 import { app, enterApp, syncNow } from './app.js';
 import { stopRouter } from './router.js';
 import { invalidate } from './data.js';
@@ -117,10 +117,10 @@ function showLogin(reason) {
   leaveApp();
   renderLogin(root, {
     reason,
-    onLoggedIn: async () => {
-      const b = await bootstrap();
+    onLoggedIn: async (_r, { status } = {}) => {
+      const b = await bootstrap({ onPage: (n) => status && status(n > 1 ? 'auth.loading_page' : 'auth.loading_data', { N: n }) });
       if (!b.ok) toast(esc(resMsg(b)), 'err');
-      goApp(false);
+      await goApp(false);
     },
     onMustChange: (tempPin) => {
       renderChangePin(root, {
@@ -203,34 +203,38 @@ async function start() {
   };
   if (!navigator.onLine) return tryOffline();
 
-  const wait = document.createElement('div');
-  wait.className = 'boot';
-  wait.innerHTML = `<div class="spinner" aria-hidden="true"></div><button type="button" class="btn small" id="open-pin">${bi('auth.open_with_pin')}</button>`;
-  root.replaceChildren(wait);
+  // Màn chờ: ảnh nhà máy, lời chào, 3 bước có tiến độ; nút Mở bằng PIN khi máy có verifier
   let decided = false;
-  $('#open-pin', wait).addEventListener('click', () => { if (!decided) { decided = true; tryOffline(); } });
+  const hasVerifier = !!(await getVerifier());
+  const u = session.user || {};
+  const bootUi = renderBoot(root, {
+    name: u.display_name, code: u.employee_code, pin: hasVerifier,
+    onPin: () => { if (!decided) { decided = true; tryOffline(); } }
+  });
   const t0 = performance.now();
-  const cursor0 = Number((await getMeta('cursor')) || 0);
-  let r = await api('sync.changes', { cursor: cursor0, limit: 1 }, { timeoutMs: probeSec * 1000 });
+  const cur0 = await getMeta('cursor');
+  const cursor0 = Number(cur0 || 0);
+  // Lần hỏi máy chủ cũng là trang thay đổi đầu tiên (một lượt gọi thay vì hai); chưa có dữ liệu thì chỉ hỏi phiên
+  const probe = { cursor: cursor0, limit: cur0 === null || cur0 === undefined ? 1 : 200 };
+  let r = await api('sync.changes', probe, { timeoutMs: probeSec * 1000 });
   if (decided) return;
   const timedOut = r.code === 'NETWORK_ERROR' && r.transport === 'TIMEOUT';
   noteColdStart(Math.round(performance.now() - t0), timedOut);
-  if (r.code === 'NETWORK_ERROR' && navigator.onLine && (timedOut || !(await getVerifier()))) {
+  if (r.code === 'NETWORK_ERROR' && navigator.onLine && (timedOut || !hasVerifier)) {
     // Còn mạng mà máy chủ chậm, hoặc không có verifier (tab Safari, máy dùng chung): chờ tiếp tới 30 giây
-    const hint = document.createElement('p');
-    hint.className = 'muted';
-    hint.textContent = biText('auth.server_slow');
-    wait.appendChild(hint);
-    r = await api('sync.changes', { cursor: cursor0, limit: 1 }, { timeoutMs: 30000, retry: true });
+    bootUi.slow();
+    r = await api('sync.changes', probe, { timeoutMs: 30000, retry: true });
     if (decided) return;
   }
   decided = true;
   if (r.code === 'NETWORK_ERROR') return tryOffline();
   if (await handleSessionError(r)) return;
   if (r.code === 'SYSTEM_MAINTENANCE') { toast(bi('sys.maintenance'), 'err'); return tryOffline(); }
+  bootUi.step(2);
   flushPendingLogout();
-  const cur = await getMeta('cursor');
-  if (cur === null || cur === undefined) await bootstrap(); else await pullChanges();
+  const onPage = (n) => bootUi.page(n);
+  if (cur0 === null || cur0 === undefined) await bootstrap({ onPage }); else await pullChanges({ first: r, onPage });
+  bootUi.step(3);
   await goApp(false);
   // Có mạng: gửi hàng chờ còn lại ở nền
   if ((await queueItems()).length) syncNow({ quiet: true });

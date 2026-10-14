@@ -1,5 +1,5 @@
 // Đăng nhập, đổi PIN, mở khóa ngoại tuyến, đăng xuất (phụ lục 1.5 mục 2.5, 3.6, 3.8)
-import { api, session, idb, ls, ss, bytesToB64, b64ToBytes, deviceInfo } from './core.js';
+import { api, session, idb, ls, ss, uuid, bytesToB64, b64ToBytes, deviceInfo } from './core.js';
 
 const SALT_BYTES = 16;
 
@@ -125,8 +125,19 @@ export async function clearUserData() {
   await idb.clear('me_files', 'files').catch(() => {});
 }
 
-export async function login(code, pin, shared) {
-  const r = await api('auth.login', { employee_code: code, pin, device_label: deviceLabel() }, { token: null, epoch: null });
+/**
+ * Đăng nhập. Mất phản hồi (chặng chuyển hướng của Google, PoC P-01) → tự gửi lại đúng request (cùng login_id,
+ * máy chủ trả lại kết quả lần đầu, không tính thêm lần sai) tối đa 2 lần. onStatus('resending') khi gửi lại.
+ */
+export async function login(code, pin, shared, { onStatus } = {}) {
+  const payload = { employee_code: code, pin, device_label: deviceLabel(), login_id: uuid() };
+  let r = await api('auth.login', payload, { token: null, epoch: null, timeoutMs: 20000 });
+  for (const wait of [1000, 2500]) {
+    if (r.code !== 'NETWORK_ERROR' || !navigator.onLine || r.transport === 'NO_URL') break;
+    if (onStatus) onStatus('resending');
+    await new Promise((res) => setTimeout(res, wait));
+    r = await api('auth.login', payload, { token: null, epoch: null, timeoutMs: 20000 });
+  }
   if (r.ok || r.code === 'MUST_CHANGE_PIN') {
     // Chỉ đổi cờ "Máy dùng chung" khi đăng nhập thành công (2.5)
     if (shared) ls.set('shared_device', '1'); else ls.del('shared_device');
