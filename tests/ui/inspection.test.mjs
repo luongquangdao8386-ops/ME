@@ -49,13 +49,25 @@ test('iPhone: nộp chứng nhận khi offline kèm 2 ảnh chứng nhận + 1 �
     const inspId = q[0].id;
     assert.ok(q.slice(1).every((x) => x.a === 'doc.upload' && x.id === inspId));
     await page.screenshot({ path: path.join(SHOTS, 'inspection-offline-iphone.png'), fullPage: true });
-    await context.setOffline(false);
+    // Trang Nháp mở lúc mất mạng: nút Đồng bộ ngay khóa
     await page.evaluate(() => { location.hash = '#/account/drafts'; });
-    await page.waitForSelector('#dr-sync:not([disabled])');
-    await page.click('#dr-sync');
+    await page.waitForSelector('#dr-sync[disabled]');
+    assert.equal(await page.locator('#dr-sent').count(), 0);
+    // Có mạng lại: tự gửi không cần bấm, trang tự vẽ lại, mục vừa gửi hiện "Đã lưu máy chủ" (NT1-33)
+    await context.setOffline(false);
     const qlen = () => page.evaluate(async () => (await (await import('./js/sync.js')).queueItems()).length);
     for (let i = 0; i < 60 && (await qlen()) > 0; i++) await page.waitForTimeout(500);
     assert.equal(await qlen(), 0);
+    await page.waitForSelector('#dr-sync:not([disabled])');
+    await page.waitForFunction(() => document.querySelectorAll('#dr-sent [data-done]').length === 4, null, { timeout: 10000 });
+    assert.ok((await page.textContent('#dr-sent')).includes('Đã lưu máy chủ'));
+    assert.ok((await page.textContent('#dr-sent')).includes('LKD-'), 'hiện mã phiếu máy chủ cấp');
+    assert.ok((await page.textContent('#toast')).includes('Đã lưu máy chủ'));
+    await page.screenshot({ path: path.join(SHOTS, 'drafts-sent-iphone.png'), fullPage: true });
+    // Bản lưu trên máy của mục đã gửi không còn giữ ảnh (base64)
+    const done = await page.evaluate(async () => (await (await import('./js/sync.js')).doneItems()).map((o) => JSON.stringify(o.payload)));
+    assert.equal(done.length, 4);
+    assert.ok(done.every((x) => !/_b64/.test(x) && x.length < 2000), 'không còn ảnh trong mục đã gửi');
     const ins = env.rows('Inspections');
     assert.equal(ins[0].inspection_id, inspId, 'ID do điện thoại tạo giữ nguyên');
     assert.equal(ins[0].status, 'PENDING_APPROVAL');

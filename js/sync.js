@@ -127,13 +127,45 @@ export async function doneItems() {
   return (await idb.all('me_data', 'done')).map((x) => x.value).sort((a, b) => a.seq - b.seq);
 }
 
+const DONE_KEEP_DAYS = 7;
+const DONE_KEEP_MAX = 50;
+
+/** Mục đã lưu máy chủ của người đang đăng nhập (mới nhất trước), để CM-04 hiện nhãn "Đã lưu máy chủ" */
+export async function recentDone() {
+  const uid = session.user && session.user.user_id;
+  return (await doneItems().catch(() => [])).filter((o) => o.user_id === uid && o.dataset_epoch === session.epoch)
+    .sort((a, b) => String(b.committed_at).localeCompare(String(a.committed_at)));
+}
+
 async function markDone(op, res) {
+  const p = op.payload || {};
   op.state = 'COMMITTED';
   op.last_code = res.code;
   op.result = res.data || null;
   op.committed_at = isoNowVN();
+  // Máy chủ đã giữ nội dung: bỏ ảnh/tệp (base64) khỏi bản lưu trên máy, chỉ giữ cỡ và số ảnh để hiển thị
+  op.size_kb = Math.ceil(JSON.stringify(p).length / 1024);
+  op.photo_n = (p.mime_type && /^image\//.test(p.mime_type) ? 1 : 0) + (Array.isArray(p.photos) ? p.photos.length : 0);
+  op.payload = Object.fromEntries(Object.entries(p).filter(([k]) => !/_b64$/.test(k)));
   await idb.put('me_data', 'done', op.operation_id, op);
   await idb.del('me_data', 'queue', op.operation_id);
+  await pruneDone();
+}
+
+/** Giữ tối đa DONE_KEEP_MAX mục trong DONE_KEEP_DAYS ngày gần nhất */
+async function pruneDone() {
+  const all = await doneItems().catch(() => []);
+  const cutoff = new Date(Date.now() - DONE_KEEP_DAYS * 864e5).toISOString().slice(0, 10);
+  const keep = new Set(all.filter((o) => String(o.committed_at || '').slice(0, 10) >= cutoff)
+    .sort((a, b) => String(b.committed_at).localeCompare(String(a.committed_at))).slice(0, DONE_KEEP_MAX).map((o) => o.operation_id));
+  for (const o of all) {
+    if (!keep.has(o.operation_id)) { await idb.del('me_data', 'done', o.operation_id).catch(() => {}); continue; }
+    // Mục gửi từ bản cũ còn giữ ảnh: bỏ ảnh
+    const p = o.payload || {};
+    if (Object.keys(p).some((k) => /_b64$/.test(k))) {
+      await idb.put('me_data', 'done', o.operation_id, { ...o, payload: Object.fromEntries(Object.entries(p).filter(([k]) => !/_b64$/.test(k))) }).catch(() => {});
+    }
+  }
 }
 
 /**

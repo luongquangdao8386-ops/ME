@@ -1,7 +1,7 @@
 // CM-04 Nháp chờ đồng bộ (5.2) và Xử lý xung đột (5.2, 1.4 §14.3)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, session, L } from '../core.js';
 import { ICON, toast, dialog, h, $ } from '../ui.js';
-import { queueItems, exportBackup, deleteQueued, requeue } from '../sync.js';
+import { queueItems, recentDone, exportBackup, deleteQueued, requeue } from '../sync.js';
 import { app, syncNow } from '../app.js';
 import { navigate } from '../router.js';
 import { shareFileNow } from '../media.js';
@@ -37,6 +37,7 @@ export async function renderDrafts(view, { shell }) {
   mine.forEach((o) => by[tabOf(o)].push(o));
   const online = navigator.onLine && !app.offline;
   const list = by[curTab];
+  const sent = curTab === 'queued' ? (await recentDone()).slice(0, 20) : [];
   view.innerHTML = `<div class="chips tabs">${TABS.map((t) => `<button type="button" class="chip${t === curTab ? ' on' : ''}" data-tab="${t}">${bi(TAB_LABEL[t])} <span class="count">${by[t].length}</span></button>`).join('')}</div>
     ${other ? `<p class="muted small">${bi('draft.other_user', { N: other })}</p>` : ''}
     <div class="row"><button type="button" class="btn small primary" id="dr-sync" ${online ? '' : 'disabled'}>${ICON.sync}<span>${bi('btn.sync_now')}</span></button>
@@ -57,7 +58,12 @@ export async function renderDrafts(view, { shell }) {
           ${curTab === 'conflict' ? `<a class="btn tiny primary" href="#/account/conflict/${esc(o.operation_id)}">${bi('conflict.title')}</a>` : ''}
           ${curTab !== 'old' ? `<button type="button" class="btn tiny danger" data-del="${esc(o.operation_id)}">${ICON.trash}<span>${bi('btn.delete_draft')}</span></button>` : ''}
         </div></div>`;
-    }).join('') || `<div class="card empty-state"><p class="muted">${bi('draft.empty')}</p></div>`}</div>`;
+    }).join('') || `<div class="card empty-state"><p class="muted">${bi('draft.empty')}</p></div>`}</div>
+    ${sent.length ? `<h2 class="sent-title">${bi('draft.recent_sent')}</h2><div class="cards" id="dr-sent">${sent.map((o) => `<div class="card rec-card" data-done="${esc(o.operation_id)}">
+        <div class="rec-top"><strong>${actionLabel(o.action)}</strong>${badge('op_state.COMMITTED')}</div>
+        <div class="muted small">${o.result && o.result.display_code ? esc(o.result.display_code) + ' · ' : ''}${bi('draft.created')}: ${esc(fmtDateTime(o.local_created_at))} · ${bi('draft.sent_at')}: ${esc(fmtDateTime(o.committed_at))}</div>
+        ${o.photo_n ? `<div class="muted small">${bi('draft.photos', { N: o.photo_n })}${o.size_kb ? ` · ${bi('draft.size')}: ${fmtNumber(o.size_kb)} KB` : ''}</div>` : ''}
+      </div>`).join('')}</div>` : ''}`;
   const again = () => renderDrafts(view, { shell });
   view.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { curTab = b.dataset.tab; again(); }));
   view.querySelector('#dr-sync').addEventListener('click', async (e) => { e.currentTarget.disabled = true; await syncNow(); again(); });

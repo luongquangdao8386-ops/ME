@@ -72,24 +72,34 @@ export async function updateSyncStatus() {
   app.shell.setSync({ offline: app.offline || !navigator.onLine, lastSync: await getMeta('last_sync'), queued: mine.length - problems, problems });
 }
 
-/**
- * Đồng bộ ngay: gửi hàng chờ rồi lấy thay đổi. Trả {ok, code}
- */
-export async function syncNow({ quiet = false } = {}) {
-  if (!navigator.onLine) { if (!quiet) toast(bi('sync.need_network'), 'err'); return { ok: false, code: 'NETWORK_ERROR' }; }
+let syncing = null;
+
+async function runSync() {
   const f = await flushQueue();
-  if (f.stopped_code && app.onSessionError && await app.onSessionError({ code: f.stopped_code, data: f.response && f.response.data })) return { ok: false, code: f.stopped_code };
+  if (f.stopped_code && app.onSessionError && await app.onSessionError({ code: f.stopped_code, data: f.response && f.response.data })) return { ok: false, code: f.stopped_code, handled: true, committed: f.committed };
   const r = await pullChanges();
   invalidate();
   app.offline = false;
   await updateSyncStatus();
   if (!r.ok) {
-    if (app.onSessionError && await app.onSessionError(r)) return r;
-    if (!quiet) toast(esc(resMsg(r)), 'err');
-    return r;
+    if (app.onSessionError && await app.onSessionError(r)) return { ...r, handled: true, committed: f.committed };
+    return { ...r, committed: f.committed };
   }
-  if (!quiet) toast(bi('sync.done'), 'ok');
-  return { ok: true };
+  return { ok: true, committed: f.committed };
+}
+
+/**
+ * Đồng bộ ngay: gửi hàng chờ rồi lấy thay đổi. Trả {ok, code, committed}.
+ * Hai lần gọi trùng nhau (nút bấm + tự gửi khi có mạng lại) dùng chung một lượt, không gửi hai lần.
+ */
+export async function syncNow({ quiet = false } = {}) {
+  if (!navigator.onLine) { if (!quiet) toast(bi('sync.need_network'), 'err'); return { ok: false, code: 'NETWORK_ERROR' }; }
+  const r = await (syncing || (syncing = runSync().finally(() => { syncing = null; })));
+  if (!r.ok) { if (!quiet && !r.handled) toast(esc(resMsg(r)), 'err'); return r; }
+  // Có mục vừa lên máy chủ: luôn báo "Đã lưu máy chủ" (NT1-33), kể cả khi tự gửi ở nền
+  if (r.committed) toast(bi('sync.committed_n', { N: r.committed }), 'ok');
+  else if (!quiet) toast(bi('sync.done'), 'ok');
+  return r;
 }
 
 /** Sau một thao tác ghi COMMITTED: lấy thay đổi (1.4 §14.3: gọi sync.changes sau mỗi COMMITTED) */
@@ -196,5 +206,17 @@ window.addEventListener('resize', () => {
   const w = isWide();
   if (w !== lastWide) { lastWide = w; refresh(); }
 });
-window.addEventListener('online', () => { app.offline = false; updateSyncStatus(); });
-window.addEventListener('offline', () => { updateSyncStatus(); });
+// Trang Nháp/Tài khoản vẽ lại theo trạng thái mạng (nút Đồng bộ ngay bật/tắt, mục vừa gửi)
+function refreshIfAccount() { if (app.shell && currentPath().startsWith('/account')) refresh(); }
+
+window.addEventListener('online', async () => {
+  app.offline = false;
+  await updateSyncStatus();
+  // Có mạng lại: tự gửi nháp của người đang đăng nhập (4.7)
+  const uid = session.user && session.user.user_id;
+  if (app.shell && uid && (await queueItems().catch(() => [])).some((o) => o.user_id === uid && o.dataset_epoch === session.epoch && o.state !== 'REJECTED' && o.state !== 'CONFLICT')) {
+    await syncNow({ quiet: true });
+  }
+  refreshIfAccount();
+});
+window.addEventListener('offline', () => { updateSyncStatus(); refreshIfAccount(); });
