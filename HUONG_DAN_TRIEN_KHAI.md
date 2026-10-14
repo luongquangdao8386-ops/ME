@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — Đợt 1 (bản 1.0.0-d1.21)
+# Hướng dẫn triển khai M&E — Đợt 1 (bản 1.0.0-d1.22)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -33,7 +33,7 @@ Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và 
 1. Mở <https://script.google.com> → **Dự án mới**. Bấm tên "Dự án không có tiêu đề" → đặt **`ME_MayChu_THAT`** → Đổi tên.
 2. **Cài đặt dự án** (bánh răng bên trái) → tick **Hiển thị tệp kê khai "appsscript.json" trong trình chỉnh sửa**.
 3. **Trình chỉnh sửa** (`< >`) → mở `appsscript.json` → Ctrl+A → dán toàn bộ tệp `apps-script/appsscript.json` → Lưu (Ctrl+S).
-4. Mở `Code.gs` → Ctrl+A → xóa → dán toàn bộ `apps-script/Code.gs` (bản **1.0.0-d1.21**) → Lưu.
+4. Mở `Code.gs` → Ctrl+A → xóa → dán toàn bộ `apps-script/Code.gs` (bản **1.0.0-d1.21** trở lên; d1.22 chỉ khác số phiên bản) → Lưu.
 5. **Cài đặt dự án** → **Thuộc tính tập lệnh** → **Thêm thuộc tính tập lệnh**: Thuộc tính `ENV`, Giá trị **`THAT`** (chữ in hoa) → **Lưu thuộc tính tập lệnh**. Thiếu bước này thì `setup` báo lỗi và không tạo gì.
 6. Trình chỉnh sửa → ô chọn hàm → **`setup`** → **Chạy**. Lần đầu Google hỏi quyền: **Xem xét quyền** → chọn tài khoản M&E → **Nâng cao** → **Đi tới ME_MayChu_THAT (không an toàn)** → **Cho phép**. Nhật ký: `Xong setup. ENV=THAT. Đã tạo 31 sheet trong thư mục ME_HeThong…`. Drive có thư mục **`ME_HeThong`** (không có đuôi `_THU`).
 7. Thuộc tính tập lệnh → thêm 3 thuộc tính: `SETUP_OWNER_CODE` = mã NV của owner, `SETUP_OWNER_NAME` = tên hiển thị, `SETUP_OWNER_TEMP_PIN` = PIN tạm 6 số → Lưu.
@@ -62,7 +62,7 @@ Làm sau khi Claude báo đã ghi link THẬT vào `config.js` và đưa bản T
 
 **Bật trang THẬT**
 1. Repo `ME` → **Settings** → **Pages** → Branch: **`main`**, **/ (root)** → **Save**. Chờ tab **Actions** hiện "pages build and deployment" xanh.
-2. Máy tính: mở <https://luongquangdao8386-ops.github.io/ME/> → Ctrl+Shift+R. Màn Đăng nhập **không** có nhãn THỬ, **không** có mục "Máy chủ". Máy đã từng mở `/ME/` (lúc còn là THỬ) báo "App đã chuyển sang máy chủ khác — đăng nhập lại" — đúng.
+2. Máy tính: mở <https://luongquangdao8386-ops.github.io/ME/> → Ctrl+Shift+R. Màn Đăng nhập **không** có nhãn THỬ, **không** có mục "Máy chủ". Máy đã từng mở `/ME/` lúc còn là THỬ sẽ tự về màn Đăng nhập, kèm một trong các dòng "App đã chuyển sang máy chủ khác", "Dữ liệu đã được đặt lại" hoặc "Đăng nhập lại" — đúng; dữ liệu THỬ trên máy đó bị xóa khi đăng nhập tài khoản THẬT.
 3. Đăng nhập bằng mã owner + PIN tạm (Phần F bước 7) → app bắt **đổi PIN** → đặt PIN mới, nhớ kỹ.
 
 **Cài đặt trong app (owner, máy tính)** — các mục ở **Tài khoản → Quản trị · 管理** (cuối trang Tài khoản):

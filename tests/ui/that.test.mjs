@@ -36,6 +36,7 @@ test('config.js: chọn máy chủ theo thư mục trang; đúng 4 khóa; trang 
   assert.match(me.EXEC_URL, /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/);
   assert.match(thu.EXEC_URL, /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/);
   assert.deepEqual([other.APP_BASE_URL, other.EXEC_URL], ['', '']);
+  assert.notEqual(me.EXEC_URL, thu.EXEC_URL, 'THẬT và THỬ là hai máy chủ khác nhau');
 });
 
 /** Một iPhone, hai trang; meExec() cho biết trang /ME/ đang trỏ máy chủ nào (đổi được giữa chừng) */
