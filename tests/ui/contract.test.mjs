@@ -116,6 +116,36 @@ test('web C4: gửi duyệt dự thảo do người khác tạo → cảnh báo 
   } finally { await app.close(); }
 });
 
+test('web C4: lưu trữ dự thảo gia hạn đang chờ duyệt (bị kẹt) → hồ sơ gốc hiện lại nút Tạo dự thảo gia hạn', async () => {
+  const env = freshServer();
+  ownerClient(env);
+  env.g.pocSeedSampleData();
+  const hd = userClient(env, 'U-HD', 2, '583019', 'HD_KD');
+  const id = uuid(), d = uuid();
+  assert.equal(hd.write('contract.create', { contract_id: id, title_vi: 'Bảo trì máy nén MẪU', start_date: '2026-10-09', end_date: '2026-11-09' }).ok, true);
+  assert.equal(hd.write('contract.renewal.create', { contract_id: d, previous_contract_id: id, start_date: '2026-11-10', end_date: '2027-11-09' }).ok, true);
+  assert.equal(hd.write('contract.renewal.submit', { contract_id: d }, { expected_version: 1 }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/contracts/${id}`);
+    await page.waitForSelector('.code.big');
+    assert.equal(await page.locator('#co-renew').count(), 0, 'đang có dự thảo mở');
+    await go(page, `#/contracts/${d}`);
+    await page.waitForSelector('#co-arch');
+    await page.click('#co-arch');
+    await page.waitForSelector('.modal #ca');
+    await page.fill('.modal #ca', 'Dự thảo thử bị kẹt');
+    await page.locator('.modal-actions .btn.primary').last().click();
+    await page.waitForFunction(() => location.hash === '#/contracts', null, { timeout: 15000 });
+    assert.ok(env.rows('Contracts').find((x) => x.contract_id === d).archived_at);
+    await go(page, `#/contracts/${id}`);
+    await page.waitForSelector('#co-renew', { timeout: 15000 });
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('iPhone C1: thấy hợp đồng nhưng không thấy giá trị; không có nút sửa/gia hạn', async () => {
   const env = freshServer();
   const owner = ownerClient(env);
