@@ -69,7 +69,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
 
 function visibleEntities_(ctx) {
   return SYNC_ENTITIES_.filter(function (ent) {
-    if (ent.dot && ent.dot > RELEASED_DOT) return false;
+    if (ent.dot && ent.dot > releasedDot_()) return false;
     if (!ent.module) return true;
     if (ent.module === '*work') return can_(ctx, 'maintenance.view', { module: 'maintenance' }) || can_(ctx, 'repair.view', { module: 'repairs' });
     if (ent.module === '*alert') return can_(ctx, ent.action, { module: 'inspections' }) || can_(ctx, ent.action, { module: 'contracts' });

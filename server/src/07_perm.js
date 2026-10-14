@@ -395,10 +395,20 @@ function authBasis_(ctx) {
   return 'ROLE_LEVEL';
 }
 
+/**
+ * Đợt đang chạy được: RELEASED_DOT khi dữ liệu đã nâng schema (migrateSchema ghi schema_version); chưa nâng thì chỉ Đợt 1,
+ * để lúc vừa dán Code.gs mới mà chưa chạy migrateSchema app vẫn dùng được phần cũ (sheet mới chưa có → "Sắp có").
+ */
+function releasedDot_() {
+  var sv = '';
+  try { sv = String(sysStateCached_().schema_version || ''); } catch (e) { sv = ''; }
+  return sv === SCHEMA_VERSION ? RELEASED_DOT : Math.min(RELEASED_DOT, 1);
+}
+
 function dotReleased_(dot) {
   if (dot === 'POC') return isTestEnv_();
   if (dot === 'H') return false;
-  return dot <= RELEASED_DOT;
+  return dot <= releasedDot_();
 }
 
 /** Khối permissions của bootstrap: action được phép theo cấp/subrole (chưa xét hồ sơ) */

@@ -401,6 +401,8 @@ function sendExpiryDigest() {
 function sendExpiryDigestRun_() {
   dbReset_();
   refreshAlerts_();
+  // Đợt 2: phiếu bảo trì tới hạn theo ngày lịch mới (Gmail Bảo trì vẫn tắt, 1.4 §5.2)
+  try { generateDueWorkOrders_(); } catch (e) { console.warn('generateDueWorkOrders_ ' + (e && e.message)); }
   housekeeping_();
   if (!setting_('gmail_enabled')) { log_('sendExpiryDigest: gmail_enabled = FALSE — chỉ tính lại Alerts.'); return; }
   var res = processMailQueue_();

@@ -115,11 +115,14 @@ function fillPendingField_(sheet, r, f, actorId, opId) {
   });
 }
 
-/** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
+/** Mỗi 3 giờ: sinh phiếu bảo trì tới hạn (Đợt 2), dịch bù trường PENDING (2.3); dịch bù không tăng record_version */
 function runBackgroundJobs() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
-  if (!mtEnabled_()) return;
   var t0 = Date.now();
+  var gen = 0;
+  try { dbReset_(); gen = generateDueWorkOrders_(); } catch (e) { console.warn('generateDueWorkOrders_ ' + (e && e.message)); }
+  if (gen) log_('runBackgroundJobs: sinh ' + gen + ' phiếu bảo trì.');
+  if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {
     if (Date.now() - t0 > 150000) return;

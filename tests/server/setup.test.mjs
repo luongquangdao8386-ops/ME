@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
-import { freshServer } from '../helpers.mjs';
+import { freshServer, makeClient, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN } from '../helpers.mjs';
 
 test('setup tạo 41 sheet Đợt 1–2, Settings, SystemState, 60 dòng RolePermissions', () => {
   const env = freshServer();
@@ -149,4 +149,34 @@ test('nâng THẬT từ Đợt 1 lên Đợt 2: migrateSchema thêm 10 sheet, c�
   assert.equal(env.props.getProperty('DATASET_EPOCH'), epoch, 'nâng đợt không đổi epoch (nháp, tem giữ nguyên)');
   assert.ok(env.rows('Settings').some((x) => x.setting_key === 'wo_generate_days_ahead'));
   assert.equal(g.readState_().map.schema_version, '1.5.2');
+});
+
+test('dán Code.gs Đợt 2 mà chưa chạy migrateSchema: app vẫn chạy Đợt 1, action Đợt 2 trả FEATURE_NOT_ENABLED; chạy xong thì bật', () => {
+  const env = loadServer();
+  const g = env.g;
+  g.RELEASED_DOT = 1;
+  env.props.setProperty('ENV', 'THU');
+  g.setup();
+  env.props.setProperty('SETUP_OWNER_CODE', OWNER_CODE);
+  env.props.setProperty('SETUP_OWNER_NAME', 'Chủ');
+  env.props.setProperty('SETUP_OWNER_TEMP_PIN', OWNER_TEMP_PIN);
+  g.adminSetupOwner();
+  // Đợt 1 đang chạy với schema 1.5.0
+  g.dbReset_();
+  g.withWriteLock_(() => { const st = g.readState_(); g.stateWrite_(st, { schema_version: ['STRING', '1.5.0'] }, 'TEST'); });
+  env.cache.clear && env.cache.clear();
+  g.RELEASED_DOT = 2;
+  g.clearSysCaches_();
+  const c = makeClient(env);
+  c.login(OWNER_CODE, OWNER_TEMP_PIN);
+  c.token = c.call('pin.change', { current_pin: OWNER_TEMP_PIN, new_pin: OWNER_PIN }).data.token;
+  const b = c.call('sync.bootstrap', {});
+  assert.equal(b.ok, true, JSON.stringify(b).slice(0, 300));
+  assert.equal(b.data.records.WORK_ORDER, undefined);
+  assert.ok(!b.data.permissions.actions.includes('maintenance.view'));
+  assert.equal(c.call('maintenance.view', {}).code, 'FEATURE_NOT_ENABLED');
+  g.migrateSchema();
+  const b2 = c.call('sync.bootstrap', {});
+  assert.ok(b2.data.permissions.actions.includes('maintenance.view'));
+  assert.equal(c.call('maintenance.view', {}).code, 'OK');
 });

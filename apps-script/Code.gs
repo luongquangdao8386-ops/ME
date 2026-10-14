@@ -2126,10 +2126,20 @@ function authBasis_(ctx) {
   return 'ROLE_LEVEL';
 }
 
+/**
+ * Đợt đang chạy được: RELEASED_DOT khi dữ liệu đã nâng schema (migrateSchema ghi schema_version); chưa nâng thì chỉ Đợt 1,
+ * để lúc vừa dán Code.gs mới mà chưa chạy migrateSchema app vẫn dùng được phần cũ (sheet mới chưa có → "Sắp có").
+ */
+function releasedDot_() {
+  var sv = '';
+  try { sv = String(sysStateCached_().schema_version || ''); } catch (e) { sv = ''; }
+  return sv === SCHEMA_VERSION ? RELEASED_DOT : Math.min(RELEASED_DOT, 1);
+}
+
 function dotReleased_(dot) {
   if (dot === 'POC') return isTestEnv_();
   if (dot === 'H') return false;
-  return dot <= RELEASED_DOT;
+  return dot <= releasedDot_();
 }
 
 /** Khối permissions của bootstrap: action được phép theo cấp/subrole (chưa xét hồ sơ) */
@@ -4006,7 +4016,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
 
 function visibleEntities_(ctx) {
   return SYNC_ENTITIES_.filter(function (ent) {
-    if (ent.dot && ent.dot > RELEASED_DOT) return false;
+    if (ent.dot && ent.dot > releasedDot_()) return false;
     if (!ent.module) return true;
     if (ent.module === '*work') return can_(ctx, 'maintenance.view', { module: 'maintenance' }) || can_(ctx, 'repair.view', { module: 'repairs' });
     if (ent.module === '*alert') return can_(ctx, ent.action, { module: 'inspections' }) || can_(ctx, ent.action, { module: 'contracts' });
@@ -6159,6 +6169,8 @@ function sendExpiryDigest() {
 function sendExpiryDigestRun_() {
   dbReset_();
   refreshAlerts_();
+  // Đợt 2: phiếu bảo trì tới hạn theo ngày lịch mới (Gmail Bảo trì vẫn tắt, 1.4 §5.2)
+  try { generateDueWorkOrders_(); } catch (e) { console.warn('generateDueWorkOrders_ ' + (e && e.message)); }
   housekeeping_();
   if (!setting_('gmail_enabled')) { log_('sendExpiryDigest: gmail_enabled = FALSE — chỉ tính lại Alerts.'); return; }
   var res = processMailQueue_();
@@ -6665,11 +6677,14 @@ function fillPendingField_(sheet, r, f, actorId, opId) {
   });
 }
 
-/** Mỗi 3 giờ: dịch bù trường PENDING (2.3); không tăng record_version */
+/** Mỗi 3 giờ: sinh phiếu bảo trì tới hạn (Đợt 2), dịch bù trường PENDING (2.3); dịch bù không tăng record_version */
 function runBackgroundJobs() {
   if (prop_('MAINTENANCE_MODE') === 'true') return;
-  if (!mtEnabled_()) return;
   var t0 = Date.now();
+  var gen = 0;
+  try { dbReset_(); gen = generateDueWorkOrders_(); } catch (e) { console.warn('generateDueWorkOrders_ ' + (e && e.message)); }
+  if (gen) log_('runBackgroundJobs: sinh ' + gen + ' phiếu bảo trì.');
+  if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {
     if (Date.now() - t0 > 150000) return;
@@ -8766,7 +8781,7 @@ function exportXlsx_(ctx) {
  * Theo giờ chạy: phiếu sinh khi số giờ đọc mới nhất ≥ operating_hours_target; xong thì target = giờ lúc làm + chu kỳ. */
 
 var PRIORITIES_ = ['URGENT', 'HIGH', 'NORMAL', 'LOW'];
-var INTERVAL_TYPES_ = ['DAY', 'MONTH', 'OPERATING_HOURS'];
+var PLAN_INTERVAL_TYPES_ = ['DAY', 'MONTH', 'OPERATING_HOURS'];
 var RESULT_TYPES_ = ['PASS_FAIL', 'NUMBER', 'TEXT'];
 var CHECK_RESULTS_ = ['PENDING', 'PASS', 'FAIL', 'NA'];
 var WO_OPEN_ = { DRAFT: 1, ASSIGNED: 1, IN_PROGRESS: 1, PENDING_ACCEPTANCE: 1 };
@@ -9006,7 +9021,7 @@ function maybeGenerateForPlan_(st, su, plan, writes) {
  * Gọi từ runBackgroundJobs (3 giờ/lần) và sendExpiryDigest (hằng ngày). Trả số phiếu đã sinh.
  */
 function generateDueWorkOrders_() {
-  if (RELEASED_DOT < 2) return 0;
+  if (releasedDot_() < 2) return 0;
   return withWriteLock_(function () {
     var st = readState_();
     var su = {}, writes = [];
@@ -9165,7 +9180,7 @@ function maintenancePlanEdit_(ctx) {
   if (!isUuidV4_(eqId)) errs.push(fieldError_('equipment_id', 'REQUIRED'));
   if (cur0 && p.equipment_id !== undefined && p.equipment_id !== cur0.equipment_id) errs.push(fieldError_('equipment_id', 'INVALID_VALUE'));
   var itype = v('interval_type');
-  if (INTERVAL_TYPES_.indexOf(itype) < 0) errs.push(fieldError_('interval_type', itype ? 'INVALID_VALUE' : 'REQUIRED'));
+  if (PLAN_INTERVAL_TYPES_.indexOf(itype) < 0) errs.push(fieldError_('interval_type', itype ? 'INVALID_VALUE' : 'REQUIRED'));
   var ival = Number(v('interval_value'));
   var maxV = itype === 'MONTH' ? 120 : (itype === 'DAY' ? 3650 : 100000);
   if (!(ival >= 1 && ival <= maxV && Math.floor(ival) === ival)) errs.push(fieldError_('interval_value', v('interval_value') === undefined || v('interval_value') === '' ? 'REQUIRED' : 'INVALID_VALUE'));

@@ -6,7 +6,7 @@
  * Theo giờ chạy: phiếu sinh khi số giờ đọc mới nhất ≥ operating_hours_target; xong thì target = giờ lúc làm + chu kỳ. */
 
 var PRIORITIES_ = ['URGENT', 'HIGH', 'NORMAL', 'LOW'];
-var INTERVAL_TYPES_ = ['DAY', 'MONTH', 'OPERATING_HOURS'];
+var PLAN_INTERVAL_TYPES_ = ['DAY', 'MONTH', 'OPERATING_HOURS'];
 var RESULT_TYPES_ = ['PASS_FAIL', 'NUMBER', 'TEXT'];
 var CHECK_RESULTS_ = ['PENDING', 'PASS', 'FAIL', 'NA'];
 var WO_OPEN_ = { DRAFT: 1, ASSIGNED: 1, IN_PROGRESS: 1, PENDING_ACCEPTANCE: 1 };
@@ -246,7 +246,7 @@ function maybeGenerateForPlan_(st, su, plan, writes) {
  * Gọi từ runBackgroundJobs (3 giờ/lần) và sendExpiryDigest (hằng ngày). Trả số phiếu đã sinh.
  */
 function generateDueWorkOrders_() {
-  if (RELEASED_DOT < 2) return 0;
+  if (releasedDot_() < 2) return 0;
   return withWriteLock_(function () {
     var st = readState_();
     var su = {}, writes = [];
@@ -405,7 +405,7 @@ function maintenancePlanEdit_(ctx) {
   if (!isUuidV4_(eqId)) errs.push(fieldError_('equipment_id', 'REQUIRED'));
   if (cur0 && p.equipment_id !== undefined && p.equipment_id !== cur0.equipment_id) errs.push(fieldError_('equipment_id', 'INVALID_VALUE'));
   var itype = v('interval_type');
-  if (INTERVAL_TYPES_.indexOf(itype) < 0) errs.push(fieldError_('interval_type', itype ? 'INVALID_VALUE' : 'REQUIRED'));
+  if (PLAN_INTERVAL_TYPES_.indexOf(itype) < 0) errs.push(fieldError_('interval_type', itype ? 'INVALID_VALUE' : 'REQUIRED'));
   var ival = Number(v('interval_value'));
   var maxV = itype === 'MONTH' ? 120 : (itype === 'DAY' ? 3650 : 100000);
   if (!(ival >= 1 && ival <= maxV && Math.floor(ival) === ival)) errs.push(fieldError_('interval_value', v('interval_value') === undefined || v('interval_value') === '' ? 'REQUIRED' : 'INVALID_VALUE'));

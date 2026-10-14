@@ -30,6 +30,15 @@ const dictSrc = `// TỆP TẠO TỰ ĐỘNG từ i18n/labels.json bằng "npm r
   `// Mỗi khóa: [Việt, 中文, màu?] (phụ lục 1.5 mục 5.3)\nexport const DICT = ${JSON.stringify(labels, null, 0).replace(/\],"/g, '],\n"')};\n`;
 const dictPath = path.join(root, 'js', 'dict.js');
 if (!fs.existsSync(dictPath) || fs.readFileSync(dictPath, 'utf8') !== dictSrc) fs.writeFileSync(dictPath, dictSrc);
+// Các tệp ghép chung một phạm vi toàn cục: cùng tên var/function ở hai tệp thì tệp sau đè tệp trước (lỗi khó thấy)
+const seenNames = new Map();
+for (const f of files) {
+  const src = fs.readFileSync(path.join(srcDir, f), 'utf8');
+  for (const m of src.matchAll(/^(?:var|function)\s+([A-Za-z_$][\w$]*)/gm)) {
+    if (seenNames.has(m[1]) && seenNames.get(m[1]) !== f) { console.error(`Trùng tên toàn cục ${m[1]}: ${seenNames.get(m[1])} và ${f}`); process.exit(1); }
+    seenNames.set(m[1], f);
+  }
+}
 const body = files.map((f) => `\n// ===== ${f} =====\n` + fs.readFileSync(path.join(srcDir, f), 'utf8')).join('') +
   `\n// ===== i18n/labels.json =====\n/** Bản chép từ điển nhãn của app (5.3) cho email, Excel, lời báo */\nvar LABELS = ${JSON.stringify(labels)};\n`;
 const out = header + body;
