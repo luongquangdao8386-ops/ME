@@ -968,6 +968,7 @@
   "excel.add": ["Thêm mới", "新增"],
   "excel.update": ["Cập nhật", "更新"],
   "excel.errors": ["Lỗi", "错误"],
+  "excel.unchanged": ["Không đổi (bỏ qua)", "无变化（跳过）"],
   "excel.mt_fields": ["{N} trường sẽ được dịch máy sau khi nhập", "导入后将机器翻译{N}个字段"],
   "excel.sensitive": ["Lô nhạy cảm: người khác người nhập duyệt và ghi, có PIN; ghi là duyệt", "敏感批次：须由导入人以外的人员审核写入（需PIN），写入即审核"],
   "excel.btn_commit": ["Nhập dữ liệu", "导入数据"],

@@ -122,11 +122,15 @@ async function commitBatch(repaint) {
   repaint();
 }
 
+/** Dòng trùng hồ sơ hiện tại (máy chủ bỏ qua, không ghi) */
+const unchangedOf = (s) => Math.max(0, (s.total_rows || 0) - (s.add_count || 0) - (s.update_count || 0) - (s.error_count || 0));
+
 function summaryHtml(key, s) {
   const st = badge('import_status.' + s.status);
   const counts = `<div class="kv-grid"><div class="kv"><span>${bi('excel.add')}</span><strong>${fmtNumber(s.add_count || 0)}</strong></div>
     <div class="kv"><span>${bi('excel.update')}</span><strong>${fmtNumber(s.update_count || 0)}</strong></div>
     <div class="kv"><span>${bi('excel.errors')}</span><strong>${fmtNumber(s.error_count || 0)}</strong></div>
+    ${unchangedOf(s) > 0 ? `<div class="kv"><span>${bi('excel.unchanged')}</span><strong>${fmtNumber(unchangedOf(s))}</strong></div>` : ''}
     ${s.committed !== undefined ? `<div class="kv"><span>${bi('import_status.COMMITTED')}</span><strong>${fmtNumber(s.committed)}</strong></div>` : ''}</div>`;
   const notes = [
     s.mt_fields ? `<p class="muted small">${bi('excel.mt_fields', { N: s.mt_fields })}</p>` : '',

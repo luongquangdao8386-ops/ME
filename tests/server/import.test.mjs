@@ -136,6 +136,41 @@ test('xuất rồi nhập lại (UPDATE theo ID + record_version): sửa tên; b
   assert.deepEqual(errsAt(old, 3), ['record_version:VERSION_CONFLICT']);
 });
 
+test('xuất rồi nhập lại nguyên trạng: dòng không đổi bỏ qua (ô số trống = null), chỉ dòng sửa là Cập nhật; commit không đổi record_version dòng bỏ qua; lô kiểm tra kiểu cũ (OK) cũng bỏ qua lúc ghi', () => {
+  const { env, c } = setup();
+  const ids = [uuid(), uuid(), uuid()];
+  ids.forEach((id, i) => c.write('equipment.create', { equipment_id: id, name_vi: 'Máy MẪU ' + i, model: 'M-' + i }));
+  const ex = c.call('export.xlsx', { template_key: 'equipment' });
+  const sh = ex.data.sheets[0];
+  const rows = sh.rows.map((rw, i) => {
+    const v = Object.fromEntries(sh.keys.map((k, j) => [k, rw[j]]));
+    delete v.i18n_machine_fields;
+    if (v.equipment_id === ids[1]) v.model = 'M-1B';
+    return row('equipment', i + 3, v);
+  });
+  const r = preview(c, 'equipment', rows);
+  assert.equal(r.data.status, 'READY', JSON.stringify(r.data.errors));
+  assert.equal(r.data.update_count, 1);
+  assert.equal(r.data.total_rows - r.data.add_count - r.data.update_count - r.data.error_count, 2, 'hai dòng không đổi');
+  assert.equal(r.data.changes.length, 1);
+  assert.deepEqual(r.data.changes[0].diff, { model: ['M-1', 'M-1B'] });
+  const cm = c.call('import.commit', { import_batch_id: r.batch }, { operation_id: uuid(), reauth_token: c.reauth() });
+  assert.equal(cm.data.status, 'COMMITTED');
+  assert.equal(cm.data.committed, 1);
+  const eqs = env.rows('Equipment');
+  assert.deepEqual(ids.map((id) => eqs.find((e) => e.equipment_id === id).record_version), [1, 2, 1]);
+  // Lô kiểm tra theo bản cũ: dòng không đổi vẫn ở trạng thái OK → lúc ghi máy chủ so lại và bỏ qua
+  const ex2 = c.call('export.xlsx', { template_key: 'equipment' }).data.sheets[0];
+  const rows2 = ex2.rows.map((rw, i) => { const v = Object.fromEntries(ex2.keys.map((k, j) => [k, rw[j]])); delete v.i18n_machine_fields; return row('equipment', i + 3, v); });
+  const r2 = preview(c, 'equipment', rows2);
+  env.g.dbReset_();
+  env.g.withWriteLock_(() => env.rows('ImportRows').filter((x) => x.import_batch_id === r2.batch).forEach((x) => env.g.writeCells_('ImportRows', x.__row, { validation_status: 'OK' })));
+  const cm2 = c.call('import.commit', { import_batch_id: r2.batch }, { operation_id: uuid(), reauth_token: c.reauth() });
+  assert.equal(cm2.data.status, 'COMMITTED', JSON.stringify(cm2.data));
+  assert.equal(cm2.data.committed, 0);
+  assert.deepEqual(ids.map((id) => env.rows('Equipment').find((e) => e.equipment_id === id).record_version), [1, 2, 1]);
+});
+
 test('lô nhạy cảm (kiểm định): HĐ nhập + gửi duyệt; HĐ không commit; C4 nhập thì không tự commit; C3 commit (PIN) = duyệt → APPROVED, hạn hiện hành, nhắc hạn', () => {
   const { env, c } = setup();
   const eq = uuid(), type = uuid(), req = uuid();

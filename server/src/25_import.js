@@ -7,7 +7,7 @@
 var IMPORT_TEMPLATE_VERSION_ = '1';
 var IMPORT_CHUNK_MAX_ = 200;
 var IMPORT_COMMIT_MAX_ = 100;
-var IMPORT_COMMIT_BUDGET_MS_ = 40000;
+var IMPORT_COMMIT_BUDGET_MS_ = 25000; // phản hồi phải về trước client_long_timeout (55 s) kể cả phần tóm tắt cuối
 
 /** Một cột: [khóa, kiểu, Việt, 中文, tùy chọn] — kiểu: id ver key code text int num date bool enum ref */
 function ic_(key, type, vi, zh, o) { var c = o || {}; c.key = key; c.type = type; c.vi = vi; c.zh = zh; return c; }
@@ -326,7 +326,7 @@ function validateImportBatch_(ctx, t, batchId) {
     return byId[table][id] || null;
   };
   var sensitive = !!t.sensitive;
-  var addN = 0, updN = 0, errN = 0, mtN = 0;
+  var addN = 0, updN = 0, errN = 0, mtN = 0, skipN = 0;
   // Khóa trong file: mã/khóa dòng → entity_id đã cấp (cho tham chiếu tới dòng thêm mới cùng file)
   var fileKeys = {};
   var parsed = rows.map(function (ir) {
@@ -383,7 +383,7 @@ function validateImportBatch_(ctx, t, batchId) {
       var fvi = vi !== undefined ? vi : curVi, fzh = zh !== undefined ? zh : curZh;
       if (pairs[base] === 'req' && !fvi && !fzh) x.errs.push([base, 'REQUIRED_ONE_LANGUAGE']);
       if ((fvi && !fzh) || (!fvi && fzh)) {
-        if ((NO_MT_FIELDS[sh.table] || []).indexOf(base) < 0) mtN++;
+        if ((NO_MT_FIELDS[sh.table] || []).indexOf(base) < 0) x.mtN = (x.mtN || 0) + 1;
       }
     });
     // Mã trùng: trong file, và dòng thêm mới trùng mã đang có
@@ -465,12 +465,15 @@ function validateImportBatch_(ctx, t, batchId) {
   var nowIso = isoVN_(now_());
   parsed.forEach(function (x) {
     var ok = !x.errs.length;
-    if (ok) { if (x.action === 'ADD') addN++; else updN++; } else errN++;
+    var same = ok && x.action === 'UPDATE' && importRowUnchanged_(x.sh, { action: 'UPDATE', entity_id: x.entityId, normalized_payload_json: { v: x.vals, r: x.refs } }, x.cur);
+    if (!same) mtN += x.mtN || 0;
+    if (same) skipN++;
+    else if (ok) { if (x.action === 'ADD') addN++; else updN++; } else errN++;
     x.ir.entity_type = x.sh ? x.sh.entity : '';
     x.ir.entity_id = x.entityId || '';
     x.ir.action = x.action || '';
     x.ir.expected_version = x.action === 'UPDATE' ? Number(x.vals.record_version) : 0;
-    x.ir.validation_status = ok ? 'OK' : 'ERROR';
+    x.ir.validation_status = same ? 'SKIPPED' : ok ? 'OK' : 'ERROR';
     x.ir.error_text = ok ? '' : JSON.stringify(x.errs.map(function (e) { return { field: e[0], code: e[1] }; }));
     var np = x.ir.normalized_payload_json || {};
     np.v = x.vals; np.r = x.refs; np.d = x.deps;
@@ -572,9 +575,9 @@ function importSummary_(ctx, b, reload, extra) {
       var col = sh.cols.filter(function (c) { return c.key === k; })[0];
       if (!col || col.type === 'ref') return;
       var before = cur[k] === undefined ? '' : cur[k];
-      if (String(before) !== String(np.v[k])) diff[k] = [before, np.v[k]];
+      if (!importSame_(cur[k], np.v[k])) diff[k] = [before === null ? '' : before, np.v[k]];
     });
-    Object.keys(np.r || {}).forEach(function (k) { if (String(cur[k] || '') !== String(np.r[k] || '')) diff[k] = [cur[k] || '', np.r[k] || '']; });
+    Object.keys(np.r || {}).forEach(function (k) { if (!importSame_(cur[k], np.r[k])) diff[k] = [cur[k] || '', np.r[k] || '']; });
     if (Object.keys(diff).length) changes.push({ sheet: np.s, row_number: r.row_number, code: cur[sh.code || 'code'] || '', diff: diff });
   });
   out.changes = changes;
@@ -682,6 +685,21 @@ function runRowAction_(ctx, action, payload, opId, expectedVersion, module, user
 }
 
 /** Dựng payload của một dòng (giá trị đã chuẩn hóa + ID tham chiếu) */
+/** So giá trị khi nhập: ô trống = null = '' ; số so theo số; đúng/sai so theo đúng/sai */
+function importSame_(a, b) {
+  var x = a === null || a === undefined ? '' : a, y = b === null || b === undefined ? '' : b;
+  if (typeof x === 'boolean' || typeof y === 'boolean') return !!x === !!y;
+  if ((typeof x === 'number' || typeof y === 'number') && x !== '' && y !== '') return Number(x) === Number(y);
+  return String(x) === String(y);
+}
+
+/** Dòng sửa mà mọi giá trị sẽ ghi trùng hồ sơ hiện tại → bỏ qua, không ghi (xuất rồi nhập lại nguyên trạng) */
+function importRowUnchanged_(sh, r, cur) {
+  if (!cur) return false;
+  var p = rowPayload_(sh, r);
+  return Object.keys(p).every(function (k) { return k === sh.id || importSame_(cur[k], p[k]); });
+}
+
 function rowPayload_(sh, r) {
   var np = r.normalized_payload_json || {};
   var v = np.v || {}, refs = np.r || {};
@@ -806,7 +824,7 @@ function importCommit_(ctx) {
   pending.sort(function (a, b) { return order.indexOf(a.normalized_payload_json.s) - order.indexOf(b.normalized_payload_json.s) || a.row_number - b.row_number; });
   var byEntity = {};
   rows0.forEach(function (r) { byEntity[r.entity_id] = r; });
-  var ready = function (r) { return (r.normalized_payload_json.d || []).every(function (id) { var dep = byEntity[id]; return !dep || dep.validation_status === 'COMMITTED' || dep.normalized_payload_json.s !== r.normalized_payload_json.s; }); };
+  var ready = function (r) { return (r.normalized_payload_json.d || []).every(function (id) { var dep = byEntity[id]; return !dep || dep.validation_status === 'COMMITTED' || dep.validation_status === 'SKIPPED' || dep.normalized_payload_json.s !== r.normalized_payload_json.s; }); };
   // Hợp đồng ghi cùng thiết bị của nó
   var ceByContract = {};
   if (t.module === 'contracts') pending.forEach(function (r) {
@@ -833,8 +851,12 @@ function importCommit_(ctx) {
           err = JSON.stringify([{ field: '', code: 'DEPENDENCY_FAILED' }]);
         } else try {
           dbReset_();
-          commitImportRow_(ctx, t, b1, sh, r, importer, group);
-          status = 'COMMITTED';
+          // Lô kiểm tra từ bản cũ (trước khi có bước bỏ qua) hoặc hồ sơ đã được sửa giống file: không ghi lại
+          if (r.action === 'UPDATE' && !(group && group.length) && importRowUnchanged_(sh, r, findOne_(sh.table, sh.id, r.entity_id))) status = 'SKIPPED';
+          else {
+            commitImportRow_(ctx, t, b1, sh, r, importer, group);
+            status = 'COMMITTED';
+          }
         } catch (e) {
           status = 'FAILED';
           var code = e && e.apiCode ? e.apiCode : 'INTERNAL_ERROR';
