@@ -629,9 +629,11 @@ export async function renderWorkOrder(view, ctx) {
     return `<div class="cl-item${stv === 'FAIL' ? ' fail' : ''}" data-field="results[${esc(r.result_id)}]" id="res-${esc(r.result_id)}">
       <div class="cl-title"><span class="cl-no">${esc(r.step_no)}</span><span>${biName(r, 'label')}${r.required === false ? ` <span class="muted small">(${bi('mt.optional')})</span>` : ''}</span>${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div>
       ${r.safety_note_vi || r.safety_note_zh ? `<div class="cl-safety">${bi('mt.safety')}: ${biName(r, 'safety_note')}</div>` : ''}
-      ${r.result_type === 'NUMBER' ? `<div class="cl-num-row"><input class="inp num" data-mv="${esc(r.result_id)}" inputmode="decimal" value="${esc(mv === '' ? '' : String(mv))}" ${dis} aria-label="${esc(nameText(r, 'label'))}"><span class="unit">${esc(r.unit || '')}</span><span class="muted small">${rangeText(r)}</span><span class="mv-out"${out ? '' : ' hidden'}>${badge('mt.out_of_range')}</span></div>` : ''}
+      ${r.result_type === 'NUMBER' ? `<label class="cl-lbl" for="mv-${esc(r.result_id)}">${bi('mt.measured_value')} <span class="req">*</span> <span class="muted">(${bi('mt.allowed_range')}: ${rangeText(r)})</span></label>
+        <div class="cl-num-row"><input class="inp num" id="mv-${esc(r.result_id)}" data-mv="${esc(r.result_id)}" inputmode="decimal" enterkeyhint="done" placeholder="${esc(biText('mt.measured_value'))}" value="${esc(mv === '' ? '' : String(mv))}" ${dis}><span class="unit">${esc(r.unit || '')}</span><span class="mv-out"${out ? '' : ' hidden'}>${badge('mt.out_of_range')}</span></div>` : ''}
       <div class="segs">${btn('PASS')}${btn('FAIL')}${r.required === false ? btn('NA') : ''}</div>
-      <input class="inp cl-note" data-note="${esc(r.result_id)}" type="text" maxlength="500" placeholder="${esc(biText(r.result_type === 'TEXT' ? 'mt.record_text' : 'field.note'))}" value="${esc(r.note_vi || r.note_zh || '')}" ${dis}>
+      <label class="cl-lbl" for="nt-${esc(r.result_id)}">${bi(r.result_type === 'TEXT' ? 'mt.record_text' : 'field.note')}</label>
+      <input class="inp cl-note" id="nt-${esc(r.result_id)}" data-note="${esc(r.result_id)}" type="text" maxlength="500" placeholder="${esc(biText(r.result_type === 'TEXT' ? 'mt.record_text' : 'mt.note_hint'))}" value="${esc(r.note_vi || r.note_zh || '')}" ${dis}>
       ${(r.note_vi && r.note_zh && r.i18n_meta && r.i18n_meta.note && r.i18n_meta.note.state === 'MACHINE') ? `<div class="muted small">${esc(r.i18n_meta.note.src === 'vi' ? r.note_zh : r.note_vi)} <span class="tag mt">${bi('tag.machine_translated')}</span></div>` : ''}
       <div class="ferr small"></div></div>`;
   };

@@ -56,6 +56,8 @@ function translateText_(text, src, tgt) {
   work = work.replace(KEEP_RE_, function (m) { return put(m); });
   var out = mtTranslate_(work, src, tgt);
   if (!out) return null;
+  // Máy dịch hay thêm "。"/"." cuối câu cho nhãn ngắn ("Kiểm tra dầu" → "检查机油。"): nguồn không có thì bỏ
+  if (!/[.。!?！？…]\s*$/.test(String(text))) out = String(out).replace(/\s*[。.]\s*$/, '');
   if (!tokens.length) return { text: out, state: 'MACHINE' };
   // Thiếu hoặc thừa token → coi như dịch lỗi
   var seen = {};

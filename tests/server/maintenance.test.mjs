@@ -360,3 +360,18 @@ test('giao việc chỉ cho người làm được (KT/C3/C4 đang hoạt độn
   assert.equal(stale.code, 'VERSION_CONFLICT');
   assert.equal(stale.data.server.work_order_id, w.work_order_id);
 });
+
+test('dịch máy nhãn ngắn: máy thêm "。" cuối câu mà nguồn không có thì bỏ; nguồn có dấu chấm thì giữ', () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  env.g.LanguageApp.translate = (text) => (/dầu/.test(text) ? '检查机油。' : '测量压力。');
+  const tpl = uuid();
+  const r = c.write('maintenance.checklist.edit', {
+    template_id: tpl, template_name_vi: 'Mẫu thử dịch',
+    items: [{ label_vi: 'Kiểm tra dầu', result_type: 'PASS_FAIL' }, { label_vi: 'Đo áp suất.', result_type: 'PASS_FAIL' }]
+  });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  const items = env.rows('ChecklistTemplates').sort((a, b) => a.step_no - b.step_no);
+  assert.equal(items[0].label_zh, '检查机油');
+  assert.equal(items[1].label_zh, '测量压力。');
+});

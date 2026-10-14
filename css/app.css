@@ -665,7 +665,9 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .cl-no { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
 .cl-safety { margin: 6px 0 0 34px; padding: 6px 10px; border-radius: 8px; background: #FFF4D6; color: var(--amber); font-size: 13px; }
 .cl-num-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
-.cl-num-row .inp { width: 150px; flex: none; }
+.cl-num-row .inp { width: 170px; flex: none; font-size: 20px; font-weight: 700; border-width: 2px; border-color: var(--navy-2); }
+.cl-lbl { display: block; margin: 10px 0 2px; font-size: 13px; color: var(--graphite); }
+.cl-lbl .muted { font-size: 12px; }
 .cl-num-row .unit { font-weight: 700; color: var(--navy); }
 .cl-note { margin-top: 8px; }
 .flash { animation: flash 1.6s ease-out; }

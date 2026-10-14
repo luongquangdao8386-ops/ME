@@ -94,6 +94,11 @@ test('iPhone KT: Công việc → phiếu bảo trì; mất mạng vẫn ghi che
     await page.click(`[data-res="${res[0].result_id}"][data-v="PASS"]`);
     await page.waitForSelector(`[data-res="${res[0].result_id}"][data-v="PASS"].on`);
     // Số đo ngoài giới hạn → tự Không đạt, Kết quả chung Không đạt (C7); nút Đạt chung bị khóa
+    // Ô số đo có nhãn "Số đo" + giới hạn, khác ô Ghi chú (người dùng từng gõ số vào ô Ghi chú)
+    assert.ok((await page.textContent(`label[for="mv-${res[1].result_id}"]`)).includes('Số đo · 测量值'));
+    assert.ok((await page.textContent(`label[for="mv-${res[1].result_id}"]`)).includes('6 – 8'));
+    assert.equal(await page.getAttribute(`[data-mv="${res[1].result_id}"]`, 'placeholder'), 'Số đo · 测量值');
+    assert.ok((await page.textContent(`label[for="nt-${res[1].result_id}"]`)).includes('Ghi chú'));
     await page.fill(`[data-mv="${res[1].result_id}"]`, '9,5');
     // Chưa rời ô (iPhone không có nút Xong): vẫn báo ngay Không đạt, ngoài giới hạn, ô vẫn đang nhập
     await page.waitForSelector(`[data-res="${res[1].result_id}"][data-v="FAIL"].on`);
