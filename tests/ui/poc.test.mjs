@@ -139,8 +139,9 @@ test('mở app khi máy chủ chậm hơn offline_probe_seconds mà vẫn có m�
     await loginOwnerFirstTime(page);
     delays['sync.changes'] = 13000; // lâu hơn offline_probe_seconds = 12 giây (chốt sau PoC)
     await page.reload();
-    await page.waitForSelector('.boot', { timeout: 10000 });
-    await page.waitForFunction(() => (document.querySelector('.boot') || {}).textContent?.includes('phản hồi chậm'), null, { timeout: 20000 });
+    await page.waitForSelector('.boot-card', { timeout: 10000 });
+    await page.waitForSelector('.boot-hint:not([hidden])', { timeout: 20000 });
+    assert.ok((await page.textContent('.boot-hint')).includes('phản hồi chậm'));
     await page.waitForSelector('[data-poc="P-01"]', { timeout: 70000 });
     assert.equal(await page.locator('#upin').count(), 0, 'không hiện màn mở khóa ngoại tuyến');
     const cold = await page.evaluate(() => JSON.parse(localStorage.getItem('me.cold_starts') || '[]'));
@@ -242,11 +243,14 @@ test('mở lại khi mất mạng → màn Mở khóa ngoại tuyến bằng PIN
     const t = await page.textContent('.page');
     assert.ok(t.includes('Mở khóa ngoại tuyến') && t.includes('离线解锁'));
     await page.screenshot({ path: path.join(SHOTS, 'unlock-web.png') });
-    await page.fill('#upin', '000111');
+    // Bấm nút khi chưa đủ 6 số: báo định dạng, không tính lần sai
+    await page.fill('#upin', '0001');
     await page.click('#u-btn');
+    await page.waitForFunction(() => document.querySelector('#u-err').textContent.includes('6 chữ số'));
+    // Nhập đủ 6 số là tự mở (không bấm nút)
+    await page.fill('#upin', '000111');
     await page.waitForFunction(() => document.querySelector('#u-err').textContent.includes('Còn 4 lần thử'));
     await page.fill('#upin', OWNER_PIN);
-    await page.click('#u-btn');
     await page.waitForSelector('[data-poc="P-04"][open]', { timeout: 15000 });
     assert.ok(await page.isVisible('#st-offline'));
   } finally { await app.close(); }

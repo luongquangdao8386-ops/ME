@@ -244,6 +244,17 @@ function userCached_(uid) {
 
 /* ---------------- auth.login ---------------- */
 
+// App gửi lại đúng request đăng nhập (cùng login_id) khi mất phản hồi: trả lại kết quả lần đầu trong 5 phút,
+// không tính thêm lần sai, không tạo thêm phiên. Khóa cache băm cả mã NV + PIN + máy nên không dùng được cho PIN khác.
+var LOGIN_REPLAY_SECONDS_ = 300;
+var LOGIN_REPLAY_CODES_ = { AUTH_FAILED: 1, PIN_LOCKED: 1, ACCOUNT_DISABLED: 1, TEMP_PIN_EXPIRED: 1, MUST_CHANGE_PIN: 1 };
+
+function loginReplayKey_(req, code, pin) {
+  var lid = (req.payload || {}).login_id;
+  if (!isUuidV4_(lid)) return null;
+  return 'ln:' + b64url_(sha256_(lid + '|' + code + '|' + pin + '|' + String(req.device_id || '')));
+}
+
 function authLogin_(req) {
   var p = req.payload || {};
   var code = normEmpCode_(p.employee_code);
@@ -251,6 +262,28 @@ function authLogin_(req) {
   if (!code || code.length > 40) throw validationError_([fieldError_('employee_code', 'REQUIRED')]);
   if (!/^\d{6}$/.test(pin)) throw validationError_([fieldError_('pin', 'PIN_FORMAT')]);
 
+  var rk = loginReplayKey_(req, code, pin);
+  if (rk) {
+    var hit = cache_().get(rk);
+    if (hit) {
+      var h = JSON.parse(hit);
+      if (h.ok) return h.data;
+      throw apiError_(h.code, h.data, null, h.vars);
+    }
+  }
+  try {
+    var out = authLoginCheck_(req, code, pin);
+    if (rk) cache_().put(rk, JSON.stringify({ ok: true, data: out }), LOGIN_REPLAY_SECONDS_);
+    return out;
+  } catch (e) {
+    if (rk && e && LOGIN_REPLAY_CODES_[e.apiCode]) {
+      cache_().put(rk, JSON.stringify({ ok: false, code: e.apiCode, data: e.apiData, vars: e.msgVars }), LOGIN_REPLAY_SECONDS_);
+    }
+    throw e;
+  }
+}
+
+function authLoginCheck_(req, code, pin) {
   var key = pepperKey_();
   var eh = empHash_(code, key);
   var t = now_().getTime();
