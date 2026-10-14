@@ -198,6 +198,19 @@ export async function enterApp(root, { offline = false } = {}) {
   lastWide = isWide();
   startRouter(renderRoute);
   await renderRoute();
+  // Vào app khi có mạng (mở app, đăng nhập lại, đổi người dùng): gửi nháp của người này ở nền (4.7)
+  if (!offline) sendMineInBackground();
+}
+
+async function hasMineQueued() {
+  const uid = session.user && session.user.user_id;
+  return !!uid && (await queueItems().catch(() => [])).some((o) => o.user_id === uid && o.dataset_epoch === session.epoch && o.state !== 'REJECTED' && o.state !== 'CONFLICT');
+}
+
+async function sendMineInBackground() {
+  if (!navigator.onLine || !app.shell || !(await hasMineQueued())) return;
+  await syncNow({ quiet: true });
+  refreshIfAccount();
 }
 
 // Đổi giữa bố cục iPhone và web khi xoay/kéo cửa sổ: vẽ lại màn hiện tại
@@ -213,10 +226,7 @@ window.addEventListener('online', async () => {
   app.offline = false;
   await updateSyncStatus();
   // Có mạng lại: tự gửi nháp của người đang đăng nhập (4.7)
-  const uid = session.user && session.user.user_id;
-  if (app.shell && uid && (await queueItems().catch(() => [])).some((o) => o.user_id === uid && o.dataset_epoch === session.epoch && o.state !== 'REJECTED' && o.state !== 'CONFLICT')) {
-    await syncNow({ quiet: true });
-  }
+  if (app.shell && await hasMineQueued()) await syncNow({ quiet: true });
   refreshIfAccount();
 });
 window.addEventListener('offline', () => { updateSyncStatus(); refreshIfAccount(); });

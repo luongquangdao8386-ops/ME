@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { openApp, SHOTS } from './harness.mjs';
-import { freshServer, ownerClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
+import { freshServer, ownerClient, addUser, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
 
 const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const WEB = { viewport: { width: 1440, height: 900 }, mobile: false };
@@ -218,6 +218,48 @@ test('Tài khoản: phiên đăng nhập có "Máy này"; đăng xuất khi còn
     await page.waitForSelector('.login-card');
     const left = await page.evaluate(async () => { const s = await import('./js/sync.js'); return (await s.queueItems()).length; });
     assert.equal(left, 1, 'nháp còn nguyên');
+  } finally { await app.close(); }
+});
+
+test('đổi người dùng khi còn nháp (NT1-18): người khác thấy "nháp của người dùng khác", không gửi hộ; chủ nháp đăng nhập lại thì nháp tự gửi, hiện "Đã lưu máy chủ"', async () => {
+  const env = seeded();
+  addUser(env, 'U-C3', 3, '694127');
+  const req = env.rows('InspectionRequirements')[0];
+  const app = await openApp({ env, ...IPHONE });
+  try {
+    const { page } = app;
+    await login(page);
+    const pay = { inspection_id: uuid(), requirement_id: req.requirement_id, inspection_date: '2026-10-01', valid_from: '2026-10-01', valid_to: '2027-09-30', result: 'PASS', certificate_number: 'CN-DOI-NGUOI' };
+    await page.evaluate(async (p) => { const s = await import('./js/sync.js'); await s.enqueue('inspection.submit', p, { entity_type: 'INSPECTION', entity_id: p.inspection_id }); }, pay);
+    await go(page, '#/account');
+    await page.waitForSelector('#ac-logout');
+    await page.click('#ac-logout');
+    await page.waitForSelector('.modal');
+    await page.click('.modal-actions .btn.primary'); // Giữ nháp trên máy
+    await page.waitForSelector('.login-card');
+    // Người khác đăng nhập
+    await page.fill('#emp', 'U-C3');
+    await page.fill('#pin', '694127');
+    await page.click('#login-btn');
+    await page.waitForSelector('.grid9', { timeout: 15000 });
+    await go(page, '#/account/drafts');
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('nháp của người dùng khác'), null, { timeout: 10000 });
+    await page.waitForTimeout(800);
+    assert.equal(env.rows('Inspections').filter((r) => r.inspection_id === pay.inspection_id).length, 0, 'không gửi hộ nháp người khác');
+    assert.equal(await page.locator('#dr-sent').count(), 0);
+    // Chủ nháp đăng nhập lại: tự gửi, không cần bấm
+    await go(page, '#/account');
+    await page.waitForSelector('#ac-logout');
+    await page.click('#ac-logout');
+    await page.waitForSelector('.login-card');
+    await login(page);
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Đã lưu máy chủ'), null, { timeout: 15000 });
+    assert.equal(env.rows('Inspections').filter((r) => r.inspection_id === pay.inspection_id).length, 1, 'gửi đúng 1 lần');
+    await go(page, '#/account/drafts');
+    await page.waitForSelector('#dr-sent [data-done]');
+    assert.ok((await page.textContent('#dr-sent')).includes('Đã lưu máy chủ'));
+    assert.ok(!(await page.textContent('.view')).includes('nháp của người dùng khác'));
+    assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
 

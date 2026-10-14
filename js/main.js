@@ -231,9 +231,7 @@ async function start() {
   flushPendingLogout();
   const cur = await getMeta('cursor');
   if (cur === null || cur === undefined) await bootstrap(); else await pullChanges();
-  await goApp(false);
-  // Có mạng: gửi hàng chờ còn lại ở nền
-  if ((await queueItems()).length) syncNow({ quiet: true });
+  await goApp(false); // enterApp tự gửi nháp của người này ở nền
 }
 
 window.addEventListener('hashchange', () => {
