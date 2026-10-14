@@ -17,7 +17,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayWorkOrder, localCreations, woSubmitIssues, outOfRange, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, WO_OPEN
+  queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep
 } from '../work.js';
 
 const INTERVALS = ['DAY', 'MONTH', 'OPERATING_HOURS'];
@@ -617,6 +617,17 @@ export async function renderWorkOrder(view, ctx) {
   const chk = woSubmitIssues(w, results, usageData.usage);
   const notSelf = ![w.assignee_user_id, w.submitted_by, w.created_by === 'SYSTEM' ? '' : w.created_by, ...results0.filter((r) => r.updated_by && r.updated_by !== r.created_by).map((r) => r.updated_by)].includes(u);
   const showAccept = w.status === 'PENDING_ACCEPTANCE' && !w._local_submit && p.accept && notSelf;
+  // Bước tiếp theo: ai bấm gì; phiếu Nháp/Đã giao việc thì checklist và khung Thực hiện còn khóa tới khi bấm Bắt đầu làm
+  const who = w.assignee_name || biText('field.not_set');
+  const doer = mineAssigned || !w.assignee_user_id;
+  const next = localNew ? null
+    : w.status === 'DRAFT' ? (p.assign ? { key: 'mt.next.assign', target: 'wo-assign', at: 'top' } : { key: 'mt.next.wait_assign', wait: true })
+      : w.status === 'ASSIGNED' ? (executing && doer ? { key: 'mt.next.start', target: 'wo-start', at: 'top' } : { key: 'mt.next.wait_start', vars: { NAME: who }, wait: true })
+        : w.status === 'IN_PROGRESS' ? (executing && doer ? { key: 'mt.next.do', target: 'wo-submit', at: 'exec' } : { key: 'mt.next.wait_submit', vars: { NAME: who }, wait: true })
+          : w.status === 'PENDING_ACCEPTANCE' ? (w._local_submit ? { key: 'mt.next.wait_sync', wait: true } : showAccept ? { key: 'mt.next.accept', target: 'wo-accept', at: 'exec' } : { key: p.accept ? 'mt.self_no_accept' : 'mt.wait_accept', wait: true })
+            : null;
+  const execLocked = ['DRAFT', 'ASSIGNED'].includes(w.status);
+  const lockNote = execLocked ? `<p class="muted small">${bi('mt.exec_locked')}</p>` : '';
   const queuedDocs = ops.filter((o) => o.action === 'doc.upload' && o.parent_id === w.work_order_id && o.state !== 'REJECTED').length;
   const isHours = plan && plan.interval_type === 'OPERATING_HOURS';
   const kv = (k, v) => (v ? `<div class="kv"><span>${bi(k)}</span><strong>${v}</strong></div>` : '');
@@ -663,10 +674,12 @@ export async function renderWorkOrder(view, ctx) {
     </div>
     ${!online && p.assign ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     ${localNew ? `<p class="muted small">${bi('mt.local_new_note')}</p>` : ''}
+    ${nextStepHtml(next, 'top')}
   </section>
-  ${results.length ? `<section class="card" id="wo-checklist"><h3>${bi('mt.checklist')}</h3>${results.map(resultCard).join('')}</section>` : ''}
+  ${results.length ? `<section class="card" id="wo-checklist"><h3>${bi('mt.checklist')}</h3>${lockNote}${results.map(resultCard).join('')}</section>` : ''}
   <section class="card exec-card" id="wo-exec">
     <h3>${bi('mt.execution')}</h3>
+    ${lockNote}
     <div class="form-grid">
       <div class="fld" data-field="start_at"><label for="f-start_at">${bi('mt.start_at')}</label><input class="inp" type="datetime-local" id="f-start_at" value="${esc(toLocalInput(w.start_at))}" ${executing && started ? '' : 'disabled'}><div class="ferr"></div></div>
       <div class="fld" data-field="end_at"><label for="f-end_at">${bi('mt.end_at')}</label><div class="row"><input class="inp" type="datetime-local" id="f-end_at" value="${esc(toLocalInput(w.end_at))}" ${executing && started ? '' : 'disabled'}>${executing && started ? `<button type="button" class="btn tiny" id="wo-end-now">${bi('mt.now')}</button>` : ''}</div><div class="ferr"></div></div>
@@ -687,8 +700,7 @@ export async function renderWorkOrder(view, ctx) {
     </div>
     ${dirty ? `<p class="muted small">${bi('mt.unsaved')}</p>` : ''}` : ''}
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="wo-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="wo-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
-    ${w.status === 'PENDING_ACCEPTANCE' && p.accept && !notSelf ? `<p class="muted small">${bi('mt.self_no_accept')}</p>` : ''}
-    ${w.status === 'PENDING_ACCEPTANCE' && !p.accept ? `<p class="muted small">${bi('mt.wait_accept')}</p>` : ''}
+    ${!(executing && started) && !showAccept ? nextStepHtml(next, 'exec') : ''}
   </section>
   <section class="card tab-body"><h3>${bi('mt.photos')}</h3>${queuedDocs ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs })}</p>` : ''}<div id="wo-docs"></div></section>
   ${localNew ? '' : await workMatHtml('WO', w)}
@@ -865,6 +877,7 @@ export async function renderWorkOrder(view, ctx) {
   };
   on('wo-accept', () => acceptFlow('ACCEPT'));
   on('wo-return', () => acceptFlow('RETURN'));
+  wireNextStep(view);
 }
 
 /** Nút chụp ảnh có tên lấy từ từ điển (đủ hai thứ tiếng, không cần dịch máy) */

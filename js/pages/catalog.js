@@ -121,7 +121,13 @@ async function glossaryDialog(g) {
   });
 }
 
-export async function renderCatalog(view, { shell }) {
+export async function renderCatalog(view, { shell, query }) {
+  // Mở thẳng một nhóm (vd. từ phiếu sửa: ?tab=lookups&group=CAUSE); bỏ tham số khỏi địa chỉ để bấm tab sau không bị kéo về
+  if (query && (query.get('tab') || query.get('group'))) {
+    if (TABS.includes(query.get('tab'))) tab = query.get('tab');
+    if (GROUPS.includes(query.get('group'))) group = query.get('group');
+    history.replaceState(history.state, '', '#/admin/catalog');
+  }
   shell.setScreen({ title: 'admin.catalog', back: '/account' });
   const perm = { locations: await can('location.edit'), vendors: await can('vendor.edit'), lookups: await can('lookup.edit'), glossary: await can('glossary.edit') };
   const repaint = () => renderCatalog(view, { shell });

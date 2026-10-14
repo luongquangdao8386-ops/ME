@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d2.3 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d2.4 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -45,9 +45,9 @@ Dùng tài khoản mẫu (MAU-KT kỹ thuật, MAU-C3 trưởng bộ phận, NV0
 | Mẫu checklist | Bảo trì → **Mẫu checklist** → Thêm: 3 bước (Đạt/Không đạt; Số đo, đơn vị `bar`, giới hạn 6–8; Ghi nhận). Sửa mẫu → tạo **phiên bản 2**, phiếu cũ giữ bản cũ |
 | Kế hoạch | Bảo trì → **Thêm kế hoạch**: theo tháng, ngày mốc hôm nay, checklist vừa tạo, người làm mặc định MAU-KT → phiếu **BT-yymm-001** tự sinh, đã giao việc |
 | Làm phiếu (iPhone, MAU-KT) | **Công việc** → phiếu → **Bắt đầu làm** → tắt mạng → ghi checklist, số đo 9 bar (tự Không đạt) → bấm **Còn N mục chưa xong** (cuộn tới mục thiếu) → ghi chú, **Bây giờ** cho giờ kết thúc → **Gửi nghiệm thu** (chọn mức độ) → bật mạng → tự gửi; có phiếu sửa **SC-** cho mục không đạt |
-| Nghiệm thu | MAU-C3 (hoặc NV001) mở phiếu → **Nghiệm thu đạt** + PIN → Hoàn thành; kế hoạch có hạn kế tiếp. MAU-KT không có nút nghiệm thu |
+| Nghiệm thu | MAU-C3 (hoặc NV001) mở **phiếu BT** (không phải phiếu SC; từ phiếu SC bấm dòng **Từ phiếu bảo trì**) → cuối khung Thực hiện **Nghiệm thu đạt** + PIN → Hoàn thành; kế hoạch có hạn kế tiếp. MAU-KT không có nút nghiệm thu |
 | Báo sự cố | iPhone, tắt mạng → **Sửa chữa → Báo sự cố**: mức độ phải chọn (không chọn sẵn), tick Máy đang dừng, chụp ảnh → Gửi → bật mạng → đúng **1** phiếu SC, 1 ảnh (bấm Đồng bộ lại không tạo trùng) |
-| Sửa chữa | NV001 **Phân công** cho MAU-KT → MAU-KT **Bắt đầu sửa**, ghi chẩn đoán, nguyên nhân (danh mục Nguyên nhân), việc con, **Kết thúc sửa**, chạy thử, **Hoạt động lại** → **Gửi nghiệm thu** → MAU-C3 nghiệm thu + PIN → đủ **6 mốc** |
+| Sửa chữa | Trước đó NV001 thêm 2–3 mã: **Tài khoản → Quản trị → Danh mục chung → Danh mục tra cứu → Nguyên nhân → Thêm**. Mở phiếu **SC-**, làm theo dòng **Bước tiếp** (ô xanh dưới các nút): NV001 **Phân công** cho MAU-KT → MAU-KT **Bắt đầu sửa** (khung Xử lý mới mở) → ghi chẩn đoán, nguyên nhân, việc con (bấm **Xong**), **Kết thúc sửa → Bây giờ**, chạy thử **Đạt**, **Hoạt động lại → Bây giờ** → **Lưu** → **Gửi nghiệm thu** → MAU-C3 mở phiếu → cuối khung Xử lý **Nghiệm thu đạt** + PIN → đủ **6 mốc** |
 | Vật tư trên phiếu | Trong phiếu đang làm: **Đề nghị vật tư** (Lưu nháp → Gửi duyệt) → MAU-C3 **Duyệt** + PIN (ghi "Chưa kết nối kho", không trừ tồn); **Ghi thực dùng** → nghiệm thu kèm xác nhận lượng dùng. Kho vật tư → tab **Đề nghị**, **Lượng dùng** |
 | Thay linh kiện | Phiếu đang làm → **Thay linh kiện** (cùng mã hoặc mã khác) → Thiết bị → tab Lịch sử có dòng Thay, kèm mã phiếu |
 | Giờ chạy | Kế hoạch **theo giờ chạy** → **Ghi giờ chạy** tới mốc → phiếu tự sinh; ghi số nhỏ hơn lần trước bị chặn (trừ khi tick đồng hồ đã thay) |

@@ -1,6 +1,6 @@
 // Phiếu công việc Đợt 2 (bảo trì, sửa chữa): gộp nháp trên máy lên bản máy chủ, điều kiện Gửi nghiệm thu (5.1.1, C8),
 // danh sách Công việc (5.2), quyền phía client (chỉ để ẩn/hiện nút; máy chủ kiểm lại)
-import { session, badge, esc, nameText, fmtNumber } from './core.js';
+import { session, bi, badge, esc, nameText, fmtNumber } from './core.js';
 import { recs, mapOf, can, today, daysBetween } from './data.js';
 import { queueItems, enqueue } from './sync.js';
 
@@ -138,6 +138,28 @@ export function repairSubmitIssues(r, tasks) {
   if (r.stopped_at && !r.restored_at && !String(r.downtime_note || '').trim()) out.push({ field: 'downtime_note', key: 'mt.issue.downtime_note' });
   for (const t of tasks) if (t.status === 'PENDING' || t.status === 'IN_PROGRESS') out.push({ field: `tasks[${t.repair_task_id}]`, key: 'rp.issue.task_open' });
   return out;
+}
+
+/* ---------------- Bước tiếp theo trên phiếu ---------------- */
+
+/**
+ * Dòng "Bước tiếp" trên phiếu BT/SC: ai bấm gì tiếp theo. next = {key, vars?, target?, at: 'top' | 'exec', wait?}.
+ * here: chỗ đặt dòng ('top' đầu phiếu, 'exec' cuối khung Thực hiện/Xử lý); nút nằm ở chỗ khác thì kèm link "Tới nút".
+ */
+export function nextStepHtml(next, here) {
+  if (!next) return '';
+  const go = next.target && next.at !== here ? ` <button type="button" class="link small" data-jump="${esc(next.target)}">${bi('wk.next_go')}</button>` : '';
+  return `<p class="next-step${next.wait ? ' wait' : ''}">${bi(next.key, next.vars)}${go}</p>`;
+}
+
+/** Link "Tới nút": cuộn tới nút và nháy sáng */
+export function wireNextStep(view) {
+  view.querySelectorAll('[data-jump]').forEach((b) => b.addEventListener('click', () => {
+    const el = view.querySelector('#' + CSS.escape(b.dataset.jump));
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600);
+  }));
 }
 
 /* ---------------- Danh sách Công việc (5.2) ---------------- */

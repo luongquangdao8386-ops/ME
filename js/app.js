@@ -242,8 +242,7 @@ async function hasMineQueued() {
 
 async function sendMineInBackground() {
   if (!navigator.onLine || !app.shell || !(await hasMineQueued())) return;
-  await syncNow({ quiet: true });
-  refreshIfAccount();
+  refreshAfterSend(await syncNow({ quiet: true }));
 }
 
 // Đổi giữa bố cục iPhone và web khi xoay/kéo cửa sổ: vẽ lại màn hiện tại
@@ -255,11 +254,24 @@ window.addEventListener('resize', () => {
 // Trang Nháp/Tài khoản vẽ lại theo trạng thái mạng (nút Đồng bộ ngay bật/tắt, mục vừa gửi)
 function refreshIfAccount() { if (app.shell && currentPath().startsWith('/account')) refresh(); }
 
+// Màn xem (danh sách, chi tiết phiếu) có nhãn "Đã lưu trên máy": tự gửi nháp xong thì vẽ lại theo bản máy chủ.
+// Không vẽ lại màn nhập (…/new, …/edit, Excel), khi đang mở hộp thoại hoặc đang gõ trong ô nhập (mất chữ chưa lưu).
+const VIEW_PAGE = /^\/(work|maintenance|repairs|materials|maintenance\/(wo|plans)\/[^/]+|repairs\/[^/]+|equipment\/[^/]+|contracts\/[^/]+|inspections\/[^/]+)?$/;
+function refreshAfterSend(r) {
+  if (!app.shell) return;
+  const path = currentPath();
+  if (path.startsWith('/account')) { refresh(); return; }
+  if (!r || !r.committed || !VIEW_PAGE.test(path) || /\/new$/.test(path) || document.querySelector('.modal')) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('.view')) return;
+  refresh();
+}
+
 window.addEventListener('online', async () => {
   app.offline = false;
   await updateSyncStatus();
   // Có mạng lại: tự gửi nháp của người đang đăng nhập (4.7)
-  if (app.shell && await hasMineQueued()) await syncNow({ quiet: true });
-  refreshIfAccount();
+  const r = app.shell && await hasMineQueued() ? await syncNow({ quiet: true }) : null;
+  refreshAfterSend(r);
 });
 window.addEventListener('offline', () => { updateSyncStatus(); refreshIfAccount(); });

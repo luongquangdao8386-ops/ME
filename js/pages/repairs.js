@@ -15,7 +15,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayRepair, localCreations, repairSubmitIssues, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, REPAIR_OPEN
+  queueWork, mergeExecPayload, workerPick, REPAIR_OPEN, nextStepHtml, wireNextStep
 } from '../work.js';
 
 const st = { filter: 'OPEN', sev: '', q: '', page: 0 };
@@ -313,7 +313,7 @@ export async function renderRepair(view, ctx) {
   const p = {
     process: await can('repair.process'), submit: await can('repair.submit'), accept: await can('repair.accept'), assign: await can('repair.assign'),
     cancel: await can('repair.cancel'), reopen: await can('repair.reopen'), edit: await can('repair.editReport'), replace: await can('part.replace'),
-    upload: await can('doc.upload'), report: await can('repair.report'), pick: await can('user.pickList')
+    upload: await can('doc.upload'), report: await can('repair.report'), pick: await can('user.pickList'), lookup: await can('lookup.edit')
   };
   const assignees = [r.assignee_user_id, ...tasks0.map((t) => t.assignee_user_id)].filter(Boolean);
   const mineAssigned = assignees.includes(u);
@@ -327,6 +327,16 @@ export async function renderRepair(view, ctx) {
   const queuedDocs = ops.filter((o) => o.action === 'doc.upload' && o.parent_id === r.repair_id && o.state !== 'REJECTED');
   const canEditReport = p.edit && r.status === 'REPORTED' && (lead || r.reported_by === u);
   const canCancel = p.cancel && !localNew && ((lead && REPAIR_OPEN.has(r.status)) || (!lead && r.reported_by === u && r.status === 'REPORTED' && !r.assignee_user_id));
+  // Bước tiếp theo: ai bấm gì; phiếu Mới báo/Đã phân công thì khung Xử lý còn khóa tới khi bấm Bắt đầu sửa
+  const who = r.assignee_name || biText('field.not_set');
+  const doer = mineAssigned || !r.assignee_user_id;
+  const next = localNew ? null
+    : r.status === 'REPORTED' ? (p.assign ? { key: 'rp.next.assign', target: 'rp-assign', at: 'top' } : { key: 'rp.next.wait_assign', wait: true })
+      : r.status === 'ASSIGNED' ? (canProc && doer ? { key: 'rp.next.start', target: 'rp-start', at: 'top' } : { key: 'rp.next.wait_start', vars: { NAME: who }, wait: true })
+        : r.status === 'IN_PROGRESS' ? (processing && doer ? { key: 'rp.next.do', target: 'rp-submit', at: 'exec' } : { key: 'rp.next.wait_submit', vars: { NAME: who }, wait: true })
+          : r.status === 'PENDING_ACCEPTANCE' ? (r._local_submit ? { key: 'mt.next.wait_sync', wait: true } : showAccept ? { key: 'mt.next.accept', target: 'rp-accept', at: 'exec' } : { key: p.accept ? 'rp.self_no_accept' : 'mt.wait_accept', wait: true })
+            : null;
+  const execLocked = ['REPORTED', 'ASSIGNED'].includes(r.status);
   const kv = (k, v) => (v ? `<div class="kv"><span>${bi(k)}</span><strong>${v}</strong></div>` : '');
   const dis = processing ? '' : 'disabled';
   const dt = (id, k, val, now = false) => `<div class="fld" data-field="${k}"><label for="f-${id}">${bi('rp.ms.' + k)}</label><div class="row"><input class="inp" type="datetime-local" id="f-${id}" data-time="${k}" value="${esc(toLocalInput(val))}" ${dis}>${now && processing ? `<button type="button" class="btn tiny" data-now="${k}">${bi('mt.now')}</button>` : ''}</div><div class="ferr"></div></div>`;
@@ -383,12 +393,14 @@ export async function renderRepair(view, ctx) {
     </div>
     ${!online && (p.assign || canCancel) ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     ${localNew ? `<p class="muted small">${bi('rp.local_new_note')}</p>` : ''}
+    ${nextStepHtml(next, 'top')}
   </section>
   <section class="card"><h3>${bi('rp.milestones')}</h3><ul class="list timeline">
     ${timeline.map(([k, t]) => `<li class="${t ? 'done' : 'todo'}"><span class="dot"></span><span>${bi('rp.ms.' + k)}</span><strong>${t ? esc(fmtDateTime(t)) : `<span class="muted">${bi('field.not_set')}</span>`}</strong></li>`).join('')}
     </ul>${r.stopped_at ? `<p class="muted small">${bi('rp.stopped_at')}: ${esc(fmtDateTime(r.stopped_at))}${r.restored_at ? '' : ` · ${bi('rp.machine_down')}`}</p>` : ''}</section>
   ${!localNew && (['IN_PROGRESS', 'PENDING_ACCEPTANCE', 'COMPLETED'].includes(r.status) || canProc) ? `<section class="card exec-card" id="rp-exec">
     <h3>${bi('rp.processing')}</h3>
+    ${execLocked ? `<p class="muted small">${bi('rp.exec_locked')}</p>` : ''}
     <div class="form-grid">
       ${dt('rs', 'repair_start_at', r.repair_start_at)}
       ${dt('re', 'repair_end_at', r.repair_end_at, true)}
@@ -396,7 +408,7 @@ export async function renderRepair(view, ctx) {
       ${dt('ra', 'restored_at', r.restored_at, true)}
       <div class="fld" data-field="downtime_note"><label for="f-downtime_note">${bi('mt.downtime_note')}</label><input class="inp" type="text" id="f-downtime_note" maxlength="500" value="${esc(r.downtime_note || '')}" ${dis}><div class="ferr"></div></div>
       ${txt('diagnosis', 'rp.diagnosis', true)}
-      <div class="fld" data-field="root_cause_code"><label for="f-root_cause_code">${bi('rp.root_cause')}</label><select class="inp sel" id="f-root_cause_code" ${dis}><option value="">${bi('field.choose')}</option>${causes.map((c) => `<option value="${esc(c.code)}"${c.code === r.root_cause_code ? ' selected' : ''}>${esc(c.code)} · ${esc(nameText(c))}</option>`).join('')}</select>${!causes.length ? `<div class="hint">${bi('rp.no_causes')}</div>` : ''}<div class="ferr"></div></div>
+      <div class="fld" data-field="root_cause_code"><label for="f-root_cause_code">${bi('rp.root_cause')}</label><select class="inp sel" id="f-root_cause_code" ${dis}><option value="">${bi('field.choose')}</option>${causes.map((c) => `<option value="${esc(c.code)}"${c.code === r.root_cause_code ? ' selected' : ''}>${esc(c.code)} · ${esc(nameText(c))}</option>`).join('')}</select>${!causes.length ? `<div class="hint">${p.lookup ? `<a href="#/admin/catalog?tab=lookups&amp;group=CAUSE">${bi('rp.no_causes')}</a>` : bi('rp.no_causes')}</div>` : ''}<div class="ferr"></div></div>
       ${txt('action', 'rp.action', true)}
       <div class="fld" data-field="vendor_id"><label for="f-vendor_id">${bi('rp.vendor')}</label><select class="inp sel" id="f-vendor_id" ${dis}><option value="">${bi('field.choose')}</option>${vendors.map((x) => `<option value="${esc(x.vendor_id)}"${x.vendor_id === r.vendor_id ? ' selected' : ''}>${esc(x.vendor_code)} · ${esc(nameText(x))}</option>`).join('')}</select><div class="ferr"></div></div>
       ${txt('outside_service', 'rp.outside_service')}
@@ -413,8 +425,7 @@ export async function renderRepair(view, ctx) {
       ${issues.length ? `<button type="button" class="link small" id="rp-left">${bi('mt.items_left', { N: issues.length })}</button>` : ''}
     </div>${dirty ? `<p class="muted small">${bi('mt.unsaved')}</p>` : ''}` : ''}
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="rp-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="rp-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
-    ${r.status === 'PENDING_ACCEPTANCE' && p.accept && !notSelf ? `<p class="muted small">${bi('rp.self_no_accept')}</p>` : ''}
-    ${r.status === 'PENDING_ACCEPTANCE' && !p.accept ? `<p class="muted small">${bi('mt.wait_accept')}</p>` : ''}
+    ${!processing && !showAccept ? nextStepHtml(next, 'exec') : ''}
   </section>` : ''}
   <section class="card tab-body"><h3>${bi('rp.photos')}</h3>${queuedDocs.length ? `<p class="muted small">${bi('mt.photos_queued', { N: queuedDocs.length })}</p>${queuedPhotoThumbs(queuedDocs)}` : ''}<div id="rp-docs"></div></section>
   ${localNew ? '' : await workMatHtml('REPAIR', r)}`;
@@ -562,6 +573,7 @@ export async function renderRepair(view, ctx) {
   };
   on('rp-accept', () => acceptFlow('PASS'));
   on('rp-return', () => acceptFlow('FAIL'));
+  wireNextStep(view);
 }
 
 /** Ảnh hiện trường còn chờ gửi (ảnh nhỏ từ hàng chờ trên máy) */

@@ -672,7 +672,15 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .cl-note { margin-top: 8px; }
 .flash { animation: flash 1.6s ease-out; }
 @keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px rgba(192,57,43,0.45); background: #FFF4D6; } 100% { box-shadow: none; } }
+/* nút được chỉ tới ("Tới nút"): chỉ viền, giữ màu nút để chữ vẫn đọc được */
+.btn.flash { animation: flash-ring 1.6s ease-out; }
+@keyframes flash-ring { 0%, 60% { box-shadow: 0 0 0 4px rgba(192,57,43,0.55); } 100% { box-shadow: none; } }
 [data-field] { scroll-margin-top: 80px; }
+
+/* bước tiếp theo trên phiếu BT/SC: ai bấm gì */
+.next-step { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; border-left: 4px solid var(--navy-2); background: #EAF2FB; color: var(--navy); font-size: 14.5px; font-weight: 600; line-height: 1.45; }
+.next-step.wait { border-left-color: var(--line); background: #F3F5F7; color: var(--graphite); font-weight: 500; }
+.next-step .link { display: inline; margin: 0 0 0 6px; padding: 2px 0; min-height: 0; font-size: 14px; }
 
 /* mốc thời gian (C9) */
 .timeline li.done, .timeline li.todo { grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
