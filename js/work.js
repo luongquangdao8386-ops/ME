@@ -104,18 +104,18 @@ export function woSubmitIssues(w, results, usage = []) {
     const f = `results[${r.result_id}]`;
     const st = r.result_status || 'PENDING';
     if (st === 'FAIL') anyFail = true;
-    if (r.required !== false && st !== 'PASS' && st !== 'FAIL') { out.push({ field: f, key: 'mt.issue.item_missing', step: r.step_no }); continue; }
+    if (r.required !== false && st !== 'PASS' && st !== 'FAIL') { out.push({ field: f, key: 'mt.issue.item_missing', step: r.step_no, vars: { N: r.step_no } }); continue; }
     const hasNote = !!(String(r.note_vi || '').trim() || String(r.note_zh || '').trim());
     const mv = num(r.measured_value);
-    if (r.result_type === 'NUMBER' && r.required !== false && (mv === null || Number.isNaN(mv))) { out.push({ field: f, key: 'mt.issue.item_missing', step: r.step_no }); continue; }
-    if (r.result_type === 'NUMBER' && mv !== null && st === 'PASS' && outOfRange(r, mv) && !hasNote) out.push({ field: f, key: 'mt.issue.range_note', step: r.step_no });
-    if (st === 'FAIL' && !hasNote) out.push({ field: f, key: 'mt.issue.fail_note', step: r.step_no });
+    if (r.result_type === 'NUMBER' && r.required !== false && (mv === null || Number.isNaN(mv))) { out.push({ field: f, key: 'mt.issue.item_missing', step: r.step_no, vars: { N: r.step_no } }); continue; }
+    if (r.result_type === 'NUMBER' && mv !== null && st === 'PASS' && outOfRange(r, mv) && !hasNote) out.push({ field: f, key: 'mt.issue.range_note', step: r.step_no, vars: { N: r.step_no } });
+    if (st === 'FAIL' && !hasNote) out.push({ field: f, key: 'mt.issue.fail_note', step: r.step_no, vars: { N: r.step_no } });
   }
   if (!w.overall_result) out.push({ field: 'overall_result', key: 'mt.issue.overall' });
   else if (anyFail && w.overall_result !== 'FAIL') out.push({ field: 'overall_result', key: 'mt.issue.overall_mismatch' });
   const s = Date.parse(w.start_at || ''), e = Date.parse(w.end_at || '');
   if (!w.start_at) out.push({ field: 'start_at', key: 'mt.issue.start' });
-  if (!w.end_at) out.push({ field: 'end_at', key: 'mt.issue.end' });
+  if (!w.end_at) out.push({ field: 'end_at', key: 'mt.issue.end', now: 'end_at' });
   if (w.start_at && w.end_at && (s > e || e > Date.now() + 5 * 60000)) out.push({ field: 'end_at', key: 'mt.issue.time_order' });
   if (w.downtime_start_at && !w.downtime_end_at && !String(w.downtime_note || '').trim()) out.push({ field: 'downtime_note', key: 'mt.issue.downtime_note' });
   if (w.downtime_start_at && w.downtime_end_at && Date.parse(w.downtime_start_at) > Date.parse(w.downtime_end_at)) out.push({ field: 'downtime_end_at', key: 'mt.issue.time_order' });
@@ -131,13 +131,33 @@ export function outOfRange(r, v) {
 export function repairSubmitIssues(r, tasks) {
   const out = [];
   if (!r.repair_start_at) out.push({ field: 'repair_start_at', key: 'rp.issue.start' });
-  if (!r.repair_end_at) out.push({ field: 'repair_end_at', key: 'rp.issue.end' });
+  if (!r.repair_end_at) out.push({ field: 'repair_end_at', key: 'rp.issue.end', now: 'repair_end_at' });
   if (!r.test_run_result) out.push({ field: 'test_run_result', key: 'rp.issue.test_run' });
   if (r.repair_start_at && r.repair_end_at && (Date.parse(r.repair_start_at) > Date.parse(r.repair_end_at) || Date.parse(r.repair_end_at) > Date.now() + 5 * 60000)) out.push({ field: 'repair_end_at', key: 'mt.issue.time_order' });
   if (r.stopped_at && r.restored_at && Date.parse(r.stopped_at) > Date.parse(r.restored_at)) out.push({ field: 'restored_at', key: 'mt.issue.time_order' });
   if (r.stopped_at && !r.restored_at && !String(r.downtime_note || '').trim()) out.push({ field: 'downtime_note', key: 'mt.issue.downtime_note' });
-  for (const t of tasks) if (t.status === 'PENDING' || t.status === 'IN_PROGRESS') out.push({ field: `tasks[${t.repair_task_id}]`, key: 'rp.issue.task_open' });
+  for (const t of tasks) if (t.status === 'PENDING' || t.status === 'IN_PROGRESS') out.push({ field: `tasks[${t.repair_task_id}]`, key: 'rp.issue.task_open', vars: { T: t.task_vi || t.task_zh || '' }, task: t.repair_task_id });
   return out;
+}
+
+/**
+ * Mục còn thiếu để Gửi nghiệm thu, hiện ngay dưới nút (5.1.1, C8): bấm từng mục để tới ô; giờ kết thúc có nút "Bây giờ",
+ * việc con có nút "Xong". leftId: nút "Còn N mục chưa xong" (cuộn tới mục đầu + báo, như trước).
+ */
+export function issueListHtml(issues, leftId) {
+  if (!issues.length) return '';
+  const item = (x) => `<li><button type="button" class="link small" data-goto="${esc(x.field)}">${bi(x.key, x.vars)}</button>${x.now ? `<button type="button" class="btn tiny" data-now="${esc(x.now)}">${bi('mt.now')}</button>` : ''}${x.task ? `<button type="button" class="btn tiny" data-task-done="${esc(x.task)}">${bi('task_status.DONE')}</button>` : ''}</li>`;
+  return `<div class="issue-box"><button type="button" class="link small" id="${leftId}">${bi('mt.items_left', { N: issues.length })}</button><ul>${issues.map(item).join('')}</ul></div>`;
+}
+
+/** Bấm một mục còn thiếu: cuộn tới ô đó và nháy sáng */
+export function wireIssueList(view) {
+  view.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => {
+    const el = view.querySelector(`[data-field="${CSS.escape(b.dataset.goto)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600);
+  }));
 }
 
 /* ---------------- Bước tiếp theo trên phiếu ---------------- */

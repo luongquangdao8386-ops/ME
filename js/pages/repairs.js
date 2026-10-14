@@ -15,7 +15,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayRepair, localCreations, repairSubmitIssues, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, pickCached, REPAIR_OPEN, nextStepHtml, wireNextStep
+  queueWork, mergeExecPayload, workerPick, pickCached, REPAIR_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList
 } from '../work.js';
 
 const st = { filter: 'OPEN', sev: '', q: '', page: 0 };
@@ -284,6 +284,7 @@ function photoLabel(i) {
 /* ======================= RP-02 Chi tiết phiếu sửa ======================= */
 
 export async function renderRepair(view, ctx) {
+  const seq = (view._renderSeq = (view._renderSeq || 0) + 1);
   const { shell, params } = ctx;
   const ops = await myQueue();
   const server = await byId('REPAIR', params.id);
@@ -372,6 +373,9 @@ export async function renderRepair(view, ctx) {
     canUpload: docWork || docReporter, photoOnly: !docWork && docReporter,
     photoButtons: [{ key: 'rp.add_photo', ...photoLabel() }]
   });
+  // Đổi ô liên tiếp → nhiều lần vẽ chạy cùng lúc: chỉ lần bắt đầu sau cùng (nháp mới nhất) được ghi lên màn, lần cũ xong
+  // muộn không ghi đè (không thì màn hiện nội dung cũ và lần đổi ô sau lưu nháp cũ, mất chữ vừa gõ)
+  if (seq !== view._renderSeq) return;
   view.innerHTML = `<section class="card">
     ${ov.rejected.length ? `<p class="banner warn">${bi('mt.has_rejected')} <a href="#/account/drafts">${bi('draft.title')}</a></p>` : ''}
     ${ov.blocked ? `<p class="banner warn">${bi('mt.blocked')}</p>` : ''}
@@ -432,8 +436,7 @@ export async function renderRepair(view, ctx) {
     ${processing ? `<div class="row form-actions">
       <button type="button" class="btn" id="rp-save" ${dirty ? '' : 'disabled'}>${bi('btn.save')}</button>
       <button type="button" class="btn primary" id="rp-submit" ${issues.length || ov.blocked || ov.rejected.length ? 'disabled' : ''}>${bi('btn.submit_acceptance')}</button>
-      ${issues.length ? `<button type="button" class="link small" id="rp-left">${bi('mt.items_left', { N: issues.length })}</button>` : ''}
-    </div>${dirty ? `<p class="muted small">${bi('mt.unsaved')}</p>` : ''}` : ''}
+    </div>${issueListHtml(issues, 'rp-left')}${dirty ? `<p class="muted small">${bi('mt.unsaved')}</p>` : ''}` : ''}
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="rp-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="rp-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
     ${!processing && !showAccept ? nextStepHtml(next, 'exec') : ''}
   </section>` : ''}
@@ -446,30 +449,45 @@ export async function renderRepair(view, ctx) {
   // ----- Nháp form -----
   const saveDraft = () => saveFormDraft(draftKey, draft);
   const setField = async (k, v) => { draft.fields[k] = v; await saveDraft(); };
-  $$('[data-time]', view).forEach((el) => el.addEventListener('change', async () => { await setField(el.dataset.time, fromLocalInput(el.value)); repaint(); }));
+  // Sửa một ô rồi chạm sang ô nhập khác: chưa vẽ lại cả màn (vẽ lại làm mất ô đang gõ, iPhone tắt bàn phím) — chỉ bật nút
+  // Lưu; vẽ lại khi rời hẳn các ô nhập (chạm nút, chạm ra ngoài). Bấm nút (Bây giờ, Đạt…) thì vẽ lại ngay như cũ.
+  const afterEdit = (src = null) => {
+    if (!view.isConnected) return;
+    const a = document.activeElement;
+    if (!a || a === src || a === document.body || !view.contains(a) || !a.matches('input, textarea, select')) { repaint(); return; }
+    const sv = $('#rp-save', view); if (sv) sv.disabled = false;
+    if (a.dataset.leave) return;
+    a.dataset.leave = '1';
+    a.addEventListener('blur', () => { delete a.dataset.leave; setTimeout(() => afterEdit(), 0); }, { once: true });
+  };
+  $$('[data-time]', view).forEach((el) => el.addEventListener('change', async () => { await setField(el.dataset.time, fromLocalInput(el.value)); afterEdit(el); }));
   $$('[data-now]', view).forEach((b) => b.addEventListener('click', async () => { await setField(b.dataset.now, isoNowVN()); repaint(); }));
   $$('[data-text]', view).forEach((el) => el.addEventListener('change', async () => {
     const k = el.dataset.text;
     const l = oneLang(k, el.value);
     draft.fields[k + '_vi'] = l[k + '_vi'] || ''; draft.fields[k + '_zh'] = l[k + '_zh'] || '';
-    await saveDraft(); repaint();
+    await saveDraft(); afterEdit(el);
   }));
-  const dn = $('#f-downtime_note', view); if (dn) dn.addEventListener('change', async () => { await setField('downtime_note', dn.value.trim()); repaint(); });
-  const rc = $('#f-root_cause_code', view); if (rc) rc.addEventListener('change', async () => { await setField('root_cause_code', rc.value); repaint(); });
-  const vd = $('#f-vendor_id', view); if (vd) vd.addEventListener('change', async () => { await setField('vendor_id', vd.value); repaint(); });
+  const dn = $('#f-downtime_note', view); if (dn) dn.addEventListener('change', async () => { await setField('downtime_note', dn.value.trim()); afterEdit(dn); });
+  const rc = $('#f-root_cause_code', view); if (rc) rc.addEventListener('change', async () => { await setField('root_cause_code', rc.value); afterEdit(rc); });
+  const vd = $('#f-vendor_id', view); if (vd) vd.addEventListener('change', async () => { await setField('vendor_id', vd.value); afterEdit(vd); });
   $$('[data-test]', view).forEach((b) => b.addEventListener('click', async () => { await setField('test_run_result', r.test_run_result === b.dataset.test ? '' : b.dataset.test); repaint(); }));
   // Việc con
   const setTask = async (id, patch) => { draft.tasks[id] = { ...(draft.tasks[id] || {}), ...patch }; await saveDraft(); };
+  const taskStatus = async (id, s) => {
+    const t = tasks.find((x) => x.repair_task_id === id);
+    if (!t) return;
+    const patch = { status: s };
+    if (s === 'IN_PROGRESS' && !t.start_at) patch.start_at = isoNowVN();
+    if (s === 'DONE' && !t.end_at) { patch.end_at = isoNowVN(); if (!t.start_at) patch.start_at = patch.end_at; }
+    await setTask(id, patch); repaint();
+  };
+  // Nút "Xong" trong danh sách mục còn thiếu
+  $$('[data-task-done]', view).forEach((b) => b.addEventListener('click', () => taskStatus(b.dataset.taskDone, 'DONE')));
   $$('[data-task]', view).forEach((li) => {
     const id = li.dataset.task;
     const t = tasks.find((x) => x.repair_task_id === id);
-    $$('[data-tstat]', li).forEach((b) => b.addEventListener('click', async () => {
-      const s = b.dataset.tstat;
-      const patch = { status: s };
-      if (s === 'IN_PROGRESS' && !t.start_at) patch.start_at = isoNowVN();
-      if (s === 'DONE' && !t.end_at) { patch.end_at = isoNowVN(); if (!t.start_at) patch.start_at = patch.end_at; }
-      await setTask(id, patch); repaint();
-    }));
+    $$('[data-tstat]', li).forEach((b) => b.addEventListener('click', () => taskStatus(id, b.dataset.tstat)));
     const ed = $('[data-tedit]', li);
     if (ed) ed.addEventListener('click', async () => {
       const res = await taskDialog(t, await pickUsers());
@@ -488,8 +506,9 @@ export async function renderRepair(view, ctx) {
     const first = issues[0];
     const el = first && (view.querySelector(`[data-field="${CSS.escape(first.field)}"]`) || $('#rp-exec', view));
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
-    toast(issues.slice(0, 4).map((x) => bi(x.key)).join(' · '), 'err');
+    toast(issues.slice(0, 4).map((x) => bi(x.key, x.vars)).join(' · '), 'err');
   });
+  wireIssueList(view);
   // ----- Ghi -----
   const pendingFor = (list) => list.some((o) => (o.entity_id === r.repair_id || o.parent_id === r.repair_id) && o.state !== 'REJECTED' && o.state !== 'CONFLICT');
   const sendProcess = async (payload) => {
@@ -525,7 +544,14 @@ export async function renderRepair(view, ctx) {
   on('rp-submit', async (ev) => {
     const btn = ev.currentTarget;
     busy(btn, true);
-    if (dirty) { const r1 = await sendProcess(processPayload()); if (!r1.ok) { busy(btn, false); await afterWrite(r1); return; } await clearFormDraft(draftKey); }
+    // Lưu thay đổi còn trên form trước; ghi trực tuyến xong thì gửi nghiệm thu theo phiên bản mới (không thì xung đột phiên bản)
+    let ver = base.record_version;
+    if (dirty) {
+      const r1 = await sendProcess(processPayload());
+      if (!r1.ok) { busy(btn, false); await afterWrite(r1); return; }
+      await clearFormDraft(draftKey);
+      if (!r1.queued && r1.record_version) ver = r1.record_version;
+    }
     const fresh = await myQueue();
     const expect = {
       documents: fresh.filter((o) => o.action === 'doc.upload' && o.parent_id === r.repair_id && o.state !== 'REJECTED').map((o) => o.payload.document_id),
@@ -536,7 +562,7 @@ export async function renderRepair(view, ctx) {
     if (!navigator.onLine || pendingFor(fresh)) {
       await queueWork('repair.submit', payload, { entity_type: 'REPAIR', entity_id: r.repair_id, expected_version: Number(base.record_version || 0), chain: true });
       res = { queued: true };
-    } else res = await writeOnline('repair.submit', payload, { expected_version: base.record_version });
+    } else res = await writeOnline('repair.submit', payload, { expected_version: ver });
     busy(btn, false);
     await afterWrite(res);
   });

@@ -1274,7 +1274,7 @@
   "rp.issue.start": ["Chưa có giờ bắt đầu sửa", "未填写开始维修时间"],
   "rp.issue.end": ["Chưa có giờ kết thúc sửa", "未填写结束维修时间"],
   "rp.issue.test_run": ["Chưa có kết quả chạy thử", "未填写试运行结果"],
-  "rp.issue.task_open": ["Còn việc con chưa xong", "还有未完成的子任务"],
+  "rp.issue.task_open": ["Việc con “{T}” chưa xong: bấm Xong hoặc Bỏ", "子任务“{T}”未完成：请点击“已完成”或“已取消”"],
   "task_status.PENDING": ["Chưa làm", "待处理", "grey"],
   "task_status.IN_PROGRESS": ["Đang làm", "进行中", "navy"],
   "task_status.DONE": ["Xong", "已完成", "green"],

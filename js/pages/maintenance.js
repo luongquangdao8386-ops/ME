@@ -17,7 +17,7 @@ import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.
 import { replaceDialog } from './partreplace.js';
 import {
   myQueue, overlayWorkOrder, localCreations, woSubmitIssues, outOfRange, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
-  queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep
+  queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList
 } from '../work.js';
 
 const INTERVALS = ['DAY', 'MONTH', 'OPERATING_HOURS'];
@@ -580,6 +580,7 @@ export async function renderWoForm(view, ctx) {
 /* ======================= MT-02 / MT-03 Phiếu thực hiện ======================= */
 
 export async function renderWorkOrder(view, ctx) {
+  const seq = (view._renderSeq = (view._renderSeq || 0) + 1);
   const { shell, params } = ctx;
   const ops = await myQueue();
   const server = await byId('WORK_ORDER', params.id);
@@ -654,6 +655,9 @@ export async function renderWorkOrder(view, ctx) {
     canUpload: (await can('doc.upload')) && (lead || mineAssigned) && WO_OPEN.has(w.status),
     photoButtons: ['mt.photo_before', 'mt.photo_after'].map(photoButton)
   });
+  // Đổi ô liên tiếp → nhiều lần vẽ chạy cùng lúc: chỉ lần bắt đầu sau cùng (nháp mới nhất) được ghi lên màn, lần cũ xong
+  // muộn không ghi đè (không thì màn hiện nội dung cũ và lần đổi ô sau lưu nháp cũ, mất chữ vừa gõ)
+  if (seq !== view._renderSeq) return;
   view.innerHTML = `<section class="card">
     ${ov.rejected.length ? `<p class="banner warn">${bi('mt.has_rejected')} <a href="#/account/drafts">${bi('draft.title')}</a></p>` : ''}
     ${ov.blocked ? `<p class="banner warn">${bi('mt.blocked')}</p>` : ''}
@@ -702,8 +706,7 @@ export async function renderWorkOrder(view, ctx) {
     ${executing && started ? `<div class="row form-actions">
       <button type="button" class="btn" id="wo-save" ${dirty ? '' : 'disabled'}>${bi('btn.save')}</button>
       <button type="button" class="btn primary" id="wo-submit" ${chk.issues.length || ov.blocked || ov.rejected.length ? 'disabled' : ''}>${bi('btn.submit_acceptance')}</button>
-      ${chk.issues.length ? `<button type="button" class="link small" id="wo-left">${bi('mt.items_left', { N: chk.issues.length })}</button>` : ''}
-    </div>
+    </div>${issueListHtml(chk.issues, 'wo-left')}
     ${dirty ? `<p class="muted small">${bi('mt.unsaved')}</p>` : ''}` : ''}
     ${showAccept ? `<div class="row form-actions"><button type="button" class="btn primary" id="wo-accept" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.accept_pass')}</span></button><button type="button" class="btn" id="wo-return" ${online ? '' : 'disabled'}>${bi('btn.accept_fail')}</button></div>` : ''}
     ${!(executing && started) && !showAccept ? nextStepHtml(next, 'exec') : ''}
@@ -721,6 +724,17 @@ export async function renderWorkOrder(view, ctx) {
   const saveDraft = async () => { await saveFormDraft(draftKey, draft); };
   const setField = async (k, v) => { draft.fields[k] = v; await saveDraft(); };
   const setRes = async (id, k, v) => { (draft.results[id] = draft.results[id] || {})[k] = v; await saveDraft(); };
+  // Sửa một ô rồi chạm sang ô nhập khác: chưa vẽ lại cả màn (vẽ lại làm mất ô đang gõ, iPhone tắt bàn phím) — chỉ bật nút
+  // Lưu; vẽ lại khi rời hẳn các ô nhập (chạm nút, chạm ra ngoài). Bấm nút (Bây giờ, Đạt…) thì vẽ lại ngay như cũ.
+  const afterEdit = (src = null) => {
+    if (!view.isConnected) return;
+    const a = document.activeElement;
+    if (!a || a === src || a === document.body || !view.contains(a) || !a.matches('input, textarea, select')) { repaint(); return; }
+    const sv = $('#wo-save', view); if (sv) sv.disabled = false;
+    if (a.dataset.leave) return;
+    a.dataset.leave = '1';
+    a.addEventListener('blur', () => { delete a.dataset.leave; setTimeout(() => afterEdit(), 0); }, { once: true });
+  };
   $$('[data-res]', view).forEach((b) => b.addEventListener('click', async () => {
     const id = b.dataset.res, v = b.dataset.v;
     const r = results.find((x) => x.result_id === id);
@@ -759,29 +773,32 @@ export async function renderWorkOrder(view, ctx) {
     // Ngoài giới hạn: tự đề xuất Không đạt; người làm đổi lại Đạt được nhưng phải ghi chú (5.1.1 mục 4)
     if (n.value !== null) await setRes(id, 'result_status', outOfRange(r, n.value) ? 'FAIL' : (r.result_status === 'FAIL' && !outOfRange(r, Number(r.measured_value)) ? r.result_status : 'PASS'));
     if (n.value !== null && outOfRange(r, n.value)) await setField('overall_result', 'FAIL');
-    repaint();
+    afterEdit(i);
   }));
   $$('[data-note]', view).forEach((i) => i.addEventListener('change', async () => {
     const id = i.dataset.note;
     const t = i.value.trim();
     const lang = oneLang('note', t);
     await setRes(id, 'note_vi', lang.note_vi || ''); await setRes(id, 'note_zh', lang.note_zh || '');
-    repaint();
+    afterEdit(i);
   }));
   const fieldMap = { 'f-start_at': 'start_at', 'f-end_at': 'end_at', 'f-downtime_start_at': 'downtime_start_at', 'f-downtime_end_at': 'downtime_end_at' };
-  for (const [id, k] of Object.entries(fieldMap)) { const el = $('#' + id, view); if (el) el.addEventListener('change', async () => { await setField(k, fromLocalInput(el.value)); repaint(); }); }
-  const dn = $('#f-downtime_note', view); if (dn) dn.addEventListener('change', async () => { await setField('downtime_note', dn.value.trim()); repaint(); });
-  const lm = $('#f-labor_minutes', view); if (lm) lm.addEventListener('change', async () => { const n = parseNumberInput(lm.value, { integer: true }); if (!n.error) { await setField('labor_minutes', n.value === null ? '' : n.value); repaint(); } });
-  const oh = $('#f-operating_hours', view); if (oh) oh.addEventListener('change', async () => { const n = parseNumberInput(oh.value); if (!n.error) { await setField('operating_hours', n.value === null ? '' : n.value); repaint(); } });
-  const rn = $('#f-result', view); if (rn) rn.addEventListener('change', async () => { const l = oneLang('result', rn.value); await setField('result_vi', l.result_vi || ''); await setField('result_zh', l.result_zh || ''); repaint(); });
+  for (const [id, k] of Object.entries(fieldMap)) { const el = $('#' + id, view); if (el) el.addEventListener('change', async () => { await setField(k, fromLocalInput(el.value)); afterEdit(el); }); }
+  const dn = $('#f-downtime_note', view); if (dn) dn.addEventListener('change', async () => { await setField('downtime_note', dn.value.trim()); afterEdit(dn); });
+  const lm = $('#f-labor_minutes', view); if (lm) lm.addEventListener('change', async () => { const n = parseNumberInput(lm.value, { integer: true }); if (!n.error) { await setField('labor_minutes', n.value === null ? '' : n.value); afterEdit(lm); } });
+  const oh = $('#f-operating_hours', view); if (oh) oh.addEventListener('change', async () => { const n = parseNumberInput(oh.value); if (!n.error) { await setField('operating_hours', n.value === null ? '' : n.value); afterEdit(oh); } });
+  const rn = $('#f-result', view); if (rn) rn.addEventListener('change', async () => { const l = oneLang('result', rn.value); await setField('result_vi', l.result_vi || ''); await setField('result_zh', l.result_zh || ''); afterEdit(rn); });
   $$('[data-overall]', view).forEach((b) => b.addEventListener('click', async () => { await setField('overall_result', b.dataset.overall); repaint(); }));
   on('wo-end-now', async () => { await setField('end_at', isoNowVN()); repaint(); });
+  // Nút "Bây giờ" trong danh sách mục còn thiếu
+  $$('[data-now]', view).forEach((b) => b.addEventListener('click', async () => { await setField(b.dataset.now, isoNowVN()); repaint(); }));
   on('wo-left', () => {
     const first = chk.issues[0];
     const el = first && (view.querySelector(`[data-field="${CSS.escape(first.field)}"]`) || $('#wo-exec', view));
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600); }
-    toast(chk.issues.slice(0, 4).map((x) => bi(x.key, { N: x.step })).join(' · '), 'err');
+    toast(chk.issues.slice(0, 4).map((x) => bi(x.key, x.vars)).join(' · '), 'err');
   });
+  wireIssueList(view);
   // ----- Ghi -----
   const pendingForWo = () => ops.some((o) => (o.entity_id === w.work_order_id || o.parent_id === w.work_order_id) && o.state !== 'REJECTED' && o.state !== 'CONFLICT');
   /** Gửi maintenance.execute: trực tuyến khi không còn mục chờ của phiếu, không thì vào hàng chờ (gửi tuần tự) */
@@ -824,8 +841,15 @@ export async function renderWorkOrder(view, ctx) {
     }
     const btn = ev.currentTarget;
     busy(btn, true);
-    // Lưu thay đổi còn trên form trước, rồi gửi nghiệm thu (gửi tuần tự, 5.1.1 mục 2)
-    if (dirty) { const r1 = await sendExec(execPayload()); if (!r1.ok && !r1.queued) { busy(btn, false); await afterWrite(r1); return; } await clearFormDraft(draftKey); }
+    // Lưu thay đổi còn trên form trước, rồi gửi nghiệm thu (gửi tuần tự, 5.1.1 mục 2); ghi trực tuyến xong thì gửi theo
+    // phiên bản mới (không thì xung đột phiên bản)
+    let ver = base.record_version;
+    if (dirty) {
+      const r1 = await sendExec(execPayload());
+      if (!r1.ok && !r1.queued) { busy(btn, false); await afterWrite(r1); return; }
+      await clearFormDraft(draftKey);
+      if (!r1.queued && r1.record_version) ver = r1.record_version;
+    }
     const expect = {
       documents: ops.filter((o) => o.action === 'doc.upload' && o.parent_id === w.work_order_id && o.state !== 'REJECTED').map((o) => o.payload.document_id),
       usage_lines: localUsageIds(usageData)
@@ -837,7 +861,7 @@ export async function renderWorkOrder(view, ctx) {
       await queueWork('maintenance.submit', payload, { entity_type: 'WORK_ORDER', entity_id: w.work_order_id, expected_version: Number(base.record_version || 0), chain: true });
       res = { queued: true };
     } else {
-      res = await writeOnline('maintenance.submit', payload, { expected_version: base.record_version });
+      res = await writeOnline('maintenance.submit', payload, { expected_version: ver });
     }
     busy(btn, false);
     if (res.ok && res.data && res.data.repair) toast(bi('mt.repair_created_toast', { C: res.data.repair.repair_code }), 'ok');
