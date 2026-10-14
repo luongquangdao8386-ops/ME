@@ -129,17 +129,13 @@ export async function clearUserData() {
  * Dữ liệu trên máy gắn với một máy chủ (link /exec). Trang đổi máy chủ (vd. /ME/ chuyển từ THỬ sang THẬT):
  * phiên, PIN ngoại tuyến và bản sao dữ liệu của máy chủ cũ bị xóa — không mở khóa ngoại tuyến vào dữ liệu cũ;
  * nháp giữ lại, thành "Nháp thế hệ dữ liệu cũ" (khác dataset_epoch, không tự gửi). Trả true khi đã xóa.
+ * Máy từ bản trước chưa ghi dấu gắn: chưa biết dữ liệu thuộc máy chủ nào → không mở khóa ngoại tuyến (serverBound)
+ * cho tới khi máy chủ hiện tại nhận phiên (bindServer) hoặc đăng nhập lại.
  */
 export async function checkServerBinding() {
   const cur = execUrl();
-  if (!cur) return false;
   const bound = ls.get('server');
-  if (bound === cur) return false;
-  if (!bound) {
-    // Máy đăng nhập từ bản trước khi có cơ chế này: gắn với máy chủ đang dùng
-    if (session.token || await getVerifier()) ls.set('server', cur);
-    return false;
-  }
+  if (!cur || !bound || bound === cur) return false;
   await clearSession();
   await clearVerifier();
   await clearUserData();
@@ -148,6 +144,9 @@ export async function checkServerBinding() {
   ls.del('env');
   return true;
 }
+
+export function serverBound() { return !!execUrl() && ls.get('server') === execUrl(); }
+export function bindServer() { if (execUrl()) ls.set('server', execUrl()); }
 
 /**
  * Đăng nhập. Mất phản hồi (chặng chuyển hướng của Google, PoC P-01) → tự gửi lại đúng request (cùng login_id,
@@ -178,7 +177,7 @@ export async function login(code, pin, shared, { onStatus } = {}) {
     }
     if (shared) await idb.del('me_auth', 'kv', 'session').catch(() => {});
     await saveSession(r.data, r.dataset_epoch);
-    ls.set('server', execUrl());
+    bindServer();
     if (r.ok) {
       try { await createVerifier(pin, r.data.user, r.data.expires_at); } catch (e) { /* không chặn đăng nhập */ }
       if (!isSharedDevice() && navigator.storage && navigator.storage.persist) {

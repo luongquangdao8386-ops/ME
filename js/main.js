@@ -1,6 +1,6 @@
 // Khởi động app M&E: Service Worker, phiên, mở offline (2.5), đăng nhập, vào khung app
 import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN, applyEnvTitle } from './core.js';
-import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding } from './auth.js';
+import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding, serverBound, bindServer } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
 import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $ } from './ui.js';
@@ -192,6 +192,7 @@ async function start() {
   // Mở app: có mạng thì hỏi máy chủ (tối đa offline_probe_seconds); không thì mở khóa ngoại tuyến (2.5)
   const probeSec = Number(session.settings.offline_probe_seconds || 12);
   const tryOffline = async () => {
+    if (!serverBound()) return showLogin(bi('sync.need_network'));
     const v = await getVerifier();
     if (!v) return showLogin(bi('sync.need_network'));
     renderUnlock(root, {
@@ -208,7 +209,7 @@ async function start() {
 
   // Màn chờ: ảnh nhà máy, lời chào, 3 bước có tiến độ; nút Mở bằng PIN khi máy có verifier
   let decided = false;
-  const hasVerifier = !!(await getVerifier());
+  const hasVerifier = serverBound() && !!(await getVerifier());
   const u = session.user || {};
   const bootUi = renderBoot(root, {
     name: u.display_name, code: u.employee_code, pin: hasVerifier,
@@ -232,6 +233,7 @@ async function start() {
   decided = true;
   if (r.code === 'NETWORK_ERROR') return tryOffline();
   if (await handleSessionError(r)) return;
+  if (r.ok) bindServer(); // máy chủ đang dùng đã nhận phiên trên máy
   if (r.code === 'SYSTEM_MAINTENANCE') { toast(bi('sys.maintenance'), 'err'); return tryOffline(); }
   bootUi.step(2);
   flushPendingLogout();

@@ -56,6 +56,10 @@ async function openPhone({ envs, meExec = () => EXEC_THAT, sw = true }) {
       await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) }).catch(() => {});
     });
   }
+  // Giả mất mạng lúc mở app (navigator.onLine = false) mà trang vẫn tải được khi không có Service Worker
+  await context.addInitScript(() => {
+    if (sessionStorage.getItem('test.offline') === '1') Object.defineProperty(Navigator.prototype, 'onLine', { get: () => false });
+  });
   const errors = [];
   const page = async (url) => {
     const p = await context.newPage();
@@ -67,6 +71,11 @@ async function openPhone({ envs, meExec = () => EXEC_THAT, sw = true }) {
     base, thuBase: base.replace(/\/ME\/$/, '/ME-thu/'), context, page, errors,
     async close() { await browser.close(); srv.close(); }
   };
+}
+
+async function reloadOffline(p, on) {
+  await p.evaluate((v) => { if (v) sessionStorage.setItem('test.offline', '1'); else sessionStorage.removeItem('test.offline'); }, on);
+  await p.reload();
 }
 
 async function login(p) {
@@ -175,17 +184,53 @@ test('trang /ME/ đổi máy chủ THỬ → THẬT: xóa phiên, PIN ngoại tu
     assert.equal(await p.getAttribute('meta[name="apple-mobile-web-app-title"]', 'content'), 'M&E');
 
     // Mất mạng lúc này: không có PIN ngoại tuyến của máy chủ cũ để mở dữ liệu cũ
-    await ph.context.setOffline(true);
-    await p.reload().catch(() => {});
-    await p.waitForTimeout(800);
+    await reloadOffline(p, true);
+    await p.waitForSelector('.login-card', { timeout: 15000 });
     assert.equal(await p.locator('#upin').count(), 0);
-    await ph.context.setOffline(false);
-
-    await p.reload();
+    await reloadOffline(p, false);
     await login(p);
     assert.equal(await p.locator('.tag.env').count(), 0);
     assert.equal(await p.evaluate(() => localStorage.getItem('me.server')), EXEC_THAT);
     assert.equal(that.rows('Sessions').length, n0 + 1);
+    assert.deepEqual(ph.errors, []);
+  } finally { await ph.close(); }
+});
+
+test('máy từ bản trước (chưa ghi dấu gắn máy chủ) khi /ME/ sang THẬT: mất mạng không mở khóa vào dữ liệu THỬ; có mạng thì đăng nhập lại, dữ liệu THỬ bị xóa; cùng máy chủ thì tự gắn', async () => {
+  const that = freshServer({ envName: 'THAT' });
+  const thu = freshServer();
+  ownerClient(that); ownerClient(thu);
+  let meExec = EXEC_THU;
+  const ph = await openPhone({ envs: { [EXEC_THAT]: that, [EXEC_THU]: thu }, meExec: () => meExec, sw: false });
+  try {
+    const p = await ph.page(ph.base);
+    await login(p);
+    // Đối chứng: đã gắn, cùng máy chủ, mất mạng → mở khóa bằng PIN được
+    await reloadOffline(p, true);
+    await p.waitForSelector('#upin', { timeout: 15000 });
+    await reloadOffline(p, false);
+    await p.waitForSelector('.grid9', { timeout: 15000 });
+    // Bản d1.20 không có dấu gắn: mở lại khi còn cùng máy chủ → máy chủ nhận phiên → tự gắn
+    await p.evaluate(() => localStorage.removeItem('me.server'));
+    await p.reload();
+    await p.waitForSelector('.grid9', { timeout: 15000 });
+    assert.equal(await p.evaluate(() => localStorage.getItem('me.server')), EXEC_THU);
+
+    await p.evaluate(() => localStorage.removeItem('me.server'));
+    meExec = EXEC_THAT;
+    await reloadOffline(p, true);
+    await p.waitForSelector('.login-card', { timeout: 15000 });
+    assert.equal(await p.locator('#upin').count(), 0, 'không mở khóa ngoại tuyến khi chưa biết dữ liệu thuộc máy chủ nào');
+    await reloadOffline(p, false);
+    await p.waitForSelector('.login-card', { timeout: 15000 }); // phiên THỬ bị máy chủ THẬT từ chối
+    await login(p);
+    assert.equal(await p.locator('.tag.env').count(), 0);
+    const recs = await p.evaluate(() => new Promise((resolve) => {
+      const r = indexedDB.open('me_data');
+      r.onsuccess = () => { const t = r.result.transaction('records').objectStore('records').get('EQUIPMENT'); t.onsuccess = () => resolve((t.result || []).length); };
+    }));
+    assert.equal(recs, 0, 'không còn thiết bị của THỬ');
+    assert.equal(await p.evaluate(() => localStorage.getItem('me.server')), EXEC_THAT);
     assert.deepEqual(ph.errors, []);
   } finally { await ph.close(); }
 });
