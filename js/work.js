@@ -1,7 +1,7 @@
 // Phiếu công việc Đợt 2 (bảo trì, sửa chữa): gộp nháp trên máy lên bản máy chủ, điều kiện Gửi nghiệm thu (5.1.1, C8),
 // danh sách Công việc (5.2), quyền phía client (chỉ để ẩn/hiện nút; máy chủ kiểm lại)
-import { session, bi, badge, esc, nameText, fmtNumber } from './core.js';
-import { recs, byId, mapOf, can, today, daysBetween } from './data.js';
+import { session, badge, esc, nameText, fmtNumber } from './core.js';
+import { recs, mapOf, can, today, daysBetween } from './data.js';
 import { queueItems, enqueue } from './sync.js';
 
 export const WO_OPEN = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_ACCEPTANCE']);
@@ -179,7 +179,7 @@ export async function workItems({ mine = false, kinds = ['WO', 'REPAIR'] } = {})
   if (kinds.includes('REPAIR')) {
     for (const r0 of [...(await recs('REPAIR')), ...loc.reps]) {
       if (!REPAIR_OPEN.has(r0.status)) continue;
-      const r = r0._local ? r0 : overlayRepair(r0, [], ops).repair;
+      const r = overlayRepair(r0, [], ops).repair;
       const assignees = [r.assignee_user_id, ...tasks.filter((t) => t.repair_id === r.repair_id).map((t) => t.assignee_user_id)];
       if (mine && !assignees.includes(u) && r.reported_by !== u) continue;
       const e = eqs.get(r.equipment_id);
@@ -265,4 +265,3 @@ export function mergeExecPayload(a, b) {
   return out;
 }
 
-export { bi };

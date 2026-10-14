@@ -35,10 +35,12 @@ export async function resolveScan(p) {
     if (r.ok) return r.data;
     if (r.code !== 'NETWORK_ERROR') return { qr_state: 'UNAVAILABLE', error: r.code };
   }
-  for (const type of ['EQUIPMENT', 'INSPECTION_REQUIREMENT', 'INSPECTION']) {
+  const CODE_F = { EQUIPMENT: 'equipment_code', INSPECTION_REQUIREMENT: 'requirement_code', INSPECTION: 'inspection_code', MAINTENANCE_PLAN: 'plan_code', WORK_ORDER: 'work_order_code', REPAIR: 'repair_code' };
+  const KEY_F = { EQUIPMENT: 'equipment_id', INSPECTION_REQUIREMENT: 'requirement_id', INSPECTION: 'inspection_id', MAINTENANCE_PLAN: 'plan_id', WORK_ORDER: 'work_order_id', REPAIR: 'repair_id' };
+  for (const type of Object.keys(CODE_F)) {
     const list = await getRecords(type);
-    const codeField = { EQUIPMENT: 'equipment_code', INSPECTION_REQUIREMENT: 'requirement_code', INSPECTION: 'inspection_code' }[type];
-    const keyField = { EQUIPMENT: 'equipment_id', INSPECTION_REQUIREMENT: 'requirement_id', INSPECTION: 'inspection_id' }[type];
+    const codeField = CODE_F[type];
+    const keyField = KEY_F[type];
     const hit = list.find((x) => (p.kind === 'qr' ? x.qr_key === p.key : x[codeField] === p.code));
     if (hit) return { qr_state: 'OK', entity_type: type, entity_id: hit[keyField], code: hit[codeField], offline: true };
   }

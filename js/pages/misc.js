@@ -37,7 +37,11 @@ const QR_TYPES = {
   MATERIAL: { type: 'MATERIAL', code: 'material_code', back: '/materials/' },
   INSPECTION_REQUIREMENT: { type: 'INSPECTION_REQUIREMENT', code: 'requirement_code', back: '/inspections/' },
   CONTRACT: { type: 'CONTRACT', code: 'contract_code', back: '/contracts/' },
-  INSPECTION: { type: 'INSPECTION', code: 'inspection_code', back: '/inspections/record/' }
+  INSPECTION: { type: 'INSPECTION', code: 'inspection_code', back: '/inspections/record/' },
+  // Đợt 2: kế hoạch, phiếu bảo trì, phiếu sửa (tem dán tại máy/phiếu giấy)
+  MAINTENANCE_PLAN: { type: 'MAINTENANCE_PLAN', code: 'plan_code', back: '/maintenance/plans/' },
+  WORK_ORDER: { type: 'WORK_ORDER', code: 'work_order_code', back: '/maintenance/wo/' },
+  REPAIR: { type: 'REPAIR', code: 'repair_code', back: '/repairs/' }
 };
 
 /** Mục in tem: tên lấy theo loại hồ sơ; yêu cầu kiểm định dùng tên loại kiểm định + thiết bị */
@@ -51,6 +55,12 @@ export async function labelItem(type, rec) {
     nv = [t && t.name_vi, e && e.equipment_code].filter(Boolean).join(' — ');
     nz = [t && t.name_zh, e && e.equipment_code].filter(Boolean).join(' — ');
     if (!locId && e) locId = e.location_id;
+  }
+  if (type === 'REPAIR') { nv = String(rec.symptom_vi || rec.symptom_zh || '').slice(0, 60); nz = String(rec.symptom_zh || rec.symptom_vi || '').slice(0, 60); }
+  // Phiếu/kế hoạch: dòng dưới tem là mã thiết bị (thay cho khu vực)
+  if (type === 'MAINTENANCE_PLAN' || type === 'WORK_ORDER' || type === 'REPAIR') {
+    const e = await byId('EQUIPMENT', rec.equipment_id);
+    return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: e ? e.equipment_code : '', machine: false };
   }
   const loc = type === 'EQUIPMENT' && locId ? await byId('LOCATION', locId) : null;
   // Tem in văn bản hiện có, không in nhãn; màn xem trước đánh dấu tem có tên dịch máy chưa sửa (2.3 quy tắc 6)
@@ -95,7 +105,7 @@ export async function renderPrintLabels(view, { shell, query }) {
   const items = [];
   for (const it of res.data.items) {
     const local = await byId(cfg.type, it.entity_id);
-    items.push(local ? { ...(await labelItem(cfg.type, local)), qr_key: it.qr_key, code: it.code } : it);
+    items.push(local ? { ...(await labelItem(cfg.type, local)), qr_key: it.qr_key, code: it.code } : { ...it, location_code: it.location_code || it.equipment_code || '' });
   }
   const b = await boot();
   const { labelSheetHtml } = await import('../labels.js');

@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — Đợt 1 (bản 1.0.0-d1.22)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d2.1 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,11 +16,54 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Thứ tự lần này:** Phần F (dựng máy chủ THẬT, gửi link `/exec` cho Claude) → Phần G (tạo repo `ME-thu`) → Claude cập nhật mã → Phần H (chuyển trang `/ME/` sang THẬT, cài đặt lần đầu). Phần A–E bên dưới là việc của THỬ (đã làm xong, giữ để tra cứu).
+**Thứ tự lần này (Đợt 2):** Phần J (đưa máy chủ Đợt 2 lên THỬ) → Phần K (thử Đợt 2 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần L. Phần F, G, H (dựng THẬT, tạo `ME-thu`) đã làm xong ngày 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 
 ---
+
+## Phần J — Đưa Đợt 2 lên THỬ (`ME_MayChu_THU`)
+
+Đợt 2 thêm **10 sheet** (Kế hoạch bảo trì, Mẫu checklist, Phiếu bảo trì, Kết quả checklist, Phiếu sửa chữa, Việc con, Đề nghị vật tư, Dòng đề nghị, Lượng dùng, Giờ chạy). App chỉ bật Bảo trì/Sửa chữa/Công việc **sau khi chạy `migrateSchema`**; trước đó app mới vẫn chạy như Đợt 1 (các ô đó mờ "Sắp có").
+
+1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d2.1**. Lúc này Bảo trì, Sửa chữa còn mờ "Sắp có" — đúng.
+2. **Sao lưu THỬ trước:** Tài khoản → Quản trị → **Sao lưu ngay** → PIN → chờ dòng **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/upbeat-heisenberg-tdnmpa/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+4. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu** (Ctrl+S).
+5. Ô chọn hàm → **`migrateSchema`** → **Chạy**. Nhật ký: `migrateSchema xong. Thêm: MaintenancePlans; ChecklistTemplates; WorkOrders; … ; EquipmentPartEvents(old_material_id). schema_version=1.5.2` (thêm cả cài đặt `wo_generate_days_ahead` = 7: phiếu bảo trì sinh trước hạn 7 ngày). Chạy lại nhiều lần vẫn an toàn.
+6. Chạy **`healthCheck`** → các dòng ĐẠT (trừ cảnh báo đã biết). Không cần cài lại trigger: trigger nhắc hạn hằng ngày và dịch bù 3 giờ/lần tự sinh phiếu bảo trì tới hạn.
+7. **Triển khai** → **Quản lý bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → Mô tả `THỬ d2.1` → **Triển khai** (giữ nguyên link).
+8. **Kiểm link:** cửa sổ ẩn danh → dán link `/exec` của THỬ, thêm `?action=system.health` → thấy `"ok":true`, `"app_id":"ME"`.
+9. App THỬ: Ctrl+Shift+R (máy tính) / mở lại app (iPhone) → lưới 9 ô: **Bảo trì, Sửa chữa** sáng; nút **Công việc** dùng được. **Trạng thái hệ thống**: schema **1.5.2**, máy chủ **d2.1**.
+
+## Phần K — Thử Đợt 2 trên THỬ
+
+Dùng tài khoản mẫu (MAU-KT kỹ thuật, MAU-C3 trưởng bộ phận, NV001 quản trị). Người lập/làm/báo **không** tự nghiệm thu phiếu của mình — cần người khác cấp 3–4.
+
+| Phần | Cách thử |
+| --- | --- |
+| Mẫu checklist | Bảo trì → **Mẫu checklist** → Thêm: 3 bước (Đạt/Không đạt; Số đo, đơn vị `bar`, giới hạn 6–8; Ghi nhận). Sửa mẫu → tạo **phiên bản 2**, phiếu cũ giữ bản cũ |
+| Kế hoạch | Bảo trì → **Thêm kế hoạch**: theo tháng, ngày mốc hôm nay, checklist vừa tạo, người làm mặc định MAU-KT → phiếu **BT-yymm-001** tự sinh, đã giao việc |
+| Làm phiếu (iPhone, MAU-KT) | **Công việc** → phiếu → **Bắt đầu làm** → tắt mạng → ghi checklist, số đo 9 bar (tự Không đạt) → bấm **Còn N mục chưa xong** (cuộn tới mục thiếu) → ghi chú, **Bây giờ** cho giờ kết thúc → **Gửi nghiệm thu** (chọn mức độ) → bật mạng → tự gửi; có phiếu sửa **SC-** cho mục không đạt |
+| Nghiệm thu | MAU-C3 (hoặc NV001) mở phiếu → **Nghiệm thu đạt** + PIN → Hoàn thành; kế hoạch có hạn kế tiếp. MAU-KT không có nút nghiệm thu |
+| Báo sự cố | iPhone, tắt mạng → **Sửa chữa → Báo sự cố**: mức độ phải chọn (không chọn sẵn), tick Máy đang dừng, chụp ảnh → Gửi → bật mạng → đúng **1** phiếu SC, 1 ảnh (bấm Đồng bộ lại không tạo trùng) |
+| Sửa chữa | NV001 **Phân công** cho MAU-KT → MAU-KT **Bắt đầu sửa**, ghi chẩn đoán, nguyên nhân (danh mục Nguyên nhân), việc con, **Kết thúc sửa**, chạy thử, **Hoạt động lại** → **Gửi nghiệm thu** → MAU-C3 nghiệm thu + PIN → đủ **6 mốc** |
+| Vật tư trên phiếu | Trong phiếu đang làm: **Đề nghị vật tư** (Lưu nháp → Gửi duyệt) → MAU-C3 **Duyệt** + PIN (ghi "Chưa kết nối kho", không trừ tồn); **Ghi thực dùng** → nghiệm thu kèm xác nhận lượng dùng. Kho vật tư → tab **Đề nghị**, **Lượng dùng** |
+| Thay linh kiện | Phiếu đang làm → **Thay linh kiện** (cùng mã hoặc mã khác) → Thiết bị → tab Lịch sử có dòng Thay, kèm mã phiếu |
+| Giờ chạy | Kế hoạch **theo giờ chạy** → **Ghi giờ chạy** tới mốc → phiếu tự sinh; ghi số nhỏ hơn lần trước bị chặn (trừ khi tick đồng hồ đã thay) |
+| Excel | Bảo trì → **Nhập/xuất Excel** (Kế hoạch bảo trì và checklist): **Xuất Excel** → nhập lại nguyên tệp → "Không đổi (bỏ qua)". Sửa chữa → Excel (**Sự cố (lịch sử)**): MAU-KT tải mẫu, điền 2 dòng, **Gửi duyệt** → MAU-C3 **Nhập dữ liệu** + PIN |
+| Tem QR | Kế hoạch, phiếu BT, phiếu SC → biểu tượng QR → In (THỬ chỉ in thử, không dán tem thật) |
+| Công việc, trang chủ | Công việc: **Của tôi / Trong phạm vi**, nhóm Quá hạn · Hôm nay · Sắp tới · Chờ nghiệm thu; trang chủ web: bảng Công việc hôm nay có phiếu BT/SC, lịch tuần có phiếu BT |
+
+Gặp lỗi: chụp màn hình (có mã phiếu, giờ) gửi Claude. Nháp mất mạng xem ở **Tài khoản → Nháp chờ đồng bộ**.
+
+## Phần L — Phát hành Đợt 2 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+
+1. Claude đưa đúng bản đã thử lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 1 tới khi máy chủ THẬT chạy `migrateSchema`).
+2. App THẬT: **Quản trị → Sao lưu ngay** → chờ **Đã kiểm chứng**.
+3. Dán **cùng bản** `Code.gs` (link raw nhánh `main`) vào **`ME_MayChu_THAT`** → Lưu → chạy **`migrateSchema`** → **`healthCheck`**.
+4. **Triển khai → Quản lý bản triển khai → bút chì → Phiên bản mới** → Mô tả `THẬT d2.1` → Triển khai → kiểm link ẩn danh `?action=system.health`.
+5. Mở `/ME/` → Ctrl+Shift+R → Trạng thái hệ thống: schema 1.5.2. Tạo mẫu checklist, kế hoạch thật (hoặc nhập Excel), cấp vai trò Kỹ thuật/Báo sự cố cho người dùng.
 
 ## Phần F — Dựng máy chủ THẬT (làm một lần)
 

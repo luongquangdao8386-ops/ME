@@ -28,9 +28,10 @@ function isoToSerial(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
   return m ? (Date.UTC(+m[1], +m[2] - 1, +m[3]) - EXCEL_EPOCH) / 86400000 : null;
 }
-/** Date của ô ngày (SheetJS cellDates, giờ máy) → 'YYYY-MM-DD' */
+/** Date của ô ngày (SheetJS cellDates, giờ máy) → 'YYYY-MM-DD', có giờ thì 'YYYY-MM-DD HH:MM' (cột thời điểm, Đợt 2) */
 function dateToIso(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return d.getHours() || d.getMinutes() ? `${day} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : day;
 }
 
 /** Một ô theo kiểu (5.4.6): số #,##0 / #,##0.0##, ngày dd/mm/yyyy, mã @ giữ số 0, chữ luôn là chuỗi (không thành công thức) */

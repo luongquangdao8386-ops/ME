@@ -2,7 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { excelLink } from '../excel-link.js';
-import { isWide, comingSoon } from '../shell.js';
+import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, invalidate, today } from '../data.js';
 import { navigate, back } from '../router.js';
 import { app, afterCommit } from '../app.js';
@@ -193,6 +193,7 @@ async function renderPane(pane, id, tab, ctx) {
   const cat = eq.category_id ? await byId('LOOKUP', eq.category_id) : null;
   const vendor = eq.vendor_id ? await byId('VENDOR', eq.vendor_id) : null;
   const kv = (k, v) => (v ? `<div class="kv"><span>${bi(k)}</span><strong>${v}</strong></div>` : '');
+  const work = RELEASED_DOT >= 2 && !eq.archived_at ? await openWorkHtml(eq) : { html: '', buttons: '' };
   pane.innerHTML = `<section class="card eq-head">
     ${eq.archived_at ? `<p class="banner warn">${bi('eq.archived_banner')} · ${esc(fmtDateTime(eq.archived_at))}</p>` : ''}
     <div class="rec-top"><span class="code big">${esc(eq.equipment_code || biText('tag.pending_code'))}</span>${badge('equipment_status.' + eq.status)}</div>
@@ -219,6 +220,7 @@ async function renderPane(pane, id, tab, ctx) {
       ${canArchive ? `<button type="button" class="btn small" id="eq-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi(eq.archived_at ? 'btn.unarchive' : 'btn.archive')}</span></button>` : ''}
     </div>` : (canArchive ? `<div class="row"><button type="button" class="btn small" id="eq-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi(eq.archived_at ? 'btn.unarchive' : 'btn.archive')}</span></button></div>` : '')}
     ${!online && (canEdit || canArchive) ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
+    ${work.buttons}${work.html}
   </section>
   <div class="tabs-bar" role="tablist">${TABS.map((t) => `<button type="button" role="tab" class="tab${t === tab ? ' on' : ''}" data-tab="${t}" aria-selected="${t === tab}">${bi('tab.' + t)}</button>`).join('')}</div>
   <section class="card tab-body" id="eq-tab"></section>`;
@@ -230,12 +232,31 @@ async function renderPane(pane, id, tab, ctx) {
     navigate(base, { replace: true });
   }));
   wireRetranslate(pane, async () => { await afterCommit(); repaint(); });
+  const hrs = $('#eq-hours', pane);
+  if (hrs) hrs.addEventListener('click', async () => { const { hoursDialog } = await import('./maintenance.js'); if (await hoursDialog(eq.equipment_id)) repaint(); });
   const arch = $('#eq-arch', pane);
   if (arch) arch.addEventListener('click', async () => { if (await archiveFlow(eq)) { invalidate(); retiredCache = null; if (eq.archived_at) repaint(); else navigate('/equipment', { replace: true }); } });
   if (tab === 'specs') { tb.innerHTML = await specsTabHtml(eq); wireSpecs(tb, eq, repaint); }
   if (tab === 'parts') { tb.innerHTML = await partsTabHtml(eq); wirePartsTab(tb, eq, repaint); }
   if (tab === 'documents') { tb.innerHTML = await docsTabHtml('EQUIPMENT', eq); wireDocsTab(tb, 'EQUIPMENT', eq, repaint); }
   if (tab === 'history') tb.innerHTML = await historyTabHtml(eq);
+}
+
+/** Nút Báo sự cố / Phiếu bảo trì / Ghi giờ chạy và các phiếu đang mở của thiết bị (Đợt 2; quét QR thiết bị → thấy việc đang làm) */
+async function openWorkHtml(eq) {
+  const id = eq.equipment_id;
+  const canRep = await can('repair.report'), canWo = await can('maintenance.wo.create'), canHrs = await can('maintenance.hours.record');
+  const hoursPlan = (await recs('MAINTENANCE_PLAN')).some((p) => p.equipment_id === id && p.active !== false && p.interval_type === 'OPERATING_HOURS');
+  const { workItems, statusBadge, prioBadges } = await import('../work.js');
+  const items = (await workItems({ mine: false })).filter((x) => x.rec.equipment_id === id);
+  const buttons = canRep || canWo || canHrs ? `<div class="row">
+      ${canRep ? `<a class="btn small primary" href="#/repairs/new?equipment=${esc(id)}">${ICON.repairs}<span>${bi('rp.new')}</span></a>` : ''}
+      ${canWo ? `<a class="btn small" href="#/maintenance/wo/new?equipment=${esc(id)}">${ICON.maintenance}<span>${bi('mt.wo_new')}</span></a>` : ''}
+      ${canHrs && hoursPlan ? `<button type="button" class="btn small" id="eq-hours">${ICON.sync}<span>${bi('mt.hours_record')}</span></button>` : ''}
+    </div>` : '';
+  const html = items.length ? `<div class="eq-work"><h3>${bi('eq.open_work')} <span class="count">${items.length}</span></h3><ul class="list">${items.map((x) => `<li><a href="#${esc(x.href)}"><span class="code">${x.code ? esc(x.code) : bi('tag.pending_code')}</span></a>
+      ${bi('wk.kind.' + x.kind)} · ${statusBadge(x.kind, x.rec.status)} ${prioBadges(x.rec, x.kind)}</li>`).join('')}</ul></div>` : '';
+  return { buttons, html };
 }
 
 /* ---------- Tab Thông số (EQ-02) ---------- */
@@ -337,9 +358,15 @@ async function historyTabHtml(eq) {
   const items = [];
   if (eq.created_at) items.push({ at: eq.created_at, html: `${bi('history.created')}${eq.created_by_name ? ' · ' + esc(eq.created_by_name) : ''}` });
   const mats = await mapOf('MATERIAL');
+  const wos = RELEASED_DOT >= 2 ? await mapOf('WORK_ORDER') : new Map();
+  const reps = RELEASED_DOT >= 2 ? await mapOf('REPAIR') : new Map();
+  const matLink = (m) => (m ? `<a href="#/materials/${esc(m.material_id)}">${esc(m.material_code)}</a> ${esc(nameText(m))}` : '');
   for (const ev of (await recs('EQUIPMENT_PART_EVENT')).filter((x) => x.equipment_id === eq.equipment_id)) {
     const m = mats.get(ev.material_id);
-    items.push({ at: ev.occurred_at || ev.created_at, html: `<span class="kind">${bi('history.part_events')}</span> ${L['part_event.' + ev.event_type] ? bi('part_event.' + ev.event_type) : esc(ev.event_type)} · ${m ? `<a href="#/materials/${esc(m.material_id)}">${esc(m.material_code)}</a> ${esc(nameText(m))}` : ''}${ev.quantity ? ' · ' + fmtQty(ev.quantity, ev.unit) : ''}${ev.created_by_name ? ' · ' + esc(ev.created_by_name) : ''}` });
+    const old = ev.old_material_id && ev.old_material_id !== ev.material_id ? mats.get(ev.old_material_id) : null;
+    const w = ev.work_type === 'WORK_ORDER' ? wos.get(ev.work_id) : (ev.work_type === 'REPAIR' ? reps.get(ev.work_id) : null);
+    const wLink = w ? ` · <a href="#/${ev.work_type === 'WORK_ORDER' ? 'maintenance/wo' : 'repairs'}/${esc(ev.work_id)}">${esc(w.work_order_code || w.repair_code || '')}</a>` : '';
+    items.push({ at: ev.occurred_at || ev.created_at, html: `<span class="kind">${bi('history.part_events')}</span> ${L['part_event.' + ev.event_type] ? bi('part_event.' + ev.event_type) : esc(ev.event_type)} · ${old ? `${matLink(old)} → ` : ''}${matLink(m)}${ev.quantity ? ' · ' + fmtQty(ev.quantity, ev.unit) : ''}${wLink}${ev.created_by_name ? ' · ' + esc(ev.created_by_name) : ''}` });
   }
   const ces = (await recs('CONTRACT_EQUIPMENT')).filter((x) => x.equipment_id === eq.equipment_id);
   const contracts = await mapOf('CONTRACT');
@@ -354,6 +381,18 @@ async function historyTabHtml(eq) {
     for (const i of insp.filter((x) => x.requirement_id === r.requirement_id)) {
       const t = types.get(r.inspection_type_id);
       items.push({ at: i.inspection_date, html: `<span class="kind">${bi('history.inspections')}</span> <a href="#/inspections/record/${esc(i.inspection_id)}">${esc(i.inspection_code || '')}</a> ${t ? esc(nameText(t)) : ''} · ${badge('inspection_result.' + i.result)} ${badge('cert_status.' + i.status)}` });
+    }
+  }
+  // Đợt 2: phiếu bảo trì, sửa chữa, giờ chạy
+  if (RELEASED_DOT >= 2) {
+    for (const w of (await recs('WORK_ORDER')).filter((x) => x.equipment_id === eq.equipment_id)) {
+      items.push({ at: w.end_at || w.approved_at || w.due_date, html: `<span class="kind">${bi('module.maintenance')}</span> <a href="#/maintenance/wo/${esc(w.work_order_id)}">${esc(w.work_order_code)}</a> ${biName(w, 'title')} · ${badge('wo_status.' + w.status)}${w.overall_result ? ' ' + badge('overall_result.' + w.overall_result) : ''}${w.assignee_name ? ' · ' + esc(w.assignee_name) : ''}` });
+    }
+    for (const r of (await recs('REPAIR')).filter((x) => x.equipment_id === eq.equipment_id)) {
+      items.push({ at: r.reported_at, html: `<span class="kind">${bi('module.repairs')}</span> <a href="#/repairs/${esc(r.repair_id)}">${esc(r.repair_code)}</a> ${biName(r, 'symptom')} · ${badge('repair_status.' + r.status)}${r.severity ? ' ' + badge('severity.' + r.severity) : ''}` });
+    }
+    for (const h0 of (await recs('OPERATING_READING')).filter((x) => x.equipment_id === eq.equipment_id)) {
+      items.push({ at: h0.measured_at, html: `<span class="kind">${bi('mt.hours')}</span> ${fmtQty(h0.cumulative_hours, 'h')}${h0.is_reset ? ' · ' + badge('mt.hours_reset_tag') : ''}${h0.reading_user_name ? ' · ' + esc(h0.reading_user_name) : ''}${h0.note ? ' · ' + esc(h0.note) : ''}` });
     }
   }
   items.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));

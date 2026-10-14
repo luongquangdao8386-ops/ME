@@ -4,7 +4,7 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d1.22';
+export const APP_VERSION = '1.0.0-d2.1';
 
 export const uuid = () => crypto.randomUUID();
 
@@ -76,6 +76,8 @@ export function addUser(env, code, level, pin, subrole) {
     }]);
     if (subrole) g.insertRows_('UserScopes', [{ scope_id: uuid(), user_id: uid, location_id: '', module: '', subrole, active: true, created_at: now, created_by: 'TEST', updated_at: now, updated_by: 'TEST' }]);
   });
+  // Như thao tác thêm người dùng qua API: danh bạ người dùng trong cache được làm mới
+  g.cache_().remove('users:dir');
   g.dbReset_();
   return uid;
 }

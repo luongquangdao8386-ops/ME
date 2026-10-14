@@ -79,6 +79,7 @@ async function runSync() {
   if (f.stopped_code && app.onSessionError && await app.onSessionError({ code: f.stopped_code, data: f.response && f.response.data })) return { ok: false, code: f.stopped_code, handled: true, committed: f.committed };
   const r = await pullChanges();
   invalidate();
+  await noteReleasedDot();
   app.offline = false;
   await updateSyncStatus();
   if (!r.ok) {
@@ -102,10 +103,17 @@ export async function syncNow({ quiet = false } = {}) {
   return r;
 }
 
+/** Máy chủ bật đợt mới khi app đang mở (đồng bộ vừa tải lại): màn của đợt mới mở được ngay; menu cập nhật khi mở lại app */
+async function noteReleasedDot() {
+  const before = RELEASED_DOT;
+  if (setReleasedDot(await bootData()) > before && app.shell) toast(bi('sync.new_features'), 'ok');
+}
+
 /** Sau một thao tác ghi COMMITTED: lấy thay đổi (1.4 §14.3: gọi sync.changes sau mỗi COMMITTED) */
 export async function afterCommit() {
   const r = await pullChanges();
   invalidate();
+  await noteReleasedDot();
   await updateSyncStatus();
   return r;
 }

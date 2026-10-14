@@ -2,7 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { excelLink } from '../excel-link.js';
-import { isWide, comingSoon } from '../shell.js';
+import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
@@ -13,6 +13,8 @@ import {
 import { conflictDialog } from './drafts.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { fmtQty, handleWriteError } from './equipment.js';
+import { requestsTabHtml, usageTabHtml, wireRowLinks } from './workmat.js';
+import { replaceDialog, openWorksOf } from './partreplace.js';
 
 const GROUPS = ['EQUIPMENT_PART', 'ELECTRICAL', 'WATER', 'CONSUMABLE', 'TOOL', 'PPE'];
 const KINDS = ['COMPONENT', 'CONSUMABLE', 'REUSABLE_TOOL'];
@@ -22,7 +24,7 @@ const notConnected = () => (session.settings.warehouse_connected ? '' : `<p clas
 
 /* ======================= Danh mục (MAT-01 / WEB-MAT-01) ======================= */
 
-const filt = { q: '', group: '', kind: '', comp: false, inactive: false, tab: 'catalog' };
+const filt = { q: '', group: '', kind: '', comp: false, inactive: false, tab: 'catalog', wq: '' };
 const selected = new Set();
 let inactiveCache = null;
 
@@ -48,12 +50,25 @@ export async function renderMaterialList(view, ctx) {
   });
   const tabs = ['catalog', ...(wide ? ['parts_by_equipment'] : []), 'requests', 'usage'];
   if (!tabs.includes(filt.tab)) filt.tab = 'catalog';
-  const tabBar = `<div class="tabs-bar" role="tablist">${tabs.map((t) => (t === 'requests' || t === 'usage')
+  // Đề nghị / Lượng dùng (Đợt 2): mờ + "Sắp có" khi máy chủ chưa lên Đợt 2 (6.6)
+  const soonTab = (t) => (t === 'requests' || t === 'usage') && RELEASED_DOT < 2;
+  if (soonTab(filt.tab)) filt.tab = 'catalog';
+  const tabBar = `<div class="tabs-bar" role="tablist">${tabs.map((t) => soonTab(t)
     ? `<button type="button" class="tab dim" data-soon="1" aria-disabled="true">${bi('tab.' + t)}<span class="soon">${bi('tag.coming_soon')}</span></button>`
     : `<button type="button" class="tab${filt.tab === t ? ' on' : ''}" data-mtab="${t}">${bi('tab.' + t)}</button>`).join('')}</div>`;
   if (filt.tab === 'parts_by_equipment') {
     view.innerHTML = notConnected() + tabBar + await partsByEquipmentHtml();
     wireTabs(view, ctx);
+    return;
+  }
+  if (filt.tab === 'requests' || filt.tab === 'usage') {
+    const search = `<div class="toolbar"><div class="search"><span>${ICON.search}</span><input id="mt-wq" type="search" value="${esc(filt.wq || '')}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>
+      <p class="muted small">${bi('mat.no_stock_note')}</p></div>`;
+    view.innerHTML = notConnected() + tabBar + search + (filt.tab === 'requests' ? await requestsTabHtml(filt.wq || '') : await usageTabHtml(filt.wq || ''));
+    wireTabs(view, ctx);
+    wireRowLinks(view);
+    let tw = null;
+    $('#mt-wq', view).addEventListener('input', (e) => { filt.wq = e.target.value; clearTimeout(tw); tw = setTimeout(async () => { const pos = e.target.selectionStart; await renderMaterialList(view, ctx); const q = $('#mt-wq', view); q.focus(); try { q.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
     return;
   }
   const rows = await listRows();
@@ -199,12 +214,13 @@ async function renderMaterialPane(pane, id, ctx) {
     ${parts.length ? `<ul class="list">${parts.map((p) => { const e = eqs.get(p.equipment_id); return e ? `<li><a href="#/equipment/${esc(e.equipment_id)}?tab=parts"><span class="code">${esc(e.equipment_code)}</span> ${biName(e)}</a> · ${fmtQty(p.installed_qty, p.unit)}${p.position_vi || p.position_zh ? ' · ' + biName(p, 'position') : ''}</li>` : ''; }).join('')}</ul>` : `<p class="muted">${bi('mat.not_used')}</p>`}
   </section>
   <section class="card"><h3>${bi('field.stock')}</h3><p class="nc-line">${bi('tag.warehouse_not_connected')}</p></section>
-  <section class="card"><h3>${bi('field.usage_history')}</h3><p class="muted">${bi('tag.coming_soon')}</p></section>
+  <section class="card" id="mt-usage"><h3>${bi('field.usage_history')}</h3>${RELEASED_DOT >= 2 ? await usageTabHtml('', m.material_id) : `<p class="muted">${bi('tag.coming_soon')}</p>`}</section>
   <section class="card tab-body" id="mt-docs"><h3>${bi('tab.documents')}</h3><div></div></section>`;
   const docBox = $('#mt-docs > div', pane);
   docBox.innerHTML = await docsTabHtml('MATERIAL', m);
   const repaint = () => renderMaterialPane(pane, id, ctx);
   wireDocsTab(docBox, 'MATERIAL', m, repaint);
+  wireRowLinks($('#mt-usage', pane));
   wireRetranslate(pane, async () => { await afterCommit(); repaint(); });
   const ar = $('#mt-arch', pane);
   if (ar) ar.addEventListener('click', async () => {
@@ -369,13 +385,31 @@ export async function partsTabHtml(eq) {
     <div class="row">
       ${canLink ? `<button type="button" class="btn small" id="pt-link" ${online ? '' : 'disabled'}>${ICON.link}<span>${bi('btn.link_part')}</span></button>` : ''}
       ${canNew ? `<button type="button" class="btn small" id="pt-new" ${online ? '' : 'disabled'}>${ICON.plus}<span>${bi('btn.new_part')}</span></button>` : ''}
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${bi('btn.replace_part')}<span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${RELEASED_DOT < 2 ? `<button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${bi('btn.replace_part')}<span class="soon">${bi('tag.coming_soon')}</span></button>`
+        : (canSync(b, 'part.replace') && !eq.archived_at ? `<button type="button" class="btn small" id="pt-replace">${bi('btn.replace_part')}</button>` : '')}
     </div>
     ${(canLink || canNew) && !online ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     <p class="muted small">${bi('mat.tab_hint')}</p>`;
 }
 
 export function wirePartsTab(tb, eq, repaint) {
+  // Thay linh kiện ghi theo phiếu bảo trì/sửa chữa đang mở của thiết bị (1.4 §5.1): một phiếu → mở ngay, nhiều phiếu → chọn
+  const rp = $('#pt-replace', tb);
+  if (rp) rp.addEventListener('click', async () => {
+    const works = await openWorksOf(eq.equipment_id);
+    if (!works.length) { toast(bi('part.need_work'), 'err'); return; }
+    let w = works[0];
+    if (works.length > 1) {
+      const id = await dialog({
+        title: bi('btn.replace_part'),
+        body: `<label for="pr-work">${bi('part.pick_work')}</label><select id="pr-work" class="inp sel">${works.map((x) => `<option value="${esc(x.kind + ':' + (x.rec.work_order_id || x.rec.repair_id))}">${esc(x.code || '')} · ${bi(x.kind === 'WO' ? 'wk.kind.WO' : 'wk.kind.REPAIR')}</option>`).join('')}</select>`,
+        actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('btn.ok'), kind: 'primary', read: (wr) => $('#pr-work', wr).value }]
+      });
+      if (!id) return;
+      w = works.find((x) => x.kind + ':' + (x.rec.work_order_id || x.rec.repair_id) === id);
+    }
+    if (w && await replaceDialog(w.kind, w.rec)) repaint();
+  });
   const l = $('#pt-link', tb);
   if (l) l.addEventListener('click', async () => { if (await linkDialog(eq, null)) repaint(); });
   const n = $('#pt-new', tb);

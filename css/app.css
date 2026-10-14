@@ -627,3 +627,104 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 /* Gợi ý dịch (2.3) */
 .i18n-suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .i18n-suggest .check { margin: 0; }
+
+/* ---------- Đợt 2: Công việc, Bảo trì, Sửa chữa, vật tư trên phiếu ---------- */
+.group-title { font-size: 15px; color: var(--navy); margin: 16px 0 4px; display: flex; align-items: center; gap: 8px; }
+.group-title .count { font-size: 12px; font-weight: 700; background: var(--bg); color: var(--graphite); border-radius: 999px; padding: 1px 8px; font-variant-numeric: tabular-nums; }
+.group-title .vi, .group-title .zh { display: inline; }
+.wk-counts { margin: 2px 0 6px; }
+.pager { justify-content: center; align-items: center; }
+.k-wo { border-left: 3px solid #5B4FA0; }
+.k-plan { border-left: 3px dashed #5B4FA0; }
+.k-repair { border-left: 3px solid var(--red); }
+.kind.k-wo, .kind.k-plan, .kind.k-repair { border-left: 0; }
+.day-item.done { opacity: 0.55; }
+.t-amber-text { color: var(--amber); }
+
+/* nút chọn một trong vài giá trị (Đạt/Không đạt/Không áp dụng, mức độ) */
+.segs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.seg { flex: 1 1 90px; min-height: 44px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--navy); font-size: 14px; font-weight: 600; cursor: pointer; line-height: 1.2; }
+.seg .vi, .seg .zh { display: block; }
+.seg .sep { display: none; }
+.seg .zh { font-size: 12px; font-weight: 500; }
+.seg.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+.seg.on.s-pass { background: var(--green); border-color: var(--green); }
+.seg.on.s-fail, .seg.on.s-sev-high { background: var(--red); border-color: var(--red); }
+.seg.on.s-na { background: #5B6B7C; border-color: #5B6B7C; }
+.seg.on.s-sev-medium { background: var(--amber); border-color: var(--amber); }
+.seg.on.s-sev-low { background: var(--navy-2); border-color: var(--navy-2); }
+.seg[disabled] { opacity: 0.55; cursor: default; }
+.seg.on[disabled] { opacity: 0.85; }
+
+/* checklist trên phiếu (MT-03) */
+.cl-item { padding: 12px 0; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
+.cl-item:first-of-type { border-top: 0; }
+.cl-item.fail { border-left: 3px solid var(--red); padding-left: 10px; background: #FFF8F7; }
+.cl-title { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; flex-wrap: wrap; }
+.cl-title > span:nth-child(2) { flex: 1; min-width: 0; }
+.cl-no { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.cl-safety { margin: 6px 0 0 34px; padding: 6px 10px; border-radius: 8px; background: #FFF4D6; color: var(--amber); font-size: 13px; }
+.cl-num-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
+.cl-num-row .inp { width: 150px; flex: none; }
+.cl-num-row .unit { font-weight: 700; color: var(--navy); }
+.cl-note { margin-top: 8px; }
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 40% { box-shadow: 0 0 0 3px rgba(192,57,43,0.45); background: #FFF4D6; } 100% { box-shadow: none; } }
+[data-field] { scroll-margin-top: 80px; }
+
+/* mốc thời gian (C9) */
+.timeline li.done, .timeline li.todo { grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.timeline .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); background: #fff; }
+.timeline li.done .dot { background: var(--green); border-color: var(--green); }
+.timeline li.todo { color: var(--graphite); }
+.timeline li strong { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+
+/* mẫu checklist (biên tập) */
+.cl-step { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin: 8px 0; }
+.cl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cl-head .row { margin: 0; gap: 2px; }
+.cl-grid { display: grid; grid-template-columns: 1fr; gap: 0 10px; }
+.cl-grid label { margin: 8px 0 0; }
+.cl-grid .check { margin-top: 10px; }
+.list.steps { counter-reset: none; }
+.list.steps li { list-style: decimal inside; }
+
+/* vật tư trên phiếu (MAT-03) */
+.mreq { padding: 10px 0; }
+.mreq .tbl { margin-top: 6px; }
+.tbl.mini { font-size: 13px; }
+.tbl.mini th, .tbl.mini td { padding: 6px 8px; }
+.modal-card.wide-card { max-width: 760px; }
+.ml-lines { display: flex; flex-direction: column; gap: 8px; }
+.ml-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; align-items: end; border: 1px solid var(--line); border-radius: 10px; padding: 8px; }
+.ml-row[hidden] { display: none; }
+.ml-mat { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.ml-qty { margin: 0; font-size: 13px; }
+.ml-qty .inp { margin-top: 4px; }
+.ml-unit { grid-column: 1 / -1; }
+.ml-unit:empty { display: none; }
+.ml-note { grid-column: 1 / 2; }
+.ml-del { justify-self: end; }
+.ml-row .ferr { grid-column: 1 / -1; }
+
+/* sửa chữa */
+.rp-task { display: flex; flex-direction: column; gap: 4px; }
+.rp-task .row { margin-top: 4px; }
+.rp-photos { margin-top: 10px; }
+.rp-photos h3 { margin-top: 4px; }
+.eq-work { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 4px; }
+.eq-work h3 { display: flex; align-items: center; gap: 8px; }
+.eq-work .count { font-size: 12px; background: var(--bg); border-radius: 999px; padding: 1px 8px; }
+
+@media (min-width: 900px) {
+  .cl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cl-grid label:nth-child(1), .cl-grid label:nth-child(2) { grid-column: span 1; }
+  .ml-row { grid-template-columns: minmax(0, 2.4fr) 110px 110px minmax(0, 1.4fr) 44px; }
+  .ml-mat { grid-column: auto; }
+  .ml-unit { grid-column: 1 / -1; }
+  .ml-note { grid-column: auto; }
+  .ml-row .ferr { grid-column: 1 / -1; }
+}
+.exec-card .inp:disabled, .exec-card select:disabled, #wo-checklist .inp:disabled { background: #F4F6F8; color: var(--text); opacity: 1; }
+.ml-list li { display: flex; flex-direction: column; gap: 4px; }
+.ml-list .rec-top .btn { flex: none; }

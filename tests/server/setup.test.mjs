@@ -175,7 +175,10 @@ test('dán Code.gs Đợt 2 mà chưa chạy migrateSchema: app vẫn chạy Đ�
   assert.equal(b.data.records.WORK_ORDER, undefined);
   assert.ok(!b.data.permissions.actions.includes('maintenance.view'));
   assert.equal(c.call('maintenance.view', {}).code, 'FEATURE_NOT_ENABLED');
+  assert.equal(c.call('sync.changes', { cursor: 0 }).data.released_dot, 1);
   g.migrateSchema();
+  // App đang mở: sync.changes báo đợt mới → app tải lại quyền và dữ liệu (cùng phiên bản máy chủ)
+  assert.equal(c.call('sync.changes', { cursor: 0 }).data.released_dot, 2);
   const b2 = c.call('sync.bootstrap', {});
   assert.ok(b2.data.permissions.actions.includes('maintenance.view'));
   assert.equal(c.call('maintenance.view', {}).code, 'OK');

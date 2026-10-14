@@ -88,6 +88,8 @@ export async function pullChanges({ first = null, onPage } = {}) {
     if (boot && boot.permissions && r.data.perm_version !== boot.permissions.perm_version) return bootstrap({ onPage });
     // Máy chủ lên phiên bản mới: tải lại quyền và cài đặt (action mới có trong danh sách quyền)
     if (boot && r.data.server_version && boot.server_version && r.data.server_version !== boot.server_version) return bootstrap({ onPage });
+    // Máy chủ vừa chạy migrateSchema (cùng phiên bản, đợt mới bật): tải lại để có quyền và dữ liệu của đợt mới
+    if (boot && r.data.released_dot !== undefined && Number(r.data.released_dot) !== Number(boot.released_dot || 0)) return bootstrap({ onPage });
     const byType = {};
     for (const ch of r.data.changes) (byType[ch.entity_type] = byType[ch.entity_type] || []).push(ch);
     if (byType.DOCUMENT) docsChanged = true;
@@ -287,6 +289,18 @@ export async function requeue(operationId) {
   if (!op) return;
   op.state = op.last_code === 'UNKNOWN_RESULT' ? 'UNKNOWN' : 'QUEUED';
   await idb.put('me_data', 'queue', operationId, op);
+}
+
+/**
+ * Xung đột của thao tác sửa nối tiếp (phiếu Đợt 2: chỉ gửi các trường đã đổi) → "Sửa tiếp trên bản máy chủ":
+ * gửi lại đúng thay đổi của tôi trên phiên bản máy chủ hiện tại; các mục sau của phiếu nối tiếp theo phiên bản mới.
+ */
+export async function rebaseQueued(operationId, serverVersion) {
+  const op = await idb.get('me_data', 'queue', operationId);
+  if (!op) return null;
+  Object.assign(op, { expected_version: Number(serverVersion) || 0, state: 'QUEUED', last_code: null, errors: [], conflict: null, blocked: false, attempts: 0 });
+  await idb.put('me_data', 'queue', operationId, op);
+  return op;
 }
 
 export async function exportBackup() {

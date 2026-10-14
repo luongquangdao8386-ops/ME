@@ -24,26 +24,29 @@ const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
-  test(`trang chủ ${name}: lưới 9 ô (5 ô mờ "Sắp có"), nav/menu, logo chỉ ở trang chủ, không M&E ở header nghiệp vụ (NT1-01, 02, 04)`, async () => {
+  test(`trang chủ ${name}: lưới 9 ô (3 ô Đợt 3 mờ "Sắp có"), nav/menu, logo chỉ ở trang chủ, không M&E ở header nghiệp vụ (NT1-01, 02, 04)`, async () => {
     const app = await openApp({ env: seeded(), ...vp });
     try {
       const { page } = app;
       await login(page);
       assert.equal(await page.locator('.grid9 > .tile').count(), 9);
       const dims = page.locator('.grid9 > .tile.dim[aria-disabled="true"]');
-      assert.equal(await dims.count(), 5);
-      for (let i = 0; i < 5; i++) assert.ok((await dims.nth(i).textContent()).includes('Sắp có · 即将推出'));
+      assert.equal(await dims.count(), 3, 'Đợt 2 đã chạy: còn Điện nước, Báo cáo, Tra cứu lộ điện');
+      for (let i = 0; i < 3; i++) assert.ok((await dims.nth(i).textContent()).includes('Sắp có · 即将推出'));
+      assert.equal(await page.locator('.grid9 > a.tile[href="#/maintenance"]').count(), 1);
+      assert.equal(await page.locator('.grid9 > a.tile[href="#/repairs"]').count(), 1);
       const grid = await page.textContent('.grid9');
       assert.ok(grid.includes('Kho vật tư · 物料库') && grid.includes('Tra cứu lộ điện · 电路查询'), 'C1');
       assert.ok(!/Kho linh kiện|备件库|mạch điện/.test(await page.textContent('body')));
       // Chạm ô mờ: không chuyển màn, báo "Chức năng sẽ có ở đợt sau"
+      await dims.first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
       await dims.first().click({ force: true }); // aria-disabled không chặn chạm thật
       assert.equal(await page.evaluate(() => location.hash), '#/');
       await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('该功能将在后续版本推出'));
       assert.equal(await page.locator('img.brand-logo').count(), 1);
       if (name === 'iphone') {
         assert.equal(await page.locator('.bnav > *').count(), 5);
-        assert.equal(await page.getAttribute('.bnav-item[data-nav="work"]', 'aria-disabled'), 'true');
+        assert.equal(await page.getAttribute('.bnav-item[data-nav="work"]', 'aria-disabled'), null, 'Công việc đã mở (Đợt 2)');
         assert.ok((await page.textContent('.bnav')).includes('Nhắc hạn'));
       } else {
         assert.equal(await page.locator('.side-nav .side-item').count(), 13);
@@ -57,7 +60,7 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
       await page.waitForFunction(() => document.querySelector('#hdr-title').textContent.includes('Thiết bị'));
       assert.equal(await page.locator('img.brand-logo').count(), 0);
       assert.ok(!(await page.textContent('.hdr')).includes('M&E'));
-      for (const h of ['#/alerts', '#/account', '#/account/drafts', '#/materials', '#/alerts/month']) {
+      for (const h of ['#/alerts', '#/account', '#/account/drafts', '#/materials', '#/alerts/month', '#/work', '#/maintenance', '#/repairs', '#/maintenance/checklists']) {
         await go(page, h);
         await page.waitForTimeout(400);
         assert.ok(await noOverflow(page), h);
@@ -68,6 +71,24 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
     } finally { await app.close(); }
   });
 }
+
+test('máy chủ đã dán Code.gs Đợt 2 nhưng chưa chạy migrateSchema: app giữ Đợt 1 — Bảo trì, Sửa chữa, Công việc mờ "Sắp có"', async () => {
+  const env = seeded();
+  const g = env.g;
+  g.dbReset_();
+  g.withWriteLock_(() => { const st = g.readState_(); g.stateWrite_(st, { schema_version: ['STRING', '1.5.0'] }, 'TEST'); });
+  g.clearSysCaches_();
+  const app = await openApp({ env, ...IPHONE });
+  try {
+    const { page } = app;
+    await login(page);
+    assert.equal(await page.locator('.grid9 > .tile.dim[aria-disabled="true"]').count(), 5);
+    assert.equal(await page.getAttribute('.bnav-item[data-nav="work"]', 'aria-disabled'), 'true');
+    await go(page, '#/maintenance');
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Chức năng sẽ có ở đợt sau'));
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
 
 test('thiết bị web: thêm (ngày dd/mm/yyyy), thông số "12 350 kg/h", xung đột → sửa tiếp trên bản máy chủ, ngừng sử dụng có lý do', async () => {
   const env = seeded();

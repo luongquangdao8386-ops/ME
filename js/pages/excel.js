@@ -10,15 +10,19 @@ import { handleWriteError } from './equipment.js';
 
 const MODULE_OF = {
   glossary: 'catalog', locations: 'catalog', lookups: 'catalog', vendors: 'catalog', materials: 'warehouse', equipment: 'equipment', equipment_parts: 'equipment',
-  inspection_types: 'inspections', inspection_requirements: 'inspections', inspections: 'inspections', contracts: 'contracts'
+  inspection_types: 'inspections', inspection_requirements: 'inspections', inspections: 'inspections', contracts: 'contracts',
+  maintenance_plans: 'maintenance', repairs_history: 'repairs'
 };
 const DUE_FILTER = { inspection_requirements: true, contracts: true };
 /** Các mẫu cùng nhóm (chip chuyển nhanh) và màn quay lại */
-const GROUPS = [['equipment', 'equipment_parts'], ['materials', 'equipment_parts'], ['inspection_requirements', 'inspections', 'inspection_types'], ['contracts'], ['glossary', 'locations', 'lookups', 'vendors'], ['alerts']];
+const GROUPS = [['equipment', 'equipment_parts'], ['materials', 'equipment_parts'], ['inspection_requirements', 'inspections', 'inspection_types'], ['contracts'], ['glossary', 'locations', 'lookups', 'vendors'], ['alerts'], ['maintenance_plans'], ['repairs_history']];
 const BACK = {
   equipment: '/equipment', equipment_parts: '/equipment', materials: '/materials', inspection_requirements: '/inspections', inspections: '/inspections', inspection_types: '/inspections',
-  contracts: '/contracts', glossary: '/admin/catalog', locations: '/admin/catalog', lookups: '/admin/catalog', vendors: '/admin/catalog', alerts: '/alerts'
+  contracts: '/contracts', glossary: '/admin/catalog', locations: '/admin/catalog', lookups: '/admin/catalog', vendors: '/admin/catalog', alerts: '/alerts',
+  maintenance_plans: '/maintenance', repairs_history: '/repairs'
 };
+/** Sheet trong tệp theo mẫu (mẫu nhiều sheet) */
+const SHEETS = { equipment: ['equipment', 'equipment_specs'], contracts: ['contracts', 'contract_equipment'], maintenance_plans: ['checklists', 'maintenance_plans'] };
 const CHUNK = 150;
 const state = { batch: null, summary: null, progress: '' };
 
@@ -184,9 +188,7 @@ export async function renderExcel(view, { shell, params }) {
   let sheets = [];
   const repaint = () => renderExcel(view, { shell, params });
   if (state.key !== key) { state.key = key; state.batch = null; state.summary = null; state.progress = ''; state.list = null; }
-  if (module === 'equipment' && key === 'equipment') sheets = ['equipment', 'equipment_specs'];
-  else if (key === 'contracts') sheets = ['contracts', 'contract_equipment'];
-  else sheets = [key];
+  sheets = SHEETS[key] || [key];
   if (canImport && navigator.onLine && !state.list) {
     const l = await api('import.errors', {}, { retry: true });
     state.list = l.ok ? l.data.items.filter((b) => b.template_key === key) : [];

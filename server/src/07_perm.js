@@ -49,6 +49,8 @@ var ACTION_TABLE_ = [
   'repair.accept|repairs|A|N N N N N N NS NS|pin|2|W',
   'repair.cancel|repairs|E|N OWN OWN OWN OWN OWN Y Y|net|2|W',
   'repair.reopen|repairs|A|N N N N N N Y Y|pin|2|W',
+  // Chỉ chạy trong lô Excel "Sự cố (lịch sử)" — lô nhạy cảm, người commit duyệt (6.9.1)
+  'repair.history.import|repairs|I|N N N N N N Y Y|net|2|W',
   // 4.4.5 Đề nghị và lượng dùng vật tư
   'matreq.create|*work|C|N ASG N N N N Y Y|offline|2|W',
   'matreq.submit|*work|E|N OWN N N N N Y Y|offline|2|W',

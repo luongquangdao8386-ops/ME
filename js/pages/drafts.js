@@ -1,11 +1,11 @@
 // CM-04 Nháp chờ đồng bộ (5.2) và Xử lý xung đột (5.2, 1.4 §14.3)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, session, L } from '../core.js';
 import { ICON, toast, dialog, h, $ } from '../ui.js';
-import { queueItems, recentDone, exportBackup, deleteQueued, requeue } from '../sync.js';
-import { app, syncNow } from '../app.js';
+import { queueItems, recentDone, exportBackup, deleteQueued, requeue, rebaseQueued } from '../sync.js';
+import { app, syncNow, entityPath } from '../app.js';
 import { navigate } from '../router.js';
 import { shareFileNow } from '../media.js';
-import { daysBetween, today } from '../data.js';
+import { daysBetween, today, mapOf } from '../data.js';
 
 const TABS = ['queued', 'failed', 'conflict', 'rejected', 'old'];
 const TAB_LABEL = { queued: 'sync.queued', failed: 'sync.failed', conflict: 'sync.conflict', rejected: 'draft.rejected', old: 'draft.old_epoch' };
@@ -20,6 +20,19 @@ function tabOf(o) {
 }
 
 function actionLabel(a) { return L['action.' + a] ? bi('action.' + a) : esc(a); }
+
+/** Mã phiếu của thao tác trên phiếu Đợt 2 (phiếu đã có mã trên máy chủ) */
+async function workCodes() {
+  const wos = await mapOf('WORK_ORDER').catch(() => new Map());
+  const reps = await mapOf('REPAIR').catch(() => new Map());
+  return (o) => {
+    for (const id of [o.entity_id, o.parent_id]) {
+      const w = id && (wos.get(id) || reps.get(id));
+      if (w) return w.work_order_code || w.repair_code || '';
+    }
+    return '';
+  };
+}
 
 function photoCount(o) {
   const p = o.payload || {};
@@ -38,6 +51,7 @@ export async function renderDrafts(view, { shell }) {
   const online = navigator.onLine && !app.offline;
   const list = by[curTab];
   const sent = curTab === 'queued' ? (await recentDone()).slice(0, 20) : [];
+  const codeOf = await workCodes();
   view.innerHTML = `<div class="chips tabs">${TABS.map((t) => `<button type="button" class="chip${t === curTab ? ' on' : ''}" data-tab="${t}">${bi(TAB_LABEL[t])} <span class="count">${by[t].length}</span></button>`).join('')}</div>
     ${other ? `<p class="muted small">${bi('draft.other_user', { N: other })}</p>` : ''}
     <div class="row"><button type="button" class="btn small primary" id="dr-sync" ${online ? '' : 'disabled'}>${ICON.sync}<span>${bi('btn.sync_now')}</span></button>
@@ -48,8 +62,9 @@ export async function renderDrafts(view, { shell }) {
       const n = photoCount(o);
       const left = curTab === 'old' ? Math.max(0, 30 - (daysBetween((o.rejected_at || o.local_created_at || '').slice(0, 10), today()) || 0)) : null;
       return `<div class="card rec-card" data-op="${esc(o.operation_id)}">
-        <div class="rec-top"><strong>${actionLabel(o.action)}</strong>${badge('op_state.' + (o.state === 'SENDING' ? 'SENDING' : o.state))}</div>
-        <div class="muted small">${o.result && o.result.display_code ? esc(o.result.display_code) : bi('tag.pending_code')} · ${bi('draft.created')}: ${esc(fmtDateTime(o.local_created_at))}</div>
+        <div class="rec-top"><strong>${actionLabel(o.action)}</strong>${badge('op_state.' + (o.blocked && o.state === 'QUEUED' ? 'BLOCKED' : (o.state === 'SENDING' ? 'SENDING' : o.state)))}</div>
+        <div class="muted small">${o.result && o.result.display_code ? esc(o.result.display_code) : (codeOf(o) ? esc(codeOf(o)) : bi('tag.pending_code'))} · ${bi('draft.created')}: ${esc(fmtDateTime(o.local_created_at))}</div>
+        ${o.blocked && o.state === 'QUEUED' ? `<div class="muted small">${bi('draft.blocked_hint')}</div>` : ''}
         <div class="muted small">${n ? bi('draft.photos', { N: n }) + ' · ' : ''}${bi('draft.size')}: ${fmtNumber(Math.ceil(size / 1024))} KB${o.last_code ? ` · ${bi('draft.error_code')}: <code>${esc(o.last_code)}</code>` : ''}</div>
         ${(o.errors || []).map((e) => `<div class="err small">${esc(e.field || '')} ${esc(e.message_vi || e.code)} · ${esc(e.message_zh || '')}</div>`).join('')}
         ${left !== null ? `<div class="muted small">${bi('draft.auto_delete', { N: left })}</div>` : ''}
@@ -127,8 +142,17 @@ export async function renderConflict(view, { shell, params }) {
     await deleteQueued(op.operation_id);
     navigate('/account/drafts', { replace: true });
   });
-  $('#cf-edit', view).addEventListener('click', () => {
-    // Đợt 1 hàng chờ chỉ có thao tác tạo mới; sửa trên bản máy chủ = mở hồ sơ để nhập lại như thao tác mới
+  $('#cf-edit', view).addEventListener('click', async () => {
+    // Phiếu Đợt 2 (sửa nối tiếp, chỉ gửi trường đã đổi): gửi lại thay đổi của tôi trên phiên bản máy chủ hiện tại
+    if (op.chain && op.conflict && op.conflict.server_version !== undefined) {
+      await rebaseQueued(op.operation_id, op.conflict.server_version);
+      toast(bi('conflict.rebased'), 'ok');
+      await syncNow({ quiet: true });
+      const target = op.entity_type === 'WORK_ORDER' || op.entity_type === 'REPAIR' ? entityPath(op.entity_type, op.entity_id) : '/account/drafts';
+      navigate(target || '/account/drafts', { replace: true });
+      return;
+    }
+    // Thao tác tạo mới: mở hồ sơ để nhập lại như thao tác mới
     toast(bi('conflict.help'));
   });
 }

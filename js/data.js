@@ -5,7 +5,8 @@ import { getRecords, getMeta, KEY } from './sync.js';
 export { KEY };
 export const CODE = {
   EQUIPMENT: 'equipment_code', MATERIAL: 'material_code', INSPECTION: 'inspection_code', INSPECTION_REQUIREMENT: 'requirement_code',
-  CONTRACT: 'contract_code', LOCATION: 'location_code', VENDOR: 'vendor_code'
+  CONTRACT: 'contract_code', LOCATION: 'location_code', VENDOR: 'vendor_code',
+  MAINTENANCE_PLAN: 'plan_code', WORK_ORDER: 'work_order_code', REPAIR: 'repair_code', MATERIAL_REQUEST: 'request_code'
 };
 
 let memo = {};

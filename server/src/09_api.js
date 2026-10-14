@@ -108,6 +108,7 @@ var HANDLERS_ = {
   'repair.accept': function (ctx) { return repairAccept_(ctx); },
   'repair.cancel': function (ctx) { return repairCancel_(ctx); },
   'repair.reopen': function (ctx) { return repairReopen_(ctx); },
+  'repair.history.import': function (ctx) { return repairHistoryImport_(ctx); },
   'matreq.create': function (ctx) { return matreqCreate_(ctx); },
   'matreq.submit': function (ctx) { return matreqSubmit_(ctx); },
   'matreq.approve': function (ctx) { return matreqApprove_(ctx); },

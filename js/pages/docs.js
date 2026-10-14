@@ -10,11 +10,14 @@ import { offlineFiles, offlineFilesAllowed, saveOfflineFile, removeOfflineFile, 
 
 const FILE_KINDS = {
   EQUIPMENT: ['MANUAL', 'DRAWING', 'CERTIFICATE', 'OTHER'], MATERIAL: ['MANUAL', 'DRAWING', 'OTHER'],
-  INSPECTION: ['CERTIFICATE', 'OTHER', 'INVOICE'], INSPECTION_REQUIREMENT: ['CERTIFICATE', 'OTHER'], CONTRACT: ['CONTRACT', 'INVOICE', 'OTHER']
+  INSPECTION: ['CERTIFICATE', 'OTHER', 'INVOICE'], INSPECTION_REQUIREMENT: ['CERTIFICATE', 'OTHER'], CONTRACT: ['CONTRACT', 'INVOICE', 'OTHER'],
+  WORK_ORDER: ['OTHER', 'MANUAL'], REPAIR: ['OTHER', 'MANUAL', 'INVOICE']
 };
-const PHOTO_KIND = { EQUIPMENT: 'PHOTO_EQUIPMENT', MATERIAL: 'PHOTO_MATERIAL', INSPECTION: 'PHOTO_EQUIPMENT', INSPECTION_REQUIREMENT: 'PHOTO_EQUIPMENT', CONTRACT: 'PHOTO_SITE' };
-const MODULE_OF = { EQUIPMENT: 'equipment', MATERIAL: 'warehouse', INSPECTION: 'inspections', INSPECTION_REQUIREMENT: 'inspections', CONTRACT: 'contracts' };
-const KEY_OF = { EQUIPMENT: 'equipment_id', MATERIAL: 'material_id', INSPECTION: 'inspection_id', INSPECTION_REQUIREMENT: 'requirement_id', CONTRACT: 'contract_id' };
+const PHOTO_KIND = { EQUIPMENT: 'PHOTO_EQUIPMENT', MATERIAL: 'PHOTO_MATERIAL', INSPECTION: 'PHOTO_EQUIPMENT', INSPECTION_REQUIREMENT: 'PHOTO_EQUIPMENT', CONTRACT: 'PHOTO_SITE', WORK_ORDER: 'PHOTO_SITE', REPAIR: 'PHOTO_SITE' };
+const MODULE_OF = { EQUIPMENT: 'equipment', MATERIAL: 'warehouse', INSPECTION: 'inspections', INSPECTION_REQUIREMENT: 'inspections', CONTRACT: 'contracts', WORK_ORDER: 'maintenance', REPAIR: 'repairs' };
+const KEY_OF = { EQUIPMENT: 'equipment_id', MATERIAL: 'material_id', INSPECTION: 'inspection_id', INSPECTION_REQUIREMENT: 'requirement_id', CONTRACT: 'contract_id', WORK_ORDER: 'work_order_id', REPAIR: 'repair_id' };
+/** Ảnh/tệp của phiếu đi tuần tự sau thao tác của phiếu trong hàng chờ (5.1.1 mục 2) */
+const WORK_TYPES = { WORK_ORDER: 1, REPAIR: 1 };
 
 function keyOf(type) { return KEY_OF[type]; }
 
@@ -24,13 +27,18 @@ export function photoSrc(d, w = 400) {
   return id ? `https://lh3.googleusercontent.com/d/${encodeURIComponent(id)}=w${w}` : '';
 }
 
-export async function docsTabHtml(type, rec) {
+/**
+ * opts.canUpload: quyết định nút tải lên thay cho quyền theo vai trò (phiếu: chỉ người được giao, người báo);
+ * opts.photoButtons: [{key, title_vi, title_zh}] — nút ảnh có sẵn tên (vd ảnh trước/sau của phiếu bảo trì, MT-03);
+ * opts.photoOnly: chỉ nút chụp ảnh (người báo sự cố thêm ảnh hiện trường)
+ */
+export async function docsTabHtml(type, rec, opts = {}) {
   const id = rec[keyOf(type)];
   const docs = (await recs('DOCUMENT')).filter((d) => d.entity_type === type && d.entity_id === id && d.active !== false)
     .sort((a, b) => String(b.document_date || '').localeCompare(String(a.document_date || '')));
   const photos = docs.filter((d) => d.access_scope === 'LINK_VIEW');
   const files = docs.filter((d) => d.access_scope !== 'LINK_VIEW');
-  const canUp = (await can('doc.upload')) && !rec.archived_at;
+  const canUp = opts.canUpload !== undefined ? !!opts.canUpload : ((await can('doc.upload')) && !rec.archived_at);
   const online = navigator.onLine;
   const uid = session.user && session.user.user_id;
   const b = await boot();
@@ -75,9 +83,9 @@ export async function docsTabHtml(type, rec) {
       </div></li>`).join('')}</ul>` : ''}
     ${!docs.length ? `<p class="muted">${bi('doc.none')}</p>` : ''}
     ${canUp ? `<div class="row upload-row">
-      <label class="btn small file">${ICON.camera}<span>${bi('eq.upload_photo')}</span><input type="file" accept="image/*" data-up="photo" hidden></label>
-      <label class="btn small file">${ICON.upload}<span>${bi('eq.upload_file')}</span><input type="file" accept="application/pdf,image/jpeg,image/png" data-up="file" hidden></label>
-      <button type="button" class="btn small" data-link="1" ${online ? '' : 'disabled'}>${ICON.link}<span>${bi('btn.add_link')}</span></button></div>
+      ${(opts.photoButtons || [{ key: 'eq.upload_photo' }]).map((pb) => `<label class="btn small file">${ICON.camera}<span>${bi(pb.key)}</span><input type="file" accept="image/*" data-up="photo"${pb.title_vi ? ` data-tvi="${esc(pb.title_vi)}" data-tzh="${esc(pb.title_zh || '')}"` : ''} hidden></label>`).join('')}
+      ${opts.photoOnly ? '' : `<label class="btn small file">${ICON.upload}<span>${bi('eq.upload_file')}</span><input type="file" accept="application/pdf,image/jpeg,image/png" data-up="file" hidden></label>
+      <button type="button" class="btn small" data-link="1" ${online ? '' : 'disabled'}>${ICON.link}<span>${bi('btn.add_link')}</span></button>`}</div>
       <p class="muted small">${bi('doc.photo_warning')}</p>` : ''}
     <div class="up-status muted small" aria-live="polite"></div>`;
 }
@@ -112,7 +120,8 @@ export function wireDocsTab(tb, type, rec, repaint) {
     let payload;
     if (inp.dataset.up === 'photo') {
       const ph = await processPhoto(f);
-      payload = { entity_type: type, entity_id: id, kind: PHOTO_KIND[type], blob: ph.main, mime: 'image/jpeg', thumb: ph.thumb, ...titlePayload(f.name.replace(/\.[^.]+$/, '')) };
+      const named = inp.dataset.tvi ? { title_vi: inp.dataset.tvi, title_zh: inp.dataset.tzh || '' } : titlePayload(f.name.replace(/\.[^.]+$/, ''));
+      payload = { entity_type: type, entity_id: id, kind: PHOTO_KIND[type], blob: ph.main, mime: 'image/jpeg', thumb: ph.thumb, ...named };
     } else {
       const meta = await askMeta({ type });
       if (!meta) return;
@@ -125,8 +134,9 @@ export function wireDocsTab(tb, type, rec, repaint) {
       const { blobToB64 } = await import('../core.js');
       const p2 = { document_id: uuid(), entity_type: type, entity_id: id, kind: payload.kind, mime_type: payload.mime, content_b64: await blobToB64(payload.blob), title_vi: payload.title_vi, title_zh: payload.title_zh };
       if (payload.thumb) p2.thumb_b64 = await blobToB64(payload.thumb);
-      await enqueue('doc.upload', p2, { entity_type: 'DOCUMENT', entity_id: p2.document_id });
+      await enqueue('doc.upload', p2, { entity_type: 'DOCUMENT', entity_id: p2.document_id, parent_id: WORK_TYPES[type] ? id : '' });
       toast(bi('doc.queued_offline'), 'ok');
+      if (WORK_TYPES[type]) repaint();
       return;
     }
     status.innerHTML = bi('doc.uploading');

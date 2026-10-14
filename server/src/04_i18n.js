@@ -76,7 +76,8 @@ var SUB_MSG = {
   TEMPLATE_MISMATCH: ['Tệp không đúng mẫu đã chọn', '文件与所选模板不符'],
   DEPENDENCY_FAILED: ['Dòng được tham chiếu bị lỗi nên dòng này không ghi', '所引用的行出错，本行未写入'],
   LAST_ADMIN: ['Phải còn ít nhất một tài khoản cấp 4 đang hoạt động', '必须保留至少一个启用的四级账号'],
-  RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件']
+  RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件'],
+  GROUP_INVALID: ['Mẫu checklist này có dòng lỗi (xem các dòng cùng mẫu)', '该检查表模板有错误行（请查看同一模板的其他行）']
 };
 
 function fmtMsg_(pair, vars) {

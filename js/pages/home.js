@@ -19,9 +19,13 @@ export async function deadlineText(it) {
   return nameText(it.rec, 'title');
 }
 
+const KIND_KEY = { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', REPAIR: 'home.item_repair' };
 function kindTag(kind) {
-  return `<span class="kind k-${kind.toLowerCase()}">${bi(kind === 'INSPECTION' ? 'home.item_inspection' : kind === 'CONTRACT' ? 'home.item_contract' : 'home.item_service')}</span>`;
+  return `<span class="kind k-${kind.toLowerCase()}">${bi(KIND_KEY[kind] || 'home.item_service')}</span>`;
 }
+
+/** Đợt 2 đã chạy trên máy chủ */
+const dot2 = () => shellMod.RELEASED_DOT >= 2;
 
 /** Mục trong lịch tuần: hạn kiểm định, hạn hợp đồng (hạn báo gia hạn, ngày hết hạn), dịch vụ HĐ chưa làm (6.6) */
 async function weekItems(from, to) {
@@ -40,6 +44,13 @@ async function weekItems(from, to) {
     if (s.performed_at || !s.due_date) continue;
     if (s.due_date >= from && s.due_date <= to) out.push({ date: s.due_date, kind: 'SERVICE', code: '', href: '/contracts/' + s.contract_id });
   }
+  // Phiếu bảo trì theo hạn (Đợt 2)
+  if (dot2()) {
+    for (const w of await recs('WORK_ORDER')) {
+      if (w.status === 'CANCELLED' || !w.due_date) continue;
+      if (w.due_date >= from && w.due_date <= to) out.push({ date: w.due_date, kind: 'WO', code: w.work_order_code, href: '/maintenance/wo/' + w.work_order_id, done: w.status === 'COMPLETED' });
+    }
+  }
   return out;
 }
 
@@ -54,7 +65,7 @@ async function weekHtml() {
     <div class="week">${days.map((d) => {
       const list = items.filter((x) => x.date === d);
       return `<div class="day${d === t ? ' today' : ''}"><div class="day-head"><span>${bi('weekday.' + weekday(d))}</span><span class="day-num">${esc(d.slice(8, 10))}/${esc(d.slice(5, 7))}</span></div>
-        <div class="day-items">${list.map((x) => `<a class="day-item k-${x.kind.toLowerCase()}" href="#${x.href}">${kindTag(x.kind)}${x.code ? `<span class="code">${esc(x.code)}</span>` : ''}</a>`).join('')}</div></div>`;
+        <div class="day-items">${list.map((x) => `<a class="day-item k-${x.kind.toLowerCase()}${x.done ? ' done' : ''}" href="#${x.href}">${kindTag(x.kind)}${x.code ? `<span class="code">${esc(x.code)}</span>` : ''}</a>`).join('')}</div></div>`;
     }).join('')}</div></section>`;
 }
 
@@ -75,13 +86,21 @@ async function deadlinesHtml() {
 async function gridHtml() {
   const counts = {};
   for (const [k, type] of Object.entries(COUNT_TYPE)) counts[k] = (await recs(type)).length;
+  // Bảo trì, Sửa chữa: số phiếu đang mở
+  const open = {};
+  if (dot2()) {
+    const { WO_OPEN, REPAIR_OPEN } = await import('../work.js');
+    open.maintenance = (await recs('WORK_ORDER')).filter((w) => WO_OPEN.has(w.status)).length;
+    open.repairs = (await recs('REPAIR')).filter((r) => REPAIR_OPEN.has(r.status)).length;
+  }
   return `<section class="grid9" aria-label="${esc(biText('menu.title'))}">${MODULES.map((m) => {
     const soon = m.dot > shellMod.RELEASED_DOT;
     if (soon) {
       return `<button type="button" class="tile dim" aria-disabled="true" data-soon="1">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span><span class="soon">${bi('tag.coming_soon')}</span></button>`;
     }
     const n = counts[m.key];
-    return `<a class="tile" href="#${m.path}">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span>${n ? `<span class="tile-count">${bi('home.records', { N: n })}</span>` : ''}</a>`;
+    const o = open[m.key];
+    return `<a class="tile" href="#${m.path}">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span>${o ? `<span class="tile-count">${bi('home.open_n', { N: o })}</span>` : (n ? `<span class="tile-count">${bi('home.records', { N: n })}</span>` : '')}</a>`;
   }).join('')}</section>`;
 }
 
@@ -101,12 +120,25 @@ async function todayWorkHtml() {
     const d = daysBetween(t, s.due_date);
     rows.push({ kind: 'SERVICE', code: '', href: '/contracts/' + s.contract_id, text: '', where: '', date: s.due_date, due: d === 0 ? { key: 'due_state.DUE_TODAY' } : { key: 'due_state.OVERDUE', vars: { N: -d } }, owner: '' });
   }
+  // Phiếu bảo trì đến hạn/quá hạn, sự cố đang mở (Đợt 2)
+  if (dot2()) {
+    const { workItems } = await import('../work.js');
+    for (const x of (await workItems({ mine: false })).filter((i) => i.group === 'OVERDUE' || i.group === 'TODAY')) {
+      const d = x.kind === 'WO' ? daysBetween(t, x.date) : null;
+      rows.push({
+        kind: x.kind, code: x.code, href: x.href, text: x.kind === 'WO' ? nameText(x.rec, 'title') : nameText(x.rec, 'symptom'),
+        where: [x.eq ? x.eq.equipment_code : '', x.loc ? x.loc.location_code : ''].filter(Boolean).join(' · '), date: x.date,
+        due: x.kind === 'REPAIR' ? { key: 'repair_status.' + x.rec.status } : (d === 0 ? { key: 'due_state.DUE_TODAY' } : { key: 'due_state.OVERDUE', vars: { N: -d } }),
+        owner: x.rec.assignee_name || ''
+      });
+    }
+  }
   return `<section class="card home-today"><div class="card-head"><h2>${bi('home.today_work')}</h2></div>
     ${rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr>
       <th>${bi('col.type')}</th><th>${bi('col.code')}</th><th>${bi('col.content')}</th><th>${bi('col.equipment_location')}</th><th>${bi('col.due')}</th><th>${bi('col.status')}</th><th>${bi('col.owner')}</th></tr></thead>
       <tbody>${rows.map((r) => `<tr class="click" data-href="${esc(r.href)}"><td>${kindTag(r.kind)}</td><td class="code">${esc(r.code)}</td><td>${esc(r.text)}</td><td>${esc(r.where)}</td><td class="num">${esc(fmtDate(r.date))}</td><td>${badge(r.due.key, r.due.vars)}</td><td>${esc(r.owner)}</td></tr>`).join('')}</tbody></table></div>`
       : `<p class="muted">${bi('home.no_work_today')}</p>`}
-    <p class="muted dim-line">${bi('home.wo_coming')} — ${bi('tag.coming_soon')}</p></section>`;
+    ${dot2() ? '' : `<p class="muted dim-line">${bi('home.wo_coming')} — ${bi('tag.coming_soon')}</p>`}</section>`;
 }
 
 export async function renderHome(view, { shell }) {

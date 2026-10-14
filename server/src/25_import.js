@@ -1,4 +1,4 @@
-/* 25_import: Nhập/xuất Excel Đợt 1 — 1.4 §11; phụ lục 1.5 mục 6.5.1, 3.15 (Nhập Excel), 4.4.11, 3.8.
+/* 25_import: Nhập/xuất Excel (Đợt 1; mẫu Đợt 2 ở 29_import_d2) — 1.4 §11; phụ lục 1.5 mục 6.5.1, 6.9.1, 3.15 (Nhập Excel), 4.4.11, 3.8.
  * File đọc ở trình duyệt (SheetJS), gửi theo khúc; máy chủ kiểm, ghi ImportBatches/ImportRows.
  * Dòng 1 là khóa cột, dòng 2 nhãn Việt · 中文, dữ liệu từ dòng 3. ID trống = ADD, có ID + record_version = UPDATE.
  * Commit: từng dòng chạy như action riêng (kiểm quyền người commit), operation_id = import_row_id (chống ghi lặp),
@@ -9,7 +9,7 @@ var IMPORT_CHUNK_MAX_ = 200;
 var IMPORT_COMMIT_MAX_ = 100;
 var IMPORT_COMMIT_BUDGET_MS_ = 25000; // phản hồi phải về trước client_long_timeout (55 s) kể cả phần tóm tắt cuối
 
-/** Một cột: [khóa, kiểu, Việt, 中文, tùy chọn] — kiểu: id ver key code text int num date bool enum ref */
+/** Một cột: [khóa, kiểu, Việt, 中文, tùy chọn] — kiểu: id ver key code text int num date time bool enum ref */
 function ic_(key, type, vi, zh, o) { var c = o || {}; c.key = key; c.type = type; c.vi = vi; c.zh = zh; return c; }
 
 var LOOKUP_GROUP_ENUM_ = ['EQUIPMENT_CATEGORY', 'UNIT', 'SPEC_KEY', 'CAUSE'];
@@ -155,6 +155,7 @@ function importTemplateAction_(ctx) {
   LOOKUP_GROUP_ENUM_.forEach(function (g) { addList('lookup_' + g, lk.filter(function (r) { return r.group_key === g; }).map(function (r) { return [r.code, r.name_vi || r.name_zh]; })); });
   if (t.module === 'inspections') addList('inspection_types', readRows_('InspectionTypes').filter(function (r) { return r.active !== false; }).map(function (r) { return [r.code, r.name_vi || r.name_zh]; }));
   addList('spec_keys', Object.keys(SPEC_STD_).map(function (k) { return [k, LABELS['spec.' + k] ? LABELS['spec.' + k][0] : k]; }));
+  importTemplateListsD2_(t, addList);
   return {
     template_key: p.template_key, version: IMPORT_TEMPLATE_VERSION_, dataset_epoch: sysProps_().dataset_epoch, module: t.module, sensitive: !!t.sensitive,
     sheets: t.sheets.map(function (sh) {
@@ -170,7 +171,8 @@ function importTemplateAction_(ctx) {
 
 /** dd/mm/yyyy hoặc yyyy-mm-dd → ISO; ngày không có thật → null */
 function parseImportDate_(v) {
-  var s = trimStr_(v);
+  // Ô ngày có kèm giờ (gõ "14/10/2026 08:00" vào cột ngày): chỉ lấy ngày
+  var s = trimStr_(v).replace(/[ T]\d{1,2}:\d{2}(:\d{2})?$/, '');
   if (!s) return '';
   var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s) || null;
   var y, mo, d;
@@ -191,6 +193,23 @@ function parseImportNum_(v) {
   if (!s) return '';
   if (/^-?\d+([.,]\d+)?$/.test(s)) return Number(s.replace(',', '.'));
   return NaN;
+}
+
+/** Thời điểm: dd/mm/yyyy hh:mm[:ss], yyyy-mm-dd hh:mm, ISO có múi giờ, hoặc chỉ ngày (00:00) — giờ Việt Nam → ISO +07:00 */
+function parseImportTime_(v) {
+  var s = trimStr_(v);
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(s)) { var t0 = parseTime_(s); return t0 ? isoVN_(t0) : null; }
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s) || null;
+  var y, mo, d, hh = 0, mi = 0, ss = 0;
+  if (m) { d = +m[1]; mo = +m[2]; y = +m[3]; hh = +(m[4] || 0); mi = +(m[5] || 0); ss = +(m[6] || 0); } else {
+    m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
+    if (!m) return null;
+    y = +m[1]; mo = +m[2]; d = +m[3]; hh = +(m[4] || 0); mi = +(m[5] || 0); ss = +(m[6] || 0);
+  }
+  var dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d || hh > 23 || mi > 59 || ss > 59) return null;
+  return y + '-' + pad2_(mo) + '-' + pad2_(d) + 'T' + pad2_(hh) + ':' + pad2_(mi) + ':' + pad2_(ss) + '+07:00';
 }
 
 function parseImportBool_(v) {
@@ -216,6 +235,11 @@ function normCell_(c, raw) {
     var d = parseImportDate_(raw);
     if (d === null) return { err: 'INVALID_DATE' };
     return { v: d };
+  }
+  if (c.type === 'time') {
+    var tm = parseImportTime_(raw);
+    if (tm === null) return { err: 'INVALID_DATE' };
+    return { v: tm };
   }
   if (c.type === 'bool') {
     var b = parseImportBool_(raw);
@@ -353,6 +377,8 @@ function validateImportBatch_(ctx, t, batchId) {
       if (n.err) { x.errs.push([c.key, n.err]); return; }
       x.vals[c.key] = n.v;
     });
+    // Sheet theo nhóm (mẫu checklist: nhiều dòng = một mẫu): kiểm ở importGroupCheck_ sau lượt này
+    if (sh.group) { x.action = 'GROUP'; return; }
     var id = x.vals[sh.id] || '';
     if (id) {
       if (sh.addOnly) { x.errs.push([sh.id, 'INVALID_VALUE']); return; }
@@ -370,7 +396,7 @@ function validateImportBatch_(ctx, t, batchId) {
       if (c.readonly && x.action === 'ADD' && x.vals[c.key]) x.errs.push([c.key, 'INVALID_VALUE']);
       if (c.readonly && x.action === 'UPDATE' && x.vals[c.key] && x.vals[c.key] !== x.cur[c.key]) x.errs.push([c.key, 'INVALID_VALUE']);
       var req = c.req === 1 || c.req === true || (c.req === 'add' && x.action === 'ADD');
-      if (req && (x.vals[c.key] === undefined || x.vals[c.key] === '')) {
+      if (req && (x.vals[c.key] === undefined || x.vals[c.key] === '') && !x.errs.some(function (e) { return e[0] === c.key; })) {
         if (x.action === 'ADD' || x.vals[c.key] === '') x.errs.push([c.key, 'REQUIRED']);
       }
     });
@@ -428,11 +454,18 @@ function validateImportBatch_(ctx, t, batchId) {
       });
     }
   });
+  importGroupCheck_(ctx, t, parsed, fileKeys);
   // Lượt 2: tham chiếu (mã đang có hoặc dòng thêm mới cùng file)
   parsed.forEach(function (x) {
     x.refs = {};
     x.deps = [];
     templateCols_(ctx, t, x.sh).forEach(function (c) {
+      if (c.lookupCode && x.vals[c.key]) {
+        // Mã danh mục lưu nguyên mã (vd nguyên nhân sự cố), không đổi sang ID
+        var lk = codeMap('LookupValues', c.lookupCode)[String(x.vals[c.key]).toUpperCase()];
+        if (!lk || lk.active === false) x.errs.push([c.key, 'NOT_FOUND']); else x.vals[c.key] = lk.code;
+        return;
+      }
       if (c.type !== 'ref' || x.vals[c.key] === undefined) return;
       var code = String(x.vals[c.key]);
       if (!code) { x.refs[c.to] = ''; return; }
@@ -440,11 +473,17 @@ function validateImportBatch_(ctx, t, batchId) {
       var inFileSheet = c.fileSheet || (c.self ? x.sh.name : null) || t.sheets.filter(function (s) { return s.table === c.ref; }).map(function (s) { return s.name; })[0];
       var fid = inFileSheet ? (fileKeys[inFileSheet + '|' + code] || fileKeys['rk|' + inFileSheet + '|' + code.toUpperCase()]) : null;
       if (fid) { x.refs[c.to] = fid; if (fid !== x.entityId) x.deps.push(fid); else x.errs.push([c.key, 'INVALID_VALUE']); return; }
+      if (c.ref === 'ChecklistTemplates') {
+        var cr = checklistRef_(code);
+        if (cr.err) x.errs.push([c.key, cr.err]); else x.refs[c.to] = cr.id;
+        return;
+      }
       var r = codeMap(c.ref, c.group)[up];
       if (!r || (c.ref === 'Users' && !r.active)) { x.errs.push([c.key, 'NOT_FOUND']); return; }
       x.refs[c.to] = r[sheetSchema_(c.ref).key];
     });
     if (x.sh.table === 'InspectionRequirements' && x.action === 'ADD' && !x.refs.equipment_id && !x.refs.location_id) x.errs.push(['equipment_code', 'REQUIRED']);
+    importRowCheckD2_(x);
     if (x.sh.table === 'EquipmentSpecs' && x.vals.spec_key && !specLabel_(String(x.vals.spec_key), readRowsCached_('LookupValues'))) x.errs.push(['spec_key', 'INVALID_VALUE']);
     if (x.sh.table === 'Inspections') {
       var res = x.vals.result;
@@ -465,14 +504,14 @@ function validateImportBatch_(ctx, t, batchId) {
   var nowIso = isoVN_(now_());
   parsed.forEach(function (x) {
     var ok = !x.errs.length;
-    var same = ok && x.action === 'UPDATE' && importRowUnchanged_(x.sh, { action: 'UPDATE', entity_id: x.entityId, normalized_payload_json: { v: x.vals, r: x.refs } }, x.cur);
+    var same = ok && (x.sh && x.sh.group ? !!x.groupSame : x.action === 'UPDATE' && importRowUnchanged_(x.sh, { action: 'UPDATE', entity_id: x.entityId, normalized_payload_json: { v: x.vals, r: x.refs } }, x.cur));
     if (!same) mtN += x.mtN || 0;
     if (same) skipN++;
     else if (ok) { if (x.action === 'ADD') addN++; else updN++; } else errN++;
     x.ir.entity_type = x.sh ? x.sh.entity : '';
     x.ir.entity_id = x.entityId || '';
     x.ir.action = x.action || '';
-    x.ir.expected_version = x.action === 'UPDATE' ? Number(x.vals.record_version) : 0;
+    x.ir.expected_version = x.action === 'UPDATE' ? Number(x.sh && x.sh.group ? x.groupRev : x.vals.record_version) : 0;
     x.ir.validation_status = same ? 'SKIPPED' : ok ? 'OK' : 'ERROR';
     x.ir.error_text = ok ? '' : JSON.stringify(x.errs.map(function (e) { return { field: e[0], code: e[1] }; }));
     var np = x.ir.normalized_payload_json || {};
@@ -567,7 +606,7 @@ function importSummary_(ctx, b, reload, extra) {
     if (r.action !== 'UPDATE' || r.validation_status !== 'OK' || changes.length >= 30) return;
     var np = r.normalized_payload_json || {};
     var sh = t.sheets.filter(function (s) { return s.name === np.s; })[0];
-    var cur = sh ? findOne_(sh.table, sh.id, r.entity_id) : null;
+    var cur = sh && !sh.group ? findOne_(sh.table, sh.id, r.entity_id) : null;
     if (!cur) return;
     var diff = {};
     Object.keys(np.v || {}).forEach(function (k) {
@@ -781,6 +820,17 @@ function commitImportRow_(ctx, t, b, sh, r, importer, group) {
       res = run('contract.edit', { contract_id: cid, equipment: [q] }, r.import_row_id, cc.record_version);
       break;
     }
+    case 'ChecklistTemplates': res = commitChecklistGroup_(r, group, run); break;
+    case 'MaintenancePlans':
+      if (!add) delete p.equipment_id;
+      if (p.active === false) p.reason = 'Excel ' + b.import_batch_id.slice(0, 8);
+      res = run('maintenance.plan.edit', p, r.import_row_id, ev);
+      break;
+    case 'Repairs':
+      // Lịch sử sự cố: người nhập là người báo khi file không ghi người báo; người commit duyệt (lô nhạy cảm)
+      if (!p.reported_by && importer) p.reported_by = importer.user_id;
+      res = run('repair.history.import', p, r.import_row_id, 0);
+      break;
     default: throw apiError_('INTERNAL_ERROR');
   }
   return res;
@@ -851,13 +901,19 @@ function importCommit_(ctx) {
   pending.forEach(function (r) {
     if (r.action !== 'UPDATE') return;
     var sh = t.sheets.filter(function (s) { return s.name === r.normalized_payload_json.s; })[0];
-    if (!sh) return;
+    if (!sh || sh.group) return;
     if (sh.table === 'Contracts' && (ceByContract[r.entity_id] || []).length) return; // hợp đồng ghi cùng thiết bị của nó
     if (sh.table === 'ContractEquipment' && ceByContract[(r.normalized_payload_json.r || {}).contract_id]) return;
     if (importRowUnchanged_(sh, r, curOf(sh, r.entity_id))) { r.validation_status = 'SKIPPED'; r.error_text = ''; r.committed_at = ''; skipped.push(r); }
   });
   if (skipped.length) withWriteLock_(function () { writeRowsBulk_('ImportRows', skipped); });
   pending = pending.filter(function (r) { return r.validation_status === 'OK'; });
+  // Sheet nhóm (checklist): mọi dòng của một mẫu ghi một lần ở dòng đầu
+  var groupRows = {};
+  pending.forEach(function (r) {
+    var s0 = t.sheets.filter(function (s) { return s.name === r.normalized_payload_json.s; })[0];
+    if (s0 && s0.group) (groupRows[r.entity_id] = groupRows[r.entity_id] || []).push(r);
+  });
   MT_DEFER_ = true;
   try {
     var progressed = true;
@@ -870,6 +926,11 @@ function importCommit_(ctx) {
         if (r.normalized_payload_json.s === 'contract_equipment' && ceByContract[(r.normalized_payload_json.r || {}).contract_id]) continue;
         var sh = t.sheets.filter(function (s) { return s.name === r.normalized_payload_json.s; })[0];
         var group = sh.table === 'Contracts' ? (ceByContract[r.entity_id] || []) : null;
+        if (sh.group) {
+          var gl = groupRows[r.entity_id] || [r];
+          if (gl[0] !== r) continue;
+          group = gl.slice(1);
+        }
         var status, err = '';
         var depFailed = (r.normalized_payload_json.d || []).some(function (id) { return byEntity[id] && byEntity[id].validation_status === 'FAILED'; });
         if (depFailed) {
@@ -951,6 +1012,7 @@ function exportCell_(c, row, codeOf) {
   var v = row[c.key];
   if (v === undefined || v === null) return '';
   if (c.type === 'bool') return v === true;
+  if (c.type === 'time') return v ? timeTextVN_(v) : '';
   return v;
 }
 
@@ -1013,6 +1075,7 @@ function exportXlsx_(ctx) {
       }
       if (sh.table === 'ContractEquipment' && keepIds) data = data.filter(function (r) { return keepIds[r.contract_id]; });
       if (sh.table === 'Inspections') data = data.filter(function (r) { return r.status === 'APPROVED'; });
+      if (sh.group === 'checklist') data = checklistExportRows_(data);
       var keys = cols.map(function (c) { return c.key; }).concat(['i18n_machine_fields']);
       var labels = cols.map(function (c) { return [c.vi, c.zh]; }).concat([['Trường dịch máy', '机器翻译字段']]);
       var types = cols.map(function (c) { return exportType_(c); }).concat(['text']);
@@ -1020,6 +1083,9 @@ function exportXlsx_(ctx) {
         var line = cols.map(function (c) {
           if (sh.table === 'ContractEquipment' && c.key === 'contract_key') return codeOf('Contracts', r.contract_id);
           if (sh.table === 'EquipmentSpecs' && c.key === 'equipment_key') return codeOf('Equipment', r.equipment_id);
+          if (sh.group === 'checklist' && c.key === 'template_key') return r.template_id;
+          if (sh.group === 'checklist' && c.key === 'revision') return r.revision;
+          if (c.ref === 'ChecklistTemplates') return r[c.to] || '';
           return exportCell_(c, r, codeOf);
         });
         var mt = Object.keys(r.i18n_meta || {}).filter(function (f) { return r.i18n_meta[f] && r.i18n_meta[f].state === 'MACHINE'; });
