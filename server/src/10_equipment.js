@@ -103,6 +103,8 @@ function equipmentEdit_(ctx) {
       EQUIPMENT_FIELDS_.forEach(function (f) { if (p[f] !== undefined) row[f] = p[f]; });
       cUpdate_(ctx, row);
       var writes = [{ sheet: 'Equipment', mode: 'update', row: row }];
+      // Tủ điện nối thiết bị này lấy khu vực theo thiết bị (B2, 3.13 kiểm 2)
+      if ((row.location_id || '') !== (cur.location_id || '')) panelLocationWrites_(ctx, row.equipment_id, row.location_id, writes);
       var qr = findOne_('QrRegistry', 'entity_id', p.equipment_id);
       if (qr && (qr.code !== row.equipment_code || qr.label_vi !== row.name_vi || qr.label_zh !== row.name_zh)) {
         var q2 = clone_(qr); delete q2.__row;
@@ -218,6 +220,8 @@ function equipmentArchive_(ctx) {
       row.archived_at = isoVN_(now_());
       cUpdate_(ctx, row);
       var writes = [{ sheet: 'Equipment', mode: 'update', row: row }];
+      // Tủ điện nối thiết bị này lấy khu vực theo thiết bị (B2, 3.13 kiểm 2)
+      if ((row.location_id || '') !== (cur.location_id || '')) panelLocationWrites_(ctx, row.equipment_id, row.location_id, writes);
       var qr = findOne_('QrRegistry', 'entity_id', p.equipment_id);
       if (qr && qr.active) { var q2 = clone_(qr); delete q2.__row; q2.active = false; writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 }); }
       return {
@@ -251,6 +255,8 @@ function equipmentUnarchive_(ctx) {
       row.archived_at = '';
       cUpdate_(ctx, row);
       var writes = [{ sheet: 'Equipment', mode: 'update', row: row }];
+      // Tủ điện nối thiết bị này lấy khu vực theo thiết bị (B2, 3.13 kiểm 2)
+      if ((row.location_id || '') !== (cur.location_id || '')) panelLocationWrites_(ctx, row.equipment_id, row.location_id, writes);
       var qr = findOne_('QrRegistry', 'entity_id', p.equipment_id);
       if (qr && !qr.active) { var q2 = clone_(qr); delete q2.__row; q2.active = true; writes.push({ sheet: 'QrRegistry', mode: 'update', row: q2 }); }
       return {

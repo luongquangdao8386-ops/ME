@@ -19,12 +19,12 @@ test('system.health qua GET và getPublicState không cần phiên', () => {
   assert.match(s.server_time, /\+07:00$/);
 });
 
-test('body không phải JSON → VALIDATION_ERROR; action lạ → FORBIDDEN; Đợt 3 → FEATURE_NOT_ENABLED', () => {
+test('body không phải JSON → VALIDATION_ERROR; action lạ → FORBIDDEN; Đợt 4 → FEATURE_NOT_ENABLED', () => {
   const env = freshServer();
   assert.equal(env.post('not json').code, 'VALIDATION_ERROR');
   const c = ownerClient(env);
   assert.equal(c.call('nope.action').code, 'FORBIDDEN');
-  assert.equal(c.call('utility.view').code, 'FEATURE_NOT_ENABLED');
+  assert.equal(c.call('utility.view').code, 'OK', 'Đợt 3 đã bật');
   assert.equal(c.call('maintenance.view').code, 'OK', 'Đợt 2 đã bật');
   assert.equal(c.call('inspection.schedule').code, 'FEATURE_NOT_ENABLED');
   assert.equal(c.call('system.reset.preview').code, 'FEATURE_NOT_ENABLED');

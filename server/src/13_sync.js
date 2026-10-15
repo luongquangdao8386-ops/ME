@@ -28,8 +28,33 @@ var SYNC_ENTITIES_ = [
   // Đề nghị, lượng dùng: module theo work_type của dòng (4.4.5)
   { type: 'MATERIAL_REQUEST', sheet: 'MaterialRequests', action: null, module: '*work', dot: 2 },
   { type: 'MATERIAL_REQUEST_LINE', sheet: 'MaterialRequestLines', action: null, module: '*work', dot: 2 },
-  { type: 'MATERIAL_USAGE', sheet: 'MaterialUsageLines', action: null, module: '*work', dot: 2 }
+  { type: 'MATERIAL_USAGE', sheet: 'MaterialUsageLines', action: null, module: '*work', dot: 2 },
+  // Đợt 3. Chỉ số: chỉ gửi 45 ngày gần nhất + lần hợp lệ mới nhất của mỗi đồng hồ (form ghi chỉ số ngoại tuyến cần số trước);
+  // tổng hợp kỳ, báo cáo tính ở máy chủ. Biểu giá chỉ người có quyền giá (tariff.view).
+  { type: 'METER', sheet: 'Meters', action: 'utility.view', module: 'utilities', qr: true, dot: 3 },
+  { type: 'METER_SEGMENT', sheet: 'MeterSegments', action: 'utility.view', module: 'utilities', dot: 3 },
+  { type: 'METER_READING', sheet: 'MeterReadings', action: 'utility.view', module: 'utilities', dot: 3, recentDays: 45 },
+  { type: 'METER_EVENT', sheet: 'MeterEvents', action: 'utility.view', module: 'utilities', dot: 3 },
+  { type: 'TARIFF', sheet: 'UtilityTariffs', action: 'tariff.view', module: 'utilities', dot: 3 },
+  { type: 'PANEL', sheet: 'Panels', action: 'circuit.view', module: 'circuits', qr: true, dot: 3 },
+  { type: 'CIRCUIT', sheet: 'Circuits', action: 'circuit.view', module: 'circuits', qr: true, dot: 3 },
+  { type: 'CIRCUIT_LOAD', sheet: 'CircuitLoads', action: 'circuit.view', module: 'circuits', dot: 3 },
+  { type: 'REPORT_DEFINITION', sheet: 'ReportDefinitions', action: 'report.view', module: 'reports', dot: 3 },
+  { type: 'REPORT_RUN', sheet: 'ReportRuns', action: 'report.view', module: 'reports', qr: true, dot: 3 }
 ];
+
+/** Lần đọc hợp lệ mới nhất của mỗi đồng hồ (reading_id) — giữ trên máy kể cả khi cũ hơn cửa sổ đồng bộ */
+function latestReadingIds_() {
+  var best = {};
+  readRows_('MeterReadings').forEach(function (r) {
+    if (r.archived_at || r.status !== 'VALID') return;
+    var b = best[r.meter_id];
+    if (!b || String(r.measured_at) > String(b.measured_at)) best[r.meter_id] = r;
+  });
+  var out = {};
+  Object.keys(best).forEach(function (k) { out[best[k].reading_id] = true; });
+  return out;
+}
 
 /** Action xem theo module của phiếu (WORK_ORDER → maintenance.view, REPAIR → repair.view) */
 var WORK_VIEW_ACTION_ = { maintenance: 'maintenance.view', repairs: 'repair.view' };
@@ -39,6 +64,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
   if (ent.type === 'DOCUMENT') {
     var mod = docModule_(row.entity_type);
     if (!mod || !row.active) return null;
+    if (!drawingVisible_(ctx, row) || row.kind === 'REPORT_FILE') return null;
     if (!(mod in costCache)) {
       costCache[mod] = { view: can_(ctx, 'doc.view', { module: mod }), cost: canViewCost_(ctx, mod) };
     }
@@ -62,6 +88,15 @@ function syncProject_(ctx, ent, row, qm, costCache) {
     if (!costCache['alert:' + am]) return null;
     return projectRow_(ctx, row, ent.sheet);
   }
+  if (ent.recentDays) {
+    if (!('__recentFrom' in costCache)) costCache.__recentFrom = isoVN_(new Date(now_().getTime() - ent.recentDays * 86400000));
+    if (String(row.measured_at) < costCache.__recentFrom) {
+      if (!costCache.__latestReadings) costCache.__latestReadings = latestReadingIds_();
+      if (!costCache.__latestReadings[row.reading_id]) return null;
+    }
+  }
+  if (ent.type === 'REPORT_RUN' && !reportRunVisible_(ctx, row, costCache)) return null;
+  if (ent.type === 'REPORT_DEFINITION' && !reportDefVisible_(ctx, row)) return null;
   var o = projectRow_(ctx, row, ent.sheet);
   if (ent.qr) o.qr_key = qm[o[sheetSchema_(ent.sheet).key]] || null;
   return o;

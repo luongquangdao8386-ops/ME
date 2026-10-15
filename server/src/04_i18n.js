@@ -77,7 +77,29 @@ var SUB_MSG = {
   DEPENDENCY_FAILED: ['Dòng được tham chiếu bị lỗi nên dòng này không ghi', '所引用的行出错，本行未写入'],
   LAST_ADMIN: ['Phải còn ít nhất một tài khoản cấp 4 đang hoạt động', '必须保留至少一个启用的四级账号'],
   RESTRICTION_REQUIRED: ['Đạt có điều kiện cần ghi hạn chế', '有条件合格须填写限制条件'],
-  GROUP_INVALID: ['Mẫu checklist này có dòng lỗi (xem các dòng cùng mẫu)', '该检查表模板有错误行（请查看同一模板的其他行）']
+  GROUP_INVALID: ['Mẫu checklist này có dòng lỗi (xem các dòng cùng mẫu)', '该检查表模板有错误行（请查看同一模板的其他行）'],
+  // Đợt 3: Điện nước (3.12), Lộ điện (3.13), Báo cáo
+  METER_INACTIVE: ['Đồng hồ đã ngừng dùng', '计量表已停用'],
+  READING_BEFORE_START: ['Lúc đọc trước khi đồng hồ bắt đầu dùng', '读数时间早于表计启用时间'],
+  READING_DUPLICATE: ['Đã có chỉ số cùng lúc đọc này', '该读数时间已有读数'],
+  READING_DECREASED: ['Chỉ số nhỏ hơn lần đọc trước (hoặc lớn hơn lần sau) trong cùng giai đoạn', '读数小于同一阶段的上次读数（或大于下次读数）'],
+  EDIT_WINDOW_PASSED: ['Đã quá thời gian tự sửa chỉ số; nhờ trưởng bộ phận sửa', '已超过本人修改期限；请联系部门主管修改'],
+  SEGMENT_BOUND_FIXED: ['Số mở/chốt giai đoạn chỉ sửa giá trị, không hủy hay đổi lúc đọc', '阶段起止读数只能修改数值，不能作废或修改时间'],
+  MULTIPLIER_NEEDS_EVENT: ['Đã có chỉ số: đổi hệ số bằng sự kiện Đổi hệ số', '已有读数：请通过“变更倍率”事件修改倍率'],
+  METER_LOOP: ['Đồng hồ tổng tạo vòng (A thuộc B, B thuộc A)', '总表关系形成循环'],
+  EVENT_PENDING: ['Đồng hồ đang có sự kiện chờ duyệt', '该表计有待审批事件'],
+  EVENT_CLOSING_TOO_LOW: ['Số chốt nhỏ hơn chỉ số hợp lệ đã ghi trước lúc sự kiện', '结束读数小于事件前已记录的有效读数'],
+  TARIFF_OVERLAP: ['Trùng ngày hiệu lực với biểu giá đã duyệt', '与已批准价格的生效期重叠'],
+  CIRCUIT_LOOP: ['Tạo vòng cấp điện (đi ngược gặp lại chính nó)', '形成供电循环（反向追溯回到自身）'],
+  PANEL_EQUIPMENT_AS_LOAD: ['Thiết bị đã nối với tủ: phụ tải phải trỏ tủ đó, không trỏ thiết bị', '设备已关联配电柜：负载须指向该配电柜，不能指向设备'],
+  PANEL_EQUIPMENT_TAKEN: ['Thiết bị đã nối với tủ khác', '该设备已关联其他配电柜'],
+  PANEL_SOURCE_FED: ['Điểm nhận lưới, máy phát không nhận nguồn từ lộ', '电网进线、发电机不能由回路供电'],
+  LOAD_TARGET_ONE: ['Chọn đúng một: thiết bị hoặc tủ nhận nguồn', '请只选一项：设备或受电配电柜'],
+  DRAWING_TARGET_ONE: ['Chọn đúng một: tủ hoặc lộ của bản vẽ', '请只选一项：图纸所属配电柜或回路'],
+  LOAD_DUPLICATE: ['Phụ tải này đã có trong lộ', '该负载已在此回路中'],
+  REPORT_TOO_LARGE: ['Báo cáo quá lớn để lưu; thu hẹp điều kiện lọc', '报表过大无法保存；请缩小筛选范围'],
+  PDF_TOO_MANY_ROWS: ['Quá 500 dòng để xuất PDF; dùng Excel hoặc thu hẹp điều kiện lọc', '超过500行无法导出PDF；请使用Excel或缩小筛选范围'],
+  BUILTIN_FIXED: ['Mẫu tích hợp chỉ đổi cột hiển thị, cấp xem, biểu đồ', '内置模板只能修改显示列、可查看级别、图表']
 };
 
 function fmtMsg_(pair, vars) {

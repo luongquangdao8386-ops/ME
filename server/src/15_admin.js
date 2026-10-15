@@ -97,6 +97,8 @@ function seedBaseRows_() {
     su.schema_version = ['STRING', SCHEMA_VERSION];
     stateWrite_(st, su, SYSTEM_USER);
     seedRolePermissions_();
+    // Đợt 3: 8 mẫu báo cáo tích hợp (5.3.9)
+    seedReportDefinitions_();
   });
 }
 

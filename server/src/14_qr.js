@@ -2,7 +2,8 @@
 
 var VIEW_ACTION_BY_MODULE_ = {
   equipment: 'equipment.view', warehouse: 'material.view', contracts: 'contract.view', inspections: 'inspection.view',
-  maintenance: 'maintenance.view', repairs: 'repair.view'
+  maintenance: 'maintenance.view', repairs: 'repair.view',
+  utilities: 'utility.view', circuits: 'circuit.view', reports: 'report.view'
 };
 
 /**
@@ -34,6 +35,11 @@ function qrResolve_(ctx) {
   if (!viewAction || !can_(ctx, 'qr.resolve', { module: et.module }) || !can_(ctx, viewAction, { module: et.module })) {
     return { qr_state: 'UNAVAILABLE' };
   }
+  // Báo cáo đã lưu có chi phí: cần quyền giá của module nguồn (4.5); mẫu giới hạn cấp xem
+  if (row.entity_type === 'REPORT_RUN') {
+    var run = findOne_('ReportRuns', 'report_run_id', row.entity_id);
+    if (!run || !reportRunVisible_(ctx, run, {})) return { qr_state: 'UNAVAILABLE' };
+  }
   return {
     qr_state: row.active ? 'OK' : 'INACTIVE', entity_type: row.entity_type, entity_id: row.entity_id,
     code: row.code, qr_key: row.qr_key
@@ -44,7 +50,7 @@ function qrResolve_(ctx) {
  * qr.print {entity_type, ids}: dữ liệu tem (mã, tên, khu vực, qr_key) cho hồ sơ người in được xem; ghi AuditLogs số tem.
  * Tem không có logo, không giá, không PIN/token (6.5.2). Cần mạng (4.4.11).
  */
-var PRINTABLE_ = { EQUIPMENT: 1, MATERIAL: 1, INSPECTION_REQUIREMENT: 1, CONTRACT: 1, MAINTENANCE_PLAN: 1, WORK_ORDER: 1, REPAIR: 1 };
+var PRINTABLE_ = { EQUIPMENT: 1, MATERIAL: 1, INSPECTION_REQUIREMENT: 1, CONTRACT: 1, MAINTENANCE_PLAN: 1, WORK_ORDER: 1, REPAIR: 1, METER: 1, PANEL: 1, CIRCUIT: 1 };
 function qrPrint_(ctx) {
   var p = ctx.req.payload || {};
   var et = ENTITY_TYPES[p.entity_type];
@@ -70,6 +76,16 @@ function qrPrint_(ctx) {
       if (p.entity_type === 'REPAIR') { it.name_vi = String(r.symptom_vi || r.symptom_zh || '').slice(0, 60); it.name_zh = String(r.symptom_zh || r.symptom_vi || '').slice(0, 60); }
       it.equipment_code = e.equipment_code || '';
     });
+  }
+  // Đồng hồ, tủ, lộ: dòng dưới tem là mã khu vực (lộ: mã tủ)
+  if ((p.entity_type === 'METER' || p.entity_type === 'PANEL' || p.entity_type === 'CIRCUIT') && items.length) {
+    var locs2 = {};
+    readRows_('Locations').forEach(function (l) { locs2[l.location_id] = l.location_code; });
+    var pans = {};
+    if (p.entity_type === 'CIRCUIT') readRows_('Panels').forEach(function (x) { pans[x.panel_id] = x.panel_code; });
+    var recs2 = {};
+    readRows_(et.sheet).forEach(function (r) { recs2[r[et.key]] = r; });
+    items.forEach(function (it) { var r = recs2[it.entity_id] || {}; it.location_code = p.entity_type === 'CIRCUIT' ? (pans[r.panel_id] || '') : (locs2[r.location_id] || ''); });
   }
   if (p.entity_type === 'EQUIPMENT' && items.length) {
     var locs = {};

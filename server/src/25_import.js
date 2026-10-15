@@ -118,6 +118,7 @@ var REF_CODE_COL_ = {
 function importTemplate_(key) {
   var t = IMPORT_TEMPLATES_[key];
   if (!t) throw validationError_([fieldError_('template_key', 'INVALID_VALUE')]);
+  if (t.dot && t.dot > releasedDot_()) throw apiError_('FEATURE_NOT_ENABLED');
   return t;
 }
 
@@ -147,6 +148,7 @@ function importTemplateAction_(ctx) {
   var p = ctx.req.payload || {};
   var t = importTemplate_(p.template_key);
   authorize_(ctx, 'import.template', { module: t.module });
+  assertImportTemplateUse_(ctx, t, false);
   var lists = {};
   var addList = function (name, vals) { if (vals.length) lists[name] = vals.slice(0, 2000); };
   addList('locations', readRows_('Locations').filter(function (r) { return r.active !== false; }).map(function (r) { return [r.location_code, r.name_vi || r.name_zh]; }));
@@ -156,6 +158,7 @@ function importTemplateAction_(ctx) {
   if (t.module === 'inspections') addList('inspection_types', readRows_('InspectionTypes').filter(function (r) { return r.active !== false; }).map(function (r) { return [r.code, r.name_vi || r.name_zh]; }));
   addList('spec_keys', Object.keys(SPEC_STD_).map(function (k) { return [k, LABELS['spec.' + k] ? LABELS['spec.' + k][0] : k]; }));
   importTemplateListsD2_(t, addList);
+  importTemplateListsD3_(t, addList);
   return {
     template_key: p.template_key, version: IMPORT_TEMPLATE_VERSION_, dataset_epoch: sysProps_().dataset_epoch, module: t.module, sensitive: !!t.sensitive,
     sheets: t.sheets.map(function (sh) {
@@ -274,6 +277,7 @@ function importPreview_(ctx) {
   var p = ctx.req.payload || {};
   var t = importTemplate_(p.template_key);
   authorize_(ctx, 'import.preview', { module: t.module });
+  assertImportTemplateUse_(ctx, t, false);
   var errs = [];
   if (!isUuidV4_(p.import_batch_id)) errs.push(fieldError_('import_batch_id', 'ID_INVALID'));
   if (!/^[0-9a-f]{64}$/.test(String(p.source_sha256 || ''))) errs.push(fieldError_('source_sha256', 'INVALID_VALUE'));
@@ -456,6 +460,7 @@ function validateImportBatch_(ctx, t, batchId) {
   });
   importGroupCheck_(ctx, t, parsed, fileKeys);
   // Lượt 2: tham chiếu (mã đang có hoặc dòng thêm mới cùng file)
+  var d3st = {};
   parsed.forEach(function (x) {
     x.refs = {};
     x.deps = [];
@@ -484,6 +489,7 @@ function validateImportBatch_(ctx, t, batchId) {
     });
     if (x.sh.table === 'InspectionRequirements' && x.action === 'ADD' && !x.refs.equipment_id && !x.refs.location_id) x.errs.push(['equipment_code', 'REQUIRED']);
     importRowCheckD2_(x);
+    importRowCheckD3_(x, d3st);
     if (x.sh.table === 'EquipmentSpecs' && x.vals.spec_key && !specLabel_(String(x.vals.spec_key), readRowsCached_('LookupValues'))) x.errs.push(['spec_key', 'INVALID_VALUE']);
     if (x.sh.table === 'Inspections') {
       var res = x.vals.result;
@@ -831,7 +837,9 @@ function commitImportRow_(ctx, t, b, sh, r, importer, group) {
       if (!p.reported_by && importer) p.reported_by = importer.user_id;
       res = run('repair.history.import', p, r.import_row_id, 0);
       break;
-    default: throw apiError_('INTERNAL_ERROR');
+    default:
+      res = commitImportRowD3_(ctx, b, sh, r, importer, run, p, ev, add);
+      if (res === undefined) throw apiError_('INTERNAL_ERROR');
   }
   return res;
 }
@@ -879,7 +887,11 @@ function importCommit_(ctx) {
   var order = t.sheets.map(function (s) { return s.name; });
   var pending = rows0.filter(function (r) { return r.validation_status === 'OK'; });
   // Thứ tự: theo sheet; trong sheet dòng phụ thuộc (khu vực cha cùng file) sau dòng được tham chiếu
-  pending.sort(function (a, b) { return order.indexOf(a.normalized_payload_json.s) - order.indexOf(b.normalized_payload_json.s) || a.row_number - b.row_number; });
+  // Sheet có orderBy (chỉ số đồng hồ): theo giờ đọc, để lần đọc đầu của đồng hồ mới là mốc gốc đúng
+  var orderBy = {};
+  t.sheets.forEach(function (s) { if (s.orderBy) orderBy[s.name] = s.orderBy; });
+  var obMs = function (r) { var f = orderBy[r.normalized_payload_json.s]; var t1 = f ? parseTime_((r.normalized_payload_json.v || {})[f]) : null; return t1 ? t1.getTime() : 0; };
+  pending.sort(function (a, b) { return order.indexOf(a.normalized_payload_json.s) - order.indexOf(b.normalized_payload_json.s) || obMs(a) - obMs(b) || a.row_number - b.row_number; });
   var byEntity = {};
   rows0.forEach(function (r) { byEntity[r.entity_id] = r; });
   var ready = function (r) { return (r.normalized_payload_json.d || []).every(function (id) { var dep = byEntity[id]; return !dep || dep.validation_status === 'COMMITTED' || dep.validation_status === 'SKIPPED' || dep.normalized_payload_json.s !== r.normalized_payload_json.s; }); };
@@ -1052,6 +1064,7 @@ function exportXlsx_(ctx) {
     var t = importTemplate_(p.template_key);
     module = t.module;
     authorize_(ctx, 'export.xlsx', { module: t.module });
+    assertImportTemplateUse_(ctx, t, true);
     var codeCache = {};
     var codeOf = function (table, id) {
       if (!codeCache[table]) { codeCache[table] = {}; readRows_(table).forEach(function (r) { codeCache[table][r[sheetSchema_(table).key]] = r[REF_CODE_COL_[table]]; }); }
@@ -1062,7 +1075,7 @@ function exportXlsx_(ctx) {
     var keepIds = null;
     t.sheets.forEach(function (sh, si) {
       var cols = templateCols_(ctx, t, sh);
-      var data = readRows_(sh.table).filter(function (r) { return !r.archived_at && !r.removed_at; });
+      var data = sh.exportEmpty ? [] : readRows_(sh.table).filter(function (r) { return !r.archived_at && !r.removed_at; });
       if (sh.table === 'InspectionRequirements' || sh.table === 'Contracts') {
         if (sh.table === 'Contracts') data = data.filter(function (r) { return r.lifecycle_status === 'ACTIVE'; });
         if (due !== 'ALL') data = data.filter(function (r) {

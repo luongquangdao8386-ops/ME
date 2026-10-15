@@ -48,3 +48,35 @@ test('mọi khóa nhãn viết cố định trong mã app (bi/biText/badge/key) 
   }
   assert.deepEqual([...missing], []);
 });
+
+test('máy chủ: mọi khóa nhãn lab_(…)/LABELS[…] viết cố định và nhãn của các giá trị liệt kê Đợt 3 có trong từ điển', () => {
+  const labels = JSON.parse(fs.readFileSync(path.join(ROOT, 'i18n', 'labels.json'), 'utf8'));
+  const dir = path.join(ROOT, 'server', 'src');
+  const missing = new Set();
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.js'))) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8');
+    for (const m of src.matchAll(/\blab_\(\s*'([a-z][a-z0-9_]*\.[A-Za-z0-9_.]+)'\s*[,)]/g)) if (!labels[m[1]]) missing.add(`${f}: ${m[1]}`);
+    for (const m of src.matchAll(/\bLABELS\[\s*'([a-z][a-z0-9_]*\.[A-Za-z0-9_.]+)'\s*\]/g)) if (!labels[m[1]]) missing.add(`${f}: ${m[1]}`);
+  }
+  const g = loadServer().g;
+  const enums = {
+    utility_type: g.UTILITY_TYPES_, period: g.PERIOD_TYPES_, panel_type: g.PANEL_TYPES_, circuit_status: g.CIRCUIT_STATUS_, supply_role: g.SUPPLY_ROLES_,
+    utility_status: ['OK', 'MISSING_READING', 'BASELINE', 'NEEDS_REVIEW', 'OPEN_PERIOD', 'NO_READING'], missing_side: ['OPENING', 'CLOSING', 'BOTH'],
+    trace_status: ['OK', 'ROOT_NOT_SOURCE', 'CYCLE_DETECTED', 'DEPTH_LIMIT'], chart_type: g.REPORT_CHART_TYPES_,
+    drawing_status: ['DRAFT', 'APPROVED', 'SUPERSEDED', 'REJECTED']
+  };
+  for (const [k, vals] of Object.entries(enums)) {
+    assert.ok(Array.isArray(vals) && vals.length, k);
+    for (const v of vals) if (!labels[k + '.' + v]) missing.add(k + '.' + v);
+  }
+  // Nhãn liệt kê của cột báo cáo (enumKey) phải có cho mọi mẫu tích hợp
+  for (const [ds, def] of Object.entries(g.REPORT_DATASETS_)) {
+    for (const c of def.columns) {
+      assert.ok(c.vi && c.zh, ds + '.' + c.key);
+      if (c.enumKey && !Object.keys(labels).some((k) => k.startsWith(c.enumKey + '.'))) missing.add(ds + ' enumKey ' + c.enumKey);
+    }
+    if (!labels['rpt_dataset.' + ds]) missing.add('rpt_dataset.' + ds);
+  }
+  for (const b of g.RPT_BUILTIN_) if (!labels['rpt.' + b[0]]) missing.add('rpt.' + b[0]);
+  assert.deepEqual([...missing], []);
+});

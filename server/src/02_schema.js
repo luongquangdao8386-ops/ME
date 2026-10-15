@@ -1,4 +1,4 @@
-/* 02_schema: sheet và cột của Đợt 1–2 (1.4 §10.2, §10.3.1; phụ lục 1.5 mục 3.1, 3.16, 6.1, 6.4) */
+/* 02_schema: sheet và cột của Đợt 1–3 (1.4 §10.2, §10.3.1; phụ lục 1.5 mục 3.1, 3.12, 3.13, 3.16, 6.1, 6.4) */
 
 /**
  * Bộ cột C (1.4 §10.1) cho bảng nghiệp vụ. Thêm `sync_revision` (mốc đồng bộ của dòng,
@@ -27,7 +27,7 @@ var SHEETS = {
   Documents: { book: 'B', dot: 1, key: 'document_id', c: true, i18n: true,
     cols: 'document_id entity_type entity_id title_vi title_zh kind drive_file_id external_url mime_type file_version ' +
       'access_scope document_date active managed_folder_id storage_kind owned_by_app drive_sharing_state sharing_updated_at ' +
-      'sharing_error_code size_bytes thumb_drive_file_id' },
+      'sharing_error_code size_bytes thumb_drive_file_id approval_status approved_by approved_at' },
   QrRegistry: { book: 'B', dot: 1, key: 'qr_key',
     cols: 'qr_key entity_type entity_id code label_vi label_zh active dataset_epoch' },
   Equipment: { book: 'B', dot: 1, key: 'equipment_id', c: true, i18n: true,
@@ -123,6 +123,39 @@ var SHEETS = {
   OperatingReadings: { book: 'B', dot: 2, key: 'operating_reading_id', c: true,
     cols: 'operating_reading_id equipment_id measured_at cumulative_hours reading_user_id note work_order_id is_reset' },
 
+  // ---- Nghiệp vụ Đợt 3 (10): Điện nước, Lộ điện, Báo cáo (6.1, 6.9.2; 3.12 B1, 3.13 B2) ----
+  // Cột ngoài 1.4 §10.2 + 3.16: vị trí đặt đồng hồ, ghi chú; số thứ tự giai đoạn; lý do sửa/hủy chỉ số, sự kiện sinh ra
+  // dòng chỉ số; trạng thái/duyệt sự kiện, hệ số mới; tên/trạng thái/người gửi của biểu giá; ghi chú tủ/lộ/phụ tải;
+  // mẫu báo cáo tích hợp, nhóm, tên tệp mẫu; tên, số dòng, tệp PDF của báo cáo đã lưu.
+  Meters: { book: 'B', dot: 3, key: 'meter_id', c: true, i18n: true,
+    cols: 'meter_id meter_code name_vi name_zh utility_type location_id parent_meter_id current_segment_id serial unit multiplier ' +
+      'reading_cycle_type reading_cycle_value assigned_user_id active reading_cycle_anchor_date position_vi position_zh note' },
+  MeterSegments: { book: 'B', dot: 3, key: 'segment_id', c: true,
+    cols: 'segment_id meter_id serial start_at end_at opening_value closing_value multiplier event_id status seq_no' },
+  MeterReadings: { book: 'B', dot: 3, key: 'reading_id', c: true, i18n: true,
+    cols: 'reading_id meter_id meter_segment_id measured_at cumulative_value multiplier_at_reading reading_user_id status note_vi note_zh ' +
+      'reading_kind event_id edit_reason void_reason' },
+  MeterEvents: { book: 'B', dot: 3, key: 'event_id', c: true, i18n: true,
+    cols: 'event_id meter_id event_type event_at old_serial new_serial closing_value opening_value old_segment_id new_segment_id ' +
+      'approved_by note status approved_at new_multiplier old_multiplier note_vi note_zh reject_reason' },
+  UtilityTariffs: { book: 'B', dot: 3, key: 'tariff_id', c: true, i18n: true,
+    cols: 'tariff_id utility_type location_id effective_from effective_to pricing_type unit unit_price currency tax_rate detail_json ' +
+      'approved_by status approved_at name_vi name_zh reject_reason' },
+  Panels: { book: 'B', dot: 3, key: 'panel_id', c: true, i18n: true,
+    cols: 'panel_id panel_code name_vi name_zh location_id supply_voltage rated_current status last_verified_at verified_by ' +
+      'panel_type equipment_id note_vi note_zh' },
+  Circuits: { book: 'B', dot: 3, key: 'circuit_id', c: true, i18n: true,
+    cols: 'circuit_id circuit_code panel_id upstream_circuit_id supply_role name_vi name_zh phases voltage breaker_model ' +
+      'breaker_rating_a protection_setting cable_type cable_section_mm2:STRING cable_length_m route_vi route_zh status verified_by verified_at note_vi note_zh' },
+  CircuitLoads: { book: 'B', dot: 3, key: 'load_link_id', c: true, i18n: true,
+    cols: 'load_link_id circuit_id equipment_id downstream_panel_id supply_role rated_load_kw note_vi note_zh' },
+  ReportDefinitions: { book: 'B', dot: 3, key: 'report_definition_id', c: true, i18n: true,
+    cols: 'report_definition_id code title_vi title_zh dataset filter_schema:JSON visible_columns:JSON chart_type allowed_roles:STRING active ' +
+      'builtin group_key file_name' },
+  ReportRuns: { book: 'B', dot: 3, key: 'report_run_id', c: true,
+    cols: 'report_run_id report_definition_id generated_at generated_by filters_json source_revision snapshot_at status ' +
+      'file_document_id access_scope dataset_epoch report_run_code title_vi title_zh row_count pdf_document_id dataset' },
+
   // ---- Bảo mật (5) ----
   Users: { book: 'S', dot: 1, key: 'user_id',
     cols: 'user_id employee_code display_name email role_level active pin_hash salt pin_hash_version failed_attempts ' +
@@ -161,7 +194,13 @@ var TYPE_OVERRIDES_ = {
   checklist_revision: 'INT', operating_hours: 'NUMBER', template_revision: 'INT', measured_value: 'NUMBER',
   requested_qty: 'NUMBER', approved_qty: 'NUMBER', issued_qty_snapshot: 'NUMBER', returned_qty_snapshot: 'NUMBER',
   actual_used_qty: 'NUMBER', scrap_qty: 'NUMBER', manual_unit_cost: 'NUMBER', net_issue_qty_snapshot: 'NUMBER',
-  inventory_cost_snapshot: 'NUMBER', cumulative_hours: 'NUMBER', is_reset: 'BOOL', needed_at: 'DATE'
+  inventory_cost_snapshot: 'NUMBER', cumulative_hours: 'NUMBER', is_reset: 'BOOL', needed_at: 'DATE',
+  // Đợt 3
+  multiplier: 'NUMBER', reading_cycle_value: 'INT', opening_value: 'NUMBER', closing_value: 'NUMBER', seq_no: 'INT',
+  cumulative_value: 'NUMBER', multiplier_at_reading: 'NUMBER', new_multiplier: 'NUMBER', old_multiplier: 'NUMBER',
+  unit_price: 'NUMBER', tax_rate: 'NUMBER', effective_to: 'DATE', supply_voltage: 'NUMBER', rated_current: 'NUMBER',
+  phases: 'INT', voltage: 'NUMBER', breaker_rating_a: 'NUMBER', cable_length_m: 'NUMBER', rated_load_kw: 'NUMBER',
+  builtin: 'BOOL', source_revision: 'INT', row_count: 'INT', reading_cycle_anchor_date: 'DATE'
 };
 
 /** Kiểu cột (3.1) suy theo tên. */

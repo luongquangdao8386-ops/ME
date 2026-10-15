@@ -398,13 +398,13 @@ function authBasis_(ctx) {
 }
 
 /**
- * Đợt đang chạy được: RELEASED_DOT khi dữ liệu đã nâng schema (migrateSchema ghi schema_version); chưa nâng thì chỉ Đợt 1,
- * để lúc vừa dán Code.gs mới mà chưa chạy migrateSchema app vẫn dùng được phần cũ (sheet mới chưa có → "Sắp có").
+ * Đợt đang chạy được: theo schema_version của dữ liệu (migrateSchema ghi), không vượt RELEASED_DOT của mã. Vừa dán Code.gs
+ * mới mà chưa chạy migrateSchema thì app vẫn chạy như đợt cũ (sheet mới chưa có → "Sắp có"): 1.5.2 → Đợt 2, 1.5.3 → Đợt 3.
  */
 function releasedDot_() {
   var sv = '';
   try { sv = String(sysStateCached_().schema_version || ''); } catch (e) { sv = ''; }
-  return sv === SCHEMA_VERSION ? RELEASED_DOT : Math.min(RELEASED_DOT, 1);
+  return Math.min(RELEASED_DOT, SCHEMA_DOTS_[sv] || 1);
 }
 
 function dotReleased_(dot) {

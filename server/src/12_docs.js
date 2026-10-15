@@ -63,9 +63,11 @@ function docUploadCondOk_(ctx, auth, module, kind, entity, entityType) {
   });
 }
 
-function docUpload_(ctx) {
+/** opts (Đợt 3, bản vẽ lộ điện): {action: mã action để kiểm quyền thay cho doc.upload, extra: cột thêm của dòng Documents} */
+function docUpload_(ctx, opts) {
+  opts = opts || {};
   var p = ctx.req.payload;
-  if (p.external_url !== undefined && p.content_b64 === undefined) return docAddLink_(ctx);
+  if (p.external_url !== undefined && p.content_b64 === undefined) return docAddLink_(ctx, opts);
   var errs = [];
   if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
   var et = ENTITY_TYPES[p.entity_type];
@@ -84,7 +86,7 @@ function docUpload_(ctx) {
   var entity = findOne_(et.sheet, et.key, p.entity_id);
   var auth;
   try {
-    auth = authorize_(ctx, 'doc.upload', { module: module });
+    auth = authorize_(ctx, opts.action || 'doc.upload', { module: module });
   } catch (e) {
     // Người báo sự cố (mọi vai trò được báo) gửi ảnh hiện trường của phiếu mình báo
     if (!(e && e.apiCode === 'FORBIDDEN' && p.entity_type === 'REPAIR' && can_(ctx, 'repair.report', { module: 'repairs' }) &&
@@ -94,6 +96,8 @@ function docUpload_(ctx) {
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
   if (!docUploadCondOk_(ctx, auth, module, p.kind, entity, p.entity_type)) throw apiError_('FORBIDDEN');
   if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  // Bản vẽ tủ/lộ đi qua circuit.drawing.upload (phiên bản, chờ duyệt)
+  if (!opts.action && p.kind === 'DRAWING' && (p.entity_type === 'PANEL' || p.entity_type === 'CIRCUIT')) throw validationError_([fieldError_('kind', 'INVALID_VALUE')]);
 
   // Đã có thao tác này → không tạo thêm file
   var ex = findOne_('Operations', 'operation_id', ctx.req.operation_id);
@@ -142,6 +146,7 @@ function docUpload_(ctx) {
           drive_sharing_state: sharing, sharing_updated_at: nowIso, sharing_error_code: sharingErr,
           size_bytes: bytes.length, thumb_drive_file_id: thumb ? thumb.getId() : ''
         };
+        Object.keys(opts.extra || {}).forEach(function (k) { row[k] = opts.extra[k]; });
         cNew_(ctx, row);
         return {
           writes: [{ sheet: 'Documents', mode: 'insert', row: row }],
@@ -171,6 +176,8 @@ function docForRead_(ctx, documentId, action) {
   var module = docModule_(d.entity_type);
   authorize_(ctx, action, { module: module });
   if (d.access_scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  if (!drawingVisible_(ctx, d)) throw apiError_('NOT_FOUND');
+  if (d.kind === 'REPORT_FILE') assertReportFileRead_(ctx, d);
   return d;
 }
 
@@ -210,7 +217,7 @@ function docView_(ctx) {
   authorize_(ctx, 'doc.view', { module: module });
   var cost = canViewCost_(ctx, module);
   var items = findAll_('Documents', 'entity_id', p.entity_id).filter(function (d) {
-    return d.active && !d.archived_at && d.entity_type === p.entity_type && (d.access_scope !== 'COST_VIEW' || cost);
+    return d.active && !d.archived_at && d.entity_type === p.entity_type && (d.access_scope !== 'COST_VIEW' || cost) && drawingVisible_(ctx, d);
   }).map(function (d) { return projectDoc_(ctx, d); });
   return { items: items };
 }
@@ -260,7 +267,8 @@ function docSetPrivate_(ctx) {
 }
 
 /** doc.upload kèm external_url (không có tệp): liên kết tài liệu ngoài, riêng tư theo loại (EQ-04) */
-function docAddLink_(ctx) {
+function docAddLink_(ctx, opts) {
+  opts = opts || {};
   var p = ctx.req.payload;
   var errs = [];
   if (!isUuidV4_(p.document_id)) errs.push(fieldError_('document_id', 'ID_INVALID'));
@@ -279,7 +287,7 @@ function docAddLink_(ctx) {
   var entity = findOne_(et.sheet, et.key, p.entity_id);
   var auth;
   try {
-    auth = authorize_(ctx, 'doc.upload', { module: module });
+    auth = authorize_(ctx, opts.action || 'doc.upload', { module: module });
   } catch (e) {
     // Người báo sự cố (mọi vai trò được báo) gửi ảnh hiện trường của phiếu mình báo
     if (!(e && e.apiCode === 'FORBIDDEN' && p.entity_type === 'REPAIR' && can_(ctx, 'repair.report', { module: 'repairs' }) &&
@@ -289,6 +297,7 @@ function docAddLink_(ctx) {
   if (!entity || entity.archived_at) throw validationError_([fieldError_('entity_id', 'NOT_FOUND')]);
   if (!docUploadCondOk_(ctx, auth, module, p.kind, entity, p.entity_type)) throw apiError_('FORBIDDEN');
   if (scope === 'COST_VIEW' && !canViewCost_(ctx, module)) throw apiError_('FORBIDDEN');
+  if (!opts.action && p.kind === 'DRAWING' && (p.entity_type === 'PANEL' || p.entity_type === 'CIRCUIT')) throw validationError_([fieldError_('kind', 'INVALID_VALUE')]);
   var tr = applyTranslations_('Documents', ['title'], { title_vi: p.title_vi, title_zh: p.title_zh }, null);
   return executeWrite_(ctx, {
     entity_type: 'DOCUMENT', entity_id: p.document_id,
@@ -301,6 +310,7 @@ function docAddLink_(ctx) {
         document_date: p.document_date || dateVN_(now_()), active: true, managed_folder_id: '', storage_kind: 'LINK',
         owned_by_app: false, drive_sharing_state: 'NOT_SHARED', sharing_updated_at: '', sharing_error_code: '', size_bytes: '', thumb_drive_file_id: ''
       };
+      Object.keys(opts.extra || {}).forEach(function (k) { row[k] = opts.extra[k]; });
       cNew_(ctx, row);
       return {
         writes: [{ sheet: 'Documents', mode: 'insert', row: row }],

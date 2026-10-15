@@ -5,12 +5,15 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d2.13';
+var SERVER_VERSION = '1.0.0-d3.1';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.2';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2 (migrateSchema)
+var SCHEMA_VERSION = '1.5.3';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3 (migrateSchema)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 2;       // đợt đang phát hành
+var RELEASED_DOT = 3;       // đợt đang phát hành
+
+/** schema_version của dữ liệu → đợt dữ liệu đã có đủ sheet (migrateSchema ghi schema_version) */
+var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3 };
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */
@@ -107,7 +110,12 @@ var CODE_PATTERNS = {
   MAINTENANCE_PLAN: { prefix: 'KH', digits: 4, yymm: false, manual: false },
   WORK_ORDER: { prefix: 'BT', digits: 3, yymm: true, manual: false },
   REPAIR: { prefix: 'SC', digits: 3, yymm: true, manual: false },
-  MATERIAL_REQUEST: { prefix: 'DN', digits: 3, yymm: true, manual: false }
+  MATERIAL_REQUEST: { prefix: 'DN', digits: 3, yymm: true, manual: false },
+  // Đợt 3 (3.3): đồng hồ, tủ, lộ nhập tay được; báo cáo đã lưu theo tháng tạo
+  METER: { prefix: 'DH', digits: 4, yymm: false, manual: true },
+  PANEL: { prefix: 'TU', digits: 4, yymm: false, manual: true },
+  CIRCUIT: { prefix: 'LO', digits: 4, yymm: false, manual: true },
+  REPORT_RUN: { prefix: 'BC', digits: 3, yymm: true, manual: false }
 };
 
 /** Vai trò cấp 2 và module chính (4.1). */
@@ -138,7 +146,17 @@ var ENTITY_TYPES = {
   MAINTENANCE_PLAN: { module: 'maintenance', sheet: 'MaintenancePlans', key: 'plan_id', code: 'plan_code', qr: true },
   WORK_ORDER: { module: 'maintenance', sheet: 'WorkOrders', key: 'work_order_id', code: 'work_order_code', qr: true },
   REPAIR: { module: 'repairs', sheet: 'Repairs', key: 'repair_id', code: 'repair_code', qr: true },
-  MATERIAL_REQUEST: { module: 'maintenance', sheet: 'MaterialRequests', key: 'request_id', code: 'request_code', qr: false, byWork: true }
+  MATERIAL_REQUEST: { module: 'maintenance', sheet: 'MaterialRequests', key: 'request_id', code: 'request_code', qr: false, byWork: true },
+  // Đợt 3: Điện nước, Lộ điện, Báo cáo
+  METER: { module: 'utilities', sheet: 'Meters', key: 'meter_id', code: 'meter_code', qr: true },
+  METER_READING: { module: 'utilities', sheet: 'MeterReadings', key: 'reading_id', code: null, qr: false },
+  METER_EVENT: { module: 'utilities', sheet: 'MeterEvents', key: 'event_id', code: null, qr: false },
+  TARIFF: { module: 'utilities', sheet: 'UtilityTariffs', key: 'tariff_id', code: null, qr: false },
+  PANEL: { module: 'circuits', sheet: 'Panels', key: 'panel_id', code: 'panel_code', qr: true },
+  CIRCUIT: { module: 'circuits', sheet: 'Circuits', key: 'circuit_id', code: 'circuit_code', qr: true },
+  CIRCUIT_LOAD: { module: 'circuits', sheet: 'CircuitLoads', key: 'load_link_id', code: null, qr: false },
+  REPORT_DEFINITION: { module: 'reports', sheet: 'ReportDefinitions', key: 'report_definition_id', code: 'code', qr: false },
+  REPORT_RUN: { module: 'reports', sheet: 'ReportRuns', key: 'report_run_id', code: 'report_run_code', qr: true }
 };
 
 /** work_type của đề nghị/lượng dùng/sự kiện linh kiện → loại hồ sơ, module quyền (4.4.5) */
@@ -152,6 +170,7 @@ var DOC_KIND_SCOPE = {
   PHOTO_EQUIPMENT: 'LINK_VIEW', PHOTO_MATERIAL: 'LINK_VIEW', PHOTO_SITE: 'LINK_VIEW', PHOTO_METER: 'LINK_VIEW',
   CERTIFICATE: 'MODULE_VIEW', DRAWING: 'MODULE_VIEW', MANUAL: 'MODULE_VIEW', IMPORT_FILE: 'MODULE_VIEW', OTHER: 'MODULE_VIEW',
   CONTRACT: 'COST_VIEW', INVOICE: 'COST_VIEW'
+  // REPORT_FILE (Đợt 3): theo ReportRuns.access_scope — chỉ máy chủ tạo khi lưu báo cáo, không tải lên từ app
 };
 
 /** Trường giá (4.5). */
@@ -162,7 +181,9 @@ var COST_FIELDS = {
   Inspections: ['cost', 'currency'],
   WorkOrders: ['labor_cost', 'other_cost', 'cost_currency'],
   Repairs: ['labor_cost', 'outside_cost', 'cost_currency'],
-  MaterialUsageLines: ['manual_unit_cost', 'currency', 'inventory_cost_snapshot']
+  MaterialUsageLines: ['manual_unit_cost', 'currency', 'inventory_cost_snapshot'],
+  // Đợt 3: biểu giá điện nước (4.5)
+  UtilityTariffs: ['unit_price', 'currency', 'tax_rate', 'detail_json']
 };
 
 /** Trường không dịch tự động (2.3). Tên trường gốc (không hậu tố _vi/_zh). */

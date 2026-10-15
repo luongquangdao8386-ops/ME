@@ -40,7 +40,7 @@ class MockBlob {
     this._name = name || '';
   }
   getBytes() { return toSignedArr(this._bytes); }
-  getDataAsString() { return this._bytes.toString('utf8'); }
+  getDataAsString() { return this._bytes.toString('utf8'); }  // Apps Script nhận tham số bảng mã; giả lập luôn UTF-8
   getContentType() { return this._type; }
   getName() { return this._name; }
   setName(n) { this._name = n; return this; }
@@ -289,6 +289,13 @@ function makeDrive() {
   const mkFile = (rec) => ({
     getId: () => rec.id, getName: () => rec.name, getSize: () => rec.bytes.length, getMimeType: () => rec.mime,
     getBlob: () => new MockBlob(rec.bytes, rec.mime, rec.name),
+    getAs: (mime) => {
+      const d = drive._docs.get(rec.id);
+      if (!d) throw new Error('getAs: not a document');
+      if (!d.saved) throw new Error('getAs before saveAndClose');
+      const text = d.parts.map((x) => (x.type === 'p' ? x.text : x.type === 'image' ? '[IMAGE]' : x.cells.map((r) => r.join(' | ')).join('\n'))).join('\n');
+      return new MockBlob(Buffer.from('%PDF-1.4\n' + text, 'utf8'), mime, rec.name + '.pdf');
+    },
     setSharing: (a, p) => { if (drive._failSharing) throw new Error('sharing failed'); rec.access = a; rec.permission = p; },
     getSharingAccess: () => rec.access, getSharingPermission: () => rec.permission,
     setTrashed: (t) => { rec.trashed = !!t; }, isTrashed: () => rec.trashed,
@@ -325,9 +332,43 @@ function makeDrive() {
     getFolderById: (id) => { const r = folders.get(id); if (!r) throw new Error('No folder ' + id); return mkFolder(r); },
     getFileById: (id) => { const r = files.get(id); if (!r) throw new Error('No file ' + id); return mkFile(r); },
     _registerExternal: (id, name, mime) => files.set(id, { id, name, bytes: Buffer.alloc(0), mime, access: 'PRIVATE', permission: 'EDIT', trashed: false, parent: null }),
-    _files: files, _folders: folders, _failSharing: false
+    _files: files, _folders: folders, _failSharing: false, _docs: new Map()
   };
   return drive;
+}
+
+/* ---------------- DocumentApp (PDF báo cáo, Đợt 3) ---------------- */
+function makeDocumentApp(drive) {
+  const docs = new Map();
+  const chain = (o) => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => chain(t)) });
+  const ParagraphHeading = { HEADING1: 'H1', HEADING2: 'H2', HEADING3: 'H3', NORMAL: 'N' };
+  const app = {
+    ParagraphHeading,
+    create: (name) => {
+      const id = 'doc_' + crypto.randomBytes(8).toString('hex');
+      const rec = { id, name, parts: [], saved: false, page: { w: 595, h: 842 } };
+      docs.set(id, rec);
+      drive._registerExternal(id, name, 'application/vnd.google-apps.document');
+      drive._docs.set(id, rec);
+      const para = (text) => { rec.parts.push({ type: 'p', text: String(text) }); return chain({}); };
+      const body = chain({
+        appendParagraph: para,
+        appendTable: (cells) => {
+          const t = { type: 'table', cells: cells.map((r) => r.map(String)) };
+          rec.parts.push(t);
+          const row = (i) => chain({ getNumCells: () => (t.cells[i] || []).length, getCell: () => chain({}) });
+          return chain({ getRow: row, getNumRows: () => t.cells.length });
+        },
+        appendImage: () => { rec.parts.push({ type: 'image' }); return chain({}); },
+        insertImage: () => { rec.parts.push({ type: 'image' }); return chain({}); },
+        setPageWidth: (w) => { rec.page.w = w; return body; },
+        setPageHeight: (h) => { rec.page.h = h; return body; }
+      });
+      return { getId: () => id, getBody: () => body, saveAndClose: () => { rec.saved = true; } };
+    },
+    _docs: docs
+  };
+  return app;
 }
 
 /* ---------------- Others ---------------- */
@@ -375,6 +416,8 @@ export function loadServer(opts = {}) {
     LockService: makeLock(lockState),
     SpreadsheetApp: ssApp,
     DriveApp: drive,
+    DocumentApp: makeDocumentApp(drive),
+    BigInt,
     ContentService: {
       MimeType: { JSON: 'JSON', TEXT: 'TEXT' },
       createTextOutput: (s) => ({ _c: s, setMimeType() { return this; }, getContent() { return this._c; } })
