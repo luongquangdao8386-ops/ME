@@ -20,7 +20,9 @@ export const app = {
 export function entityPath(type, id) {
   return {
     EQUIPMENT: '/equipment/', MATERIAL: '/materials/', INSPECTION_REQUIREMENT: '/inspections/', INSPECTION: '/inspections/record/',
-    CONTRACT: '/contracts/', MAINTENANCE_PLAN: '/maintenance/plans/', WORK_ORDER: '/maintenance/wo/', REPAIR: '/repairs/'
+    CONTRACT: '/contracts/', MAINTENANCE_PLAN: '/maintenance/plans/', WORK_ORDER: '/maintenance/wo/', REPAIR: '/repairs/',
+    // Đợt 3: tem đồng hồ mở thẳng màn nhập chỉ số (người không ghi được chỉ số thì sang hồ sơ đồng hồ)
+    METER: '/utilities/read/', PANEL: '/circuits/p/', CIRCUIT: '/circuits/c/', REPORT_RUN: '/reports/saved/'
   }[type] + encodeURIComponent(id);
 }
 
@@ -180,6 +182,30 @@ function registerRoutes() {
   route('/repairs/new', soonOr(2, lazy('./pages/repairs.js', 'renderReportForm')), { nav: 'repairs' });
   route('/repairs/:id', soonOr(2, lazy('./pages/repairs.js', 'renderRepair')), { nav: 'repairs' });
   route('/repairs/:id/edit', soonOr(2, lazy('./pages/repairs.js', 'renderReportForm')), { nav: 'repairs' });
+  // Đợt 3: Điện nước (UT-01..03, WEB-UT-01), Lộ điện (CI-01..03, WEB-CI-01), Báo cáo (RE-01..03, WEB-RE-01)
+  route('/utilities', soonOr(3, lazy('./pages/utilities.js', 'renderUtilities')), { nav: 'utilities' });
+  route('/utilities/meters', soonOr(3, lazy('./pages/utilities.js', 'renderMeterList')), { nav: 'utilities' });
+  route('/utilities/meters/new', soonOr(3, lazy('./pages/utilities.js', 'renderMeterForm')), { nav: 'utilities' });
+  route('/utilities/meters/:id', soonOr(3, lazy('./pages/utilities.js', 'renderMeter')), { nav: 'utilities' });
+  route('/utilities/meters/:id/edit', soonOr(3, lazy('./pages/utilities.js', 'renderMeterForm')), { nav: 'utilities' });
+  route('/utilities/meters/:id/event', soonOr(3, lazy('./pages/utilities.js', 'renderEventForm')), { nav: 'utilities' });
+  route('/utilities/read/:id', soonOr(3, lazy('./pages/utilities.js', 'renderReadingForm')), { nav: 'utilities' });
+  route('/utilities/tariffs', soonOr(3, lazy('./pages/utilities.js', 'renderTariffs')), { nav: 'utilities' });
+  route('/utilities/tariffs/new', soonOr(3, lazy('./pages/utilities.js', 'renderTariffForm')), { nav: 'utilities' });
+  route('/utilities/tariffs/:id', soonOr(3, lazy('./pages/utilities.js', 'renderTariffForm')), { nav: 'utilities' });
+  route('/circuits', soonOr(3, lazy('./pages/circuits.js', 'renderCircuitList')), { nav: 'circuits' });
+  route('/circuits/trace', soonOr(3, lazy('./pages/circuits.js', 'renderTrace')), { nav: 'circuits' });
+  route('/circuits/p/new', soonOr(3, lazy('./pages/circuits.js', 'renderPanelForm')), { nav: 'circuits' });
+  route('/circuits/p/:id', soonOr(3, lazy('./pages/circuits.js', 'renderPanel')), { nav: 'circuits' });
+  route('/circuits/p/:id/edit', soonOr(3, lazy('./pages/circuits.js', 'renderPanelForm')), { nav: 'circuits' });
+  route('/circuits/c/new', soonOr(3, lazy('./pages/circuits.js', 'renderCircuitForm')), { nav: 'circuits' });
+  route('/circuits/c/:id', soonOr(3, lazy('./pages/circuits.js', 'renderCircuit')), { nav: 'circuits' });
+  route('/circuits/c/:id/edit', soonOr(3, lazy('./pages/circuits.js', 'renderCircuitForm')), { nav: 'circuits' });
+  route('/reports', soonOr(3, lazy('./pages/reports.js', 'renderReports')), { nav: 'reports' });
+  route('/reports/run/:code', soonOr(3, lazy('./pages/reports.js', 'renderReportRun')), { nav: 'reports' });
+  route('/reports/saved/:id', soonOr(3, lazy('./pages/reports.js', 'renderSavedReport')), { nav: 'reports' });
+  route('/reports/templates', soonOr(3, lazy('./pages/reports.js', 'renderTemplates')), { nav: 'reports' });
+  route('/reports/templates/:id', soonOr(3, lazy('./pages/reports.js', 'renderTemplateForm')), { nav: 'reports' });
   route('/alerts', lazy('./pages/alerts.js', 'renderAlerts'), { nav: 'alerts' });
   route('/alerts/month', lazy('./pages/alerts.js', 'renderMonth'), { nav: 'alerts' });
   route('/account', lazy('./pages/account.js', 'renderAccount'), { nav: 'account' });
@@ -218,7 +244,7 @@ function registerRoutes() {
   route('/print', lazy('./pages/misc.js', 'renderPrintLabels'), { nav: '' });
   route('/excel/:key', lazy('./pages/excel.js', 'renderExcel'), { nav: '' });
   route('/labels', testOnly(async (view, ctx) => { ctx.shell.setScreen({ title: 'screen.labels', back: '/poc' }); const m = await import('./poc.js'); return m.renderLabels(view); }), { nav: 'account' });
-  for (const m of MODULES) if (m.dot > 2) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
+  for (const m of MODULES) if (m.dot > 3) route(m.path, lazy('./pages/misc.js', 'renderComingSoon'), { nav: m.key });
   route('/r/:key', async (view, ctx) => {
     const r = await resolveScan({ kind: 'qr', key: ctx.params.key });
     if (r.qr_state === 'OK') { navigate(entityPath(r.entity_type, r.entity_id), { replace: true }); return; }
@@ -267,7 +293,7 @@ function refreshIfAccount() { if (app.shell && currentPath().startsWith('/accoun
 
 // Màn xem (danh sách, chi tiết phiếu) có nhãn "Đã lưu trên máy": tự gửi nháp xong thì vẽ lại theo bản máy chủ.
 // Không vẽ lại màn nhập (…/new, …/edit, Excel), khi đang mở hộp thoại hoặc đang gõ trong ô nhập (mất chữ chưa lưu).
-const VIEW_PAGE = /^\/(work|maintenance|repairs|materials|maintenance\/(wo|plans)\/[^/]+|repairs\/[^/]+|equipment\/[^/]+|contracts\/[^/]+|inspections\/[^/]+)?$/;
+const VIEW_PAGE = /^\/(work|maintenance|repairs|materials|utilities|utilities\/meters|utilities\/meters\/[^/]+|circuits|maintenance\/(wo|plans)\/[^/]+|repairs\/[^/]+|equipment\/[^/]+|contracts\/[^/]+|inspections\/[^/]+)?$/;
 function refreshAfterSend(r) {
   if (!app.shell) return;
   const path = currentPath();

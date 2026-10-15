@@ -11,18 +11,22 @@ import { handleWriteError } from './equipment.js';
 const MODULE_OF = {
   glossary: 'catalog', locations: 'catalog', lookups: 'catalog', vendors: 'catalog', materials: 'warehouse', equipment: 'equipment', equipment_parts: 'equipment',
   inspection_types: 'inspections', inspection_requirements: 'inspections', inspections: 'inspections', contracts: 'contracts',
-  maintenance_plans: 'maintenance', repairs_history: 'repairs'
+  maintenance_plans: 'maintenance', repairs_history: 'repairs',
+  meters: 'utilities', utility_tariffs: 'utilities', circuits: 'circuits'
 };
 const DUE_FILTER = { inspection_requirements: true, contracts: true };
 /** Các mẫu cùng nhóm (chip chuyển nhanh) và màn quay lại */
-const GROUPS = [['equipment', 'equipment_parts'], ['materials', 'equipment_parts'], ['inspection_requirements', 'inspections', 'inspection_types'], ['contracts'], ['glossary', 'locations', 'lookups', 'vendors'], ['alerts'], ['maintenance_plans'], ['repairs_history']];
+const GROUPS = [['equipment', 'equipment_parts'], ['materials', 'equipment_parts'], ['inspection_requirements', 'inspections', 'inspection_types'], ['contracts'], ['glossary', 'locations', 'lookups', 'vendors'], ['alerts'], ['maintenance_plans'], ['repairs_history'], ['meters', 'utility_tariffs'], ['circuits']];
 const BACK = {
   equipment: '/equipment', equipment_parts: '/equipment', materials: '/materials', inspection_requirements: '/inspections', inspections: '/inspections', inspection_types: '/inspections',
   contracts: '/contracts', glossary: '/admin/catalog', locations: '/admin/catalog', lookups: '/admin/catalog', vendors: '/admin/catalog', alerts: '/alerts',
-  maintenance_plans: '/maintenance', repairs_history: '/repairs'
+  maintenance_plans: '/maintenance', repairs_history: '/repairs', meters: '/utilities', utility_tariffs: '/utilities/tariffs', circuits: '/circuits'
 };
 /** Sheet trong tệp theo mẫu (mẫu nhiều sheet) */
-const SHEETS = { equipment: ['equipment', 'equipment_specs'], contracts: ['contracts', 'contract_equipment'], maintenance_plans: ['checklists', 'maintenance_plans'] };
+const SHEETS = {
+  equipment: ['equipment', 'equipment_specs'], contracts: ['contracts', 'contract_equipment'], maintenance_plans: ['checklists', 'maintenance_plans'],
+  meters: ['meters', 'meter_readings'], circuits: ['panels', 'circuits', 'circuit_loads', 'circuit_drawings']
+};
 const CHUNK = 150;
 const state = { batch: null, summary: null, progress: '' };
 

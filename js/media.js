@@ -45,8 +45,8 @@ export async function processPhoto(file) {
   return out;
 }
 
-/** doc.upload (thao tác ghi, có operation_id) */
-export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thumb, title_vi, title_zh, document_id }) {
+/** doc.upload (thao tác ghi, có operation_id); action khác cùng tham số: circuit.drawing.upload (bản vẽ tủ/lộ, Đợt 3) */
+export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thumb, title_vi, title_zh, document_id, action = 'doc.upload' }) {
   // Điện thoại: tệp trên doc_mobile_upload_max_bytes (mặc định 5 MB) tải lên từ máy tính (P-16)
   const mobileMax = Number(session.settings.doc_mobile_upload_max_bytes || 5242880);
   if (isTouchMobile() && blob.size > mobileMax) {
@@ -63,7 +63,7 @@ export async function uploadDoc({ entity_type, entity_id, kind, blob, mime, thum
   // Phản hồi có thể mất ở chặng chuyển hướng của Google dù máy chủ đã ghi xong (PoC iPhone):
   // hỏi trạng thái thao tác, chưa COMMITTED thì gửi lại đúng operation_id và nội dung cũ (máy chủ không tạo trùng)
   for (const wait of [3000, 8000, 0]) {
-    r = await api('doc.upload', payload, { write: true, expected_version: 0, operation_id });
+    r = await api(action, payload, { write: true, expected_version: 0, operation_id });
     if (r.ok || !['UNKNOWN_RESULT', 'NETWORK_ERROR', 'SERVER_BUSY'].includes(r.code) || !wait) break;
     retries++;
     await new Promise((res) => setTimeout(res, wait));

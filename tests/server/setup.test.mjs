@@ -225,6 +225,32 @@ test('nâng THẬT từ Đợt 2 lên Đợt 3: migrateSchema thêm 10 sheet, c�
   assert.equal(g.readState_().map.schema_version, '1.5.3');
 });
 
+test('nâng THẬT thẳng từ Đợt 1 lên Đợt 3 (chưa phát hành Đợt 2): một lần migrateSchema thêm đủ 20 sheet, cột, khóa Settings, mẫu báo cáo', () => {
+  const env = loadServer();
+  const g = env.g;
+  g.RELEASED_DOT = 1;
+  g.SCHEMA_VERSION = '1.5.1';
+  env.props.setProperty('ENV', 'THAT');
+  g.setup();
+  const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
+  assert.equal(biz.getSheets().length, 26);
+  g.dbReset_();
+  g.withWriteLock_(() => g.insertRows_('Locations', [{ location_id: g.uuid_(), location_code: 'KV-001', name_vi: 'Xưởng A', active: true, record_version: 1 }]));
+  const epoch = env.props.getProperty('DATASET_EPOCH');
+  g.RELEASED_DOT = 3;
+  g.SCHEMA_VERSION = '1.5.3';
+  g.migrateSchema();
+  assert.equal(biz.getSheets().length, 46);
+  for (const n of ['MaintenancePlans', 'WorkOrders', 'Repairs', 'OperatingReadings', 'Meters', 'MeterReadings', 'Panels', 'Circuits', 'ReportDefinitions', 'ReportRuns']) assert.ok(biz.getSheetByName(n), n);
+  const keys = env.rows('Settings').map((x) => x.setting_key);
+  for (const k of ['wo_generate_days_ahead', 'meter_boundary_window_hours', 'reading_self_edit_hours']) assert.ok(keys.includes(k), k);
+  assert.equal(env.rows('ReportDefinitions').length, 8);
+  assert.equal(env.rows('Locations').length, 1);
+  assert.equal(env.props.getProperty('DATASET_EPOCH'), epoch);
+  assert.equal(g.readState_().map.schema_version, '1.5.3');
+  assert.equal(g.releasedDot_(), 3);
+});
+
 test('dán Code.gs Đợt 3 mà chưa chạy migrateSchema: app chạy như Đợt 2 (bảo trì được, điện nước FEATURE_NOT_ENABLED); chạy xong thì bật Đợt 3', () => {
   const env = loadServer();
   const g = env.g;

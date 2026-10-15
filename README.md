@@ -3,7 +3,10 @@
 App quản lý cơ điện: Google Sheets + Apps Script (máy chủ) + PWA trên GitHub Pages (iPhone và máy tính).
 Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân viên + PIN 6 số.
 
-**Trạng thái:** Đợt 1, phiên bản `1.0.0-d1.20` (thiết bị, kho vật tư, kiểm định, hợp đồng, nhắc hạn/Gmail, quản trị, sao lưu, nhập/xuất Excel, tem QR). Đang thử trên môi trường THỬ với dữ liệu mẫu.
+**Trạng thái:** phiên bản `1.0.0-d3.1`.
+- Đợt 1 (thiết bị, kho vật tư, kiểm định, hợp đồng, nhắc hạn/Gmail, quản trị, sao lưu, nhập/xuất Excel, tem QR) — đang chạy THẬT.
+- Đợt 2 (bảo trì, sửa chữa, vật tư trên phiếu, Công việc) và Đợt 3 (điện nước: đồng hồ, chỉ số lũy kế, chốt kỳ, biểu giá; tra cứu lộ điện: tủ ↔ thiết bị, đường cấp; báo cáo: 8 mẫu, Excel/PDF không logo, báo cáo đã lưu có QR) — đang thử trên THỬ với dữ liệu mẫu.
+- Máy chủ bật từng đợt theo `schema_version` (chạy `migrateSchema` sau khi dán `Code.gs` mới).
 
 ## Cấu trúc
 

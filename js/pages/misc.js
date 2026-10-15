@@ -41,7 +41,12 @@ const QR_TYPES = {
   // Đợt 2: kế hoạch, phiếu bảo trì, phiếu sửa (tem dán tại máy/phiếu giấy)
   MAINTENANCE_PLAN: { type: 'MAINTENANCE_PLAN', code: 'plan_code', back: '/maintenance/plans/' },
   WORK_ORDER: { type: 'WORK_ORDER', code: 'work_order_code', back: '/maintenance/wo/' },
-  REPAIR: { type: 'REPAIR', code: 'repair_code', back: '/repairs/' }
+  REPAIR: { type: 'REPAIR', code: 'repair_code', back: '/repairs/' },
+  // Đợt 3: đồng hồ (tem mở màn nhập chỉ số), tủ, lộ điện, báo cáo đã lưu
+  METER: { type: 'METER', code: 'meter_code', back: '/utilities/meters/' },
+  PANEL: { type: 'PANEL', code: 'panel_code', back: '/circuits/p/' },
+  CIRCUIT: { type: 'CIRCUIT', code: 'circuit_code', back: '/circuits/c/' },
+  REPORT_RUN: { type: 'REPORT_RUN', code: 'report_run_code', back: '/reports/saved/' }
 };
 
 /** Mục in tem: tên lấy theo loại hồ sơ; yêu cầu kiểm định dùng tên loại kiểm định + thiết bị */
@@ -62,7 +67,13 @@ export async function labelItem(type, rec) {
     const e = await byId('EQUIPMENT', rec.equipment_id);
     return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: e ? e.equipment_code : '', machine: false };
   }
-  const loc = type === 'EQUIPMENT' && locId ? await byId('LOCATION', locId) : null;
+  // Lộ điện: dòng dưới tem là mã tủ cha
+  if (type === 'CIRCUIT') {
+    const p = await byId('PANEL', rec.panel_id);
+    return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: p ? p.panel_code : '', machine: false };
+  }
+  if (type === 'REPORT_RUN') return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: String(rec.generated_at || '').slice(0, 10), machine: false };
+  const loc = (type === 'EQUIPMENT' || type === 'METER' || type === 'PANEL') && locId ? await byId('LOCATION', locId) : null;
   // Tem in văn bản hiện có, không in nhãn; màn xem trước đánh dấu tem có tên dịch máy chưa sửa (2.3 quy tắc 6)
   const meta = rec.i18n_meta && (rec.i18n_meta.name || rec.i18n_meta.title);
   return { entity_type: type, code: rec[cfg.code], qr_key: rec.qr_key, name_vi: nv, name_zh: nz, location_code: loc ? loc.location_code : '', machine: !!(meta && meta.state === 'MACHINE') };
@@ -93,7 +104,7 @@ export async function renderPrintLabels(view, { shell, query }) {
   const type = query.get('type');
   const ids = (query.get('ids') || '').split(',').filter(Boolean);
   const cfg = QR_TYPES[type];
-  shell.setScreen({ title: 'screen.labels', back: cfg && ids.length === 1 ? cfg.back + ids[0] : (cfg ? cfg.back.replace(/\/$/, '').replace('/record', '') : '/') });
+  shell.setScreen({ title: 'screen.labels', back: cfg && ids.length === 1 ? cfg.back + ids[0] : (cfg ? cfg.back.replace(/\/$/, '').replace('/record', '').replace(/\/(p|c|saved)$/, '') : '/') });
   if (!(await can('qr.print'))) { view.innerHTML = `<div class="card">${bi('err.forbidden')}</div>`; return; }
   if (!cfg) { view.innerHTML = `<div class="card">${bi('err.not_found')}</div>`; return; }
   if (!navigator.onLine) { view.innerHTML = `<div class="card">${bi('sync.need_network')}</div>`; return; }

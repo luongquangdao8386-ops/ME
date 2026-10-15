@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d2.13 (Đợt 1 đang chạy THẬT · Đợt 2 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d3.1 (Đợt 1, Đợt 2 đang chạy THẬT · Đợt 3 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,13 +16,73 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Thứ tự lần này (Đợt 2):** Phần J (đưa máy chủ Đợt 2 lên THỬ) → Phần K (thử Đợt 2 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần L. **Trạng thái 15/10/2026:** Phần J, K đã làm xong trên THỬ (app 1.0.0-d2.13, máy chủ THỬ chạy Code.gs d2.1 — phần máy chủ sau d2.1 chỉ khác số phiên bản và bỏ dấu chấm cuối do dịch máy); còn Phần L. Phần F, G, H (dựng THẬT, tạo `ME-thu`) đã làm xong ngày 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
+**Thứ tự lần này (Đợt 3):** Phần M (đưa máy chủ Đợt 3 lên THỬ) → Phần N (thử Đợt 3 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần O. **Trạng thái 15/10/2026:** Đợt 2 đã thử xong trên THỬ và **đã phát hành THẬT** (Phần J, K, L xong). Phần F, G, H (dựng THẬT, tạo `ME-thu`) xong 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 
 ---
 
-## Phần J — Đưa Đợt 2 lên THỬ (`ME_MayChu_THU`)
+## Phần M — Đưa Đợt 3 lên THỬ (`ME_MayChu_THU`)
+
+Đợt 3 thêm **10 sheet** (Đồng hồ, Giai đoạn đồng hồ, Chỉ số, Sự kiện đồng hồ, Biểu giá, Tủ điện, Lộ điện, Phụ tải, Mẫu báo cáo, Báo cáo đã lưu), 3 cột duyệt bản vẽ ở sheet Tài liệu, 2 cấu hình (`meter_boundary_window_hours` = 24: số chốt kỳ là lần đọc hợp lệ đầu tiên trong 24 giờ sau mốc 00:00; `reading_self_edit_hours` = 24: người đọc tự sửa chỉ số của mình trong 24 giờ) và **8 mẫu báo cáo** có sẵn. Máy chủ mới cần thêm **một quyền Google**: tạo Google Tài liệu tạm để xuất PDF (báo cáo, hồ sơ thiết bị, phiếu).
+
+Thứ tự lần này **khác Phần J**: cấp quyền → triển khai bản mới → **sau cùng** mới `migrateSchema`. Lý do: máy chủ đang triển khai (mã Đợt 2) mà thấy sheet đã nâng thì tự lùi về Đợt 1 — Bảo trì, Sửa chữa mờ đi cho tới khi triển khai bản mới. Mã mới thì chạy như Đợt 2 cho tới khi `migrateSchema` xong, nên làm theo thứ tự dưới đây app không lúc nào bị gián đoạn.
+
+1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d3.1**. Lúc này Điện nước, Báo cáo, Tra cứu lộ điện còn mờ "Sắp có" — đúng (máy chủ chưa nâng).
+2. **Sao lưu THỬ trước:** Tài khoản → Quản trị → **Sao lưu ngay** → PIN → chờ dòng **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/dot-3/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+4. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu** (Ctrl+S).
+5. **Cấp quyền mới:** ô chọn hàm → **`healthCheck`** → **Chạy** → Google hỏi quyền: **Xem xét quyền** → chọn tài khoản M&E → **Nâng cao** → **Đi tới ME_MayChu_THU (không an toàn)** → **Cho phép** (có thêm dòng xem/sửa/tạo Google Tài liệu). Nhật ký: dòng `CẢNH BÁO schema_version: 1.5.2 (1.5.3)` — đúng, chưa nâng. Không hỏi quyền cũng được (đã cấp trước đó).
+6. **Triển khai** → **Quản lý bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → Mô tả `THỬ d3.1` → **Triển khai** (giữ nguyên link). Cửa sổ ẩn danh → link `/exec` của THỬ thêm `?action=system.health` → thấy `"ok":true`, `"app_id":"ME"`. App THỬ lúc này vẫn chạy như Đợt 2 (Bảo trì, Sửa chữa dùng bình thường).
+7. Ô chọn hàm → **`migrateSchema`** → **Chạy**. Nhật ký: `migrateSchema xong. Thêm: Documents(approval_status,approved_by,approved_at); Meters; MeterSegments; MeterReadings; MeterEvents; UtilityTariffs; Panels; Circuits; CircuitLoads; ReportDefinitions; ReportRuns. schema_version=1.5.3`. Chạy lại nhiều lần vẫn an toàn (lần sau: `Thêm: không có`).
+8. Chạy **`healthCheck`** → `schema_version: 1.5.3`, `server_version: 1.0.0-d3.1` ĐẠT (cảnh báo cũ đã biết thì bỏ qua). Không cần cài thêm trigger.
+9. App THỬ: Ctrl+Shift+R (máy tính) / đóng hẳn rồi mở lại app (iPhone; app đang mở thì hiện thông báo "mở lại app") → lưới 9 ô **sáng hết**. **Tài khoản → Quản trị → Trạng thái hệ thống**: schema **1.5.3**, máy chủ **d3.1**.
+
+## Phần N — Thử Đợt 3 trên THỬ
+
+Tài khoản mẫu: NV001 (quản trị), MAU-C3 (trưởng bộ phận), MAU-KT (kỹ thuật, **không** có quyền xem giá). Trước tiên NV001 tạo thêm người đọc số: **Tài khoản → Quản trị → Người dùng → Thêm**: mã **MAU-DN**, cấp 2, vai trò **Đọc điện nước** → ghi PIN tạm. Người lập **không** tự duyệt (biểu giá, sự kiện đồng hồ, xác minh tủ/lộ, bản vẽ) — cần người khác cấp 3–4.
+
+| Phần | Cách thử |
+| --- | --- |
+| Đồng hồ | NV001 (máy tính): **Điện nước → Đồng hồ → Thêm đồng hồ**: loại Điện, khu vực bất kỳ, chu kỳ đọc **5 ngày**, hệ số nhân 1, **Chỉ số ban đầu 12 350 – Đọc lúc 01/10/2026 07:45** → Lưu → mã **DH-0001**. Thêm đồng hồ Nước: chỉ số ban đầu **600** lúc **01/10/2026 07:00** → **DH-0002**. Biểu tượng QR → In thử tem (THỬ không dán tem thật) |
+| Ví dụ B1: 130 kWh | iPhone, MAU-DN: **Quét QR** tem DH-0001 → vào thẳng màn **Nhập chỉ số** → Ngày giờ đọc **06/10/2026 08:00**, Chỉ số mới **12 480** → dòng Tiêu thụ kỳ đo **130 kWh** → **Gửi chỉ số**. Màn **Điện nước** → kỳ **5 ngày** → bấm ‹ tới **01/10/2026 – 05/10/2026** → ô Điện **130 kWh**. Trên máy tính, kỳ 26/09 – 30/09: bảng ghi **Mốc gốc** (lần đọc đầu không tính thành 0) |
+| B1: thiếu số | DH-0002: nhập **625** lúc **07/10/2026 00:30** (quá 24 giờ sau mốc 06/10 00:00) → kỳ 01/10 – 05/10: đồng hồ nước **Thiếu số đo** (bảng trên máy tính), ô Nước hiện "—", biểu đồ nước kỳ đó chỉ có dấu tròn — không chia đều, không tính 0 |
+| Mất mạng | iPhone MAU-DN: tắt mạng → Nhập chỉ số DH-0001 (giờ hiện tại, số lớn hơn 12 480) + **chụp ảnh đồng hồ** → Gửi → nhãn "Đã lưu trên máy" → bật mạng → tự gửi, đúng **1** chỉ số và **1** ảnh |
+| Sửa, hủy chỉ số | MAU-DN sửa chỉ số của mình trong 24 giờ (**Sửa chỉ số**, phải ghi lý do). NV001 **Hủy chỉ số** của người khác (lý do) → tiêu thụ tính lại; nhật ký có trước – sau |
+| Thay đồng hồ, đổi hệ số | DH-0001 → **Thay/reset/đổi hệ số** → Thay đồng hồ: số chốt đồng hồ cũ, số mở đồng hồ mới (vd. 0) → "chờ duyệt" → MAU-C3 **Duyệt** + PIN → tab **Giai đoạn đồng hồ** có giai đoạn 2; tiêu thụ = phần đồng hồ cũ + phần đồng hồ mới (không lấy số mới trừ số cũ). Đổi hệ số 1 → 40: phần sau mốc nhân 40 |
+| Biểu giá, chi phí | NV001: **Điện nước → Biểu giá → Thêm biểu giá**: Điện, **2 000** VND/kWh, thuế **8%**, hiệu lực từ **01/09/2026** → MAU-C3 **Duyệt** + PIN → kỳ 01/10 – 05/10: Chi phí **280 800 VND** (130 × 2 000 × 1,08). Đăng nhập MAU-KT: không thấy chi phí, không thấy Biểu giá |
+| Tủ, lộ (nguồn → tủ → lộ → phụ tải) | NV001 (máy tính): **Tra cứu lộ điện → Thêm tủ** 4 tủ: Điểm nhận lưới (loại nhóm Nguồn), Máy biến áp, Tủ tổng MSB, Tủ phân phối **DB1** — DB1 chọn **Thiết bị của tủ** là một thiết bị có sẵn. Mỗi tủ **Thêm lộ** (Tủ cha = tủ đó), rồi ở lộ → tab **Phụ tải → Thêm phụ tải** chọn tủ nhận: lộ của lưới → MBA, lộ của MBA → MSB, lộ của MSB → DB1; lộ của DB1 → phụ tải là một **thiết bị** máy |
+| B2: tủ ↔ thiết bị | Trước đó báo 1 sự cố (**Sửa chữa → Báo sự cố**) cho thiết bị của DB1. Mở tủ **DB1**: thấy hồ sơ thiết bị của tủ và phiếu **SC-** đó (khung "Phiếu của thiết bị nối tủ"); mở thiết bị đó: có dòng tủ/lộ liên quan |
+| Đường cấp, vòng lặp | Mở lộ của DB1 (hoặc thiết bị phụ tải) → **Xem đường cấp** → chuỗi phụ tải → DB1 → MSB → MBA → lưới, trạng thái **Tới nguồn**; lọc Nguồn chính / Nguồn dự phòng. Thử ở lộ của DB1 **Thêm phụ tải** chọn tủ MSB → báo **Không lưu được: tạo vòng cấp điện** |
+| Xác minh, bản vẽ | MAU-C3 **Xác minh** tủ/lộ do NV001 lập (+ PIN; người sửa cuối không tự xác minh). MAU-KT mở lộ → **Tải bản vẽ mới** (PDF) → chờ duyệt → MAU-C3 duyệt → bản trước thành bản cũ |
+| Báo cáo | **Báo cáo** → **Điện nước** → kỳ 5 ngày, ngày 01/10/2026 → **Tạo báo cáo**: số khớp màn Điện nước (130 kWh, 280 800 VND), **không logo** → **Xuất Excel**, **PDF** (mở được, không logo) → **Lưu báo cáo** → mã **BC-2610-001** + tem QR. MAU-KT chạy cùng báo cáo: không có dòng/cột chi phí. Thử thêm các mẫu Thiết bị, Sửa chữa, Lộ điện và phụ tải |
+| Mẫu báo cáo | NV001: Báo cáo → **Danh sách mẫu báo cáo** → mở một mẫu → đổi tên/bớt cột → **Lưu mẫu**; **Xuất mẫu** → **Nhập mẫu Excel** lại tệp vừa xuất |
+| PDF hồ sơ, phiếu | Thiết bị / phiếu BT / phiếu SC → **Xuất PDF** (iPhone: bấm tiếp **Mở / Lưu**) → PDF không logo; người không có quyền giá không thấy chi phí |
+| Nút Báo cáo ở module | Thiết bị, Bảo trì, Sửa chữa, Kho vật tư, Kiểm định, Hợp đồng, Điện nước, Tra cứu lộ điện → nút **Báo cáo** mở đúng mẫu của module (Thiết bị, Điện nước, Lộ điện mang theo bộ lọc đang xem) |
+| Excel | Điện nước → **Nhập/xuất Excel**: **Đồng hồ và chỉ số** (đồng hồ mới + chỉ số, ghi theo thứ tự lúc đọc), **Biểu giá điện nước** (lô nhạy cảm: người nhập **Gửi duyệt**, người khác cấp 3–4 **Nhập dữ liệu** + PIN). Tra cứu lộ điện → Excel **Tủ, lộ, phụ tải, bản vẽ**: Xuất Excel → nhập lại nguyên tệp → "Không đổi (bỏ qua)" |
+| Tem QR | Đồng hồ, tủ, lộ, báo cáo đã lưu → QR → In thử. Quét tem đồng hồ: **MAU-DN** vào thẳng Nhập chỉ số; **MAU-KT** vào trang đồng hồ |
+| Trang chủ | Ô Điện nước "N cần đọc"; lịch tuần có mục **Chỉ số** vào ngày mốc đọc; ô Tra cứu lộ điện "N lộ"; ô Báo cáo "8 mẫu" |
+
+Gặp lỗi: chụp màn hình (có mã đồng hồ/tủ/lộ, giờ) gửi Claude. Đổi cửa sổ chốt kỳ (1–24 giờ) hoặc thời gian tự sửa chỉ số: **Tài khoản → Quản trị → Trạng thái hệ thống → Cấu hình** → dòng tương ứng → **Sửa cấu hình**.
+
+## Phần O — Phát hành Đợt 3 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+
+THẬT đang dùng Bảo trì, Sửa chữa hằng ngày: giữ đúng thứ tự **cấp quyền → triển khai → `migrateSchema`** (như Phần M) để không lúc nào bị lùi đợt. Nên làm ngoài giờ có người đang ghi phiếu.
+
+1. Claude đưa đúng bản đã thử trên THỬ (nhánh `claude/dot-3`, bản **1.0.0-d3.1** trở lên) lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 2 tới khi máy chủ THẬT nâng). Chờ 2–3 phút (tab **Actions** của repo `ME` xanh); gặp màn lỗi thì bấm **Tải lại bản mới**.
+2. App THẬT: **Tài khoản → Quản trị → Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C → <https://script.google.com> → dự án **`ME_MayChu_THAT`** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+4. Ô chọn hàm → **`healthCheck`** → **Chạy** → cấp quyền mới như Phần M bước 5 (**Đi tới ME_MayChu_THAT (không an toàn)** → **Cho phép**). Dòng `schema_version: 1.5.2 (1.5.3)` báo CẢNH BÁO — đúng.
+5. **Triển khai → Quản lý bản triển khai → bút chì → Phiên bản: Phiên bản mới** → Mô tả `THẬT d3` → **Triển khai** (giữ nguyên link) → cửa sổ ẩn danh mở link `/exec` THẬT thêm `?action=system.health` → thấy `"ok":true`. App THẬT vẫn chạy như Đợt 2.
+6. Ô chọn hàm → **`migrateSchema`** → **Chạy** → Nhật ký giống Phần M bước 7, kết thúc bằng `schema_version=1.5.3`. Chạy **`healthCheck`** → các dòng ĐẠT (trừ cảnh báo đã biết).
+7. Mở `/ME/` → Ctrl+Shift+R → **Tài khoản**: phiên bản app đúng bản đã thử; **Trạng thái hệ thống**: schema **1.5.3**. Lưới 9 ô sáng hết.
+8. Dữ liệu thật (từ đây mới in và dán tem thật):
+   - **Người dùng:** cấp vai trò **Đọc điện nước** cho người đọc số (Tài khoản → Quản trị → Người dùng).
+   - **Đồng hồ:** thêm từng cái hoặc Excel **Đồng hồ và chỉ số**; chỉ số ban đầu = số đọc thật lúc bắt đầu dùng app. In tem QR dán đồng hồ.
+   - **Biểu giá:** nhập tay hoặc Excel **Biểu giá điện nước** → người khác cấp 3–4 duyệt + PIN. Chưa có biểu giá thì báo cáo không có chi phí (không tự lấy 0).
+   - **Tủ, lộ, phụ tải:** Excel **Tủ, lộ, phụ tải, bản vẽ** (Xuất Excel lấy mẫu → điền → Nhập). Nguồn là **loại tủ** (Điểm nhận lưới, Máy biến áp, Máy phát). Đối chiếu thực tế xong thì C3/C4 **Xác minh** từng tủ/lộ.
+
+## Phần J — Đưa Đợt 2 lên THỬ (`ME_MayChu_THU`) — đã xong 15/10/2026
 
 Đợt 2 thêm **10 sheet** (Kế hoạch bảo trì, Mẫu checklist, Phiếu bảo trì, Kết quả checklist, Phiếu sửa chữa, Việc con, Đề nghị vật tư, Dòng đề nghị, Lượng dùng, Giờ chạy). App chỉ bật Bảo trì/Sửa chữa/Công việc **sau khi chạy `migrateSchema`**; trước đó app mới vẫn chạy như Đợt 1 (các ô đó mờ "Sắp có").
 
@@ -36,7 +96,7 @@ Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và 
 8. **Kiểm link:** cửa sổ ẩn danh → dán link `/exec` của THỬ, thêm `?action=system.health` → thấy `"ok":true`, `"app_id":"ME"`.
 9. App THỬ: Ctrl+Shift+R (máy tính) / mở lại app (iPhone) → lưới 9 ô: **Bảo trì, Sửa chữa** sáng; nút **Công việc** dùng được. **Trạng thái hệ thống**: schema **1.5.2**, máy chủ **d2.1**.
 
-## Phần K — Thử Đợt 2 trên THỬ
+## Phần K — Thử Đợt 2 trên THỬ — đã xong 15/10/2026
 
 Dùng tài khoản mẫu (MAU-KT kỹ thuật, MAU-C3 trưởng bộ phận, NV001 quản trị). Người lập/làm/báo **không** tự nghiệm thu phiếu của mình — cần người khác cấp 3–4.
 
@@ -57,7 +117,7 @@ Dùng tài khoản mẫu (MAU-KT kỹ thuật, MAU-C3 trưởng bộ phận, NV0
 
 Gặp lỗi: chụp màn hình (có mã phiếu, giờ) gửi Claude. Nháp mất mạng xem ở **Tài khoản → Nháp chờ đồng bộ**.
 
-## Phần L — Phát hành Đợt 2 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+## Phần L — Phát hành Đợt 2 lên THẬT — đã xong 15/10/2026
 
 1. Claude đưa đúng bản đã thử (nhánh `claude/upbeat-heisenberg-tdnmpa`, bản 1.0.0-d2.13 trở lên) lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 1 tới khi máy chủ THẬT chạy `migrateSchema`). Chờ 2–3 phút (tab **Actions** của repo `ME` xanh) rồi mới làm bước 5; ngay sau khi phát hành, trình duyệt có thể còn nhận tệp cũ — gặp màn lỗi thì bấm **Tải lại bản mới**.
 2. App THẬT: **Tài khoản → Quản trị → Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.

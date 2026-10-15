@@ -2,6 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, blobToB64, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink } from '../report-link.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, roleLevel, dueInfo, requirementRecordStatus, costModules, today } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -50,6 +51,7 @@ export async function renderInspectionList(view, ctx) {
   const canType = await can('inspection.type.edit');
   const canPrint = await can('qr.print');
   const excelBtn = await excelLink('inspection_requirements');
+  const rptBtn = await reportLink('RPT_INSPECTIONS');
   shell.setScreen({
     title: 'module.inspections', back: '/',
     actions: !wide && canReq ? [{ icon: 'plus', label: biText('in.new_requirement'), onClick: () => navigate('/inspections/new'), disabled: !navigator.onLine }] : []
@@ -81,7 +83,7 @@ export async function renderInspectionList(view, ctx) {
       ${canType ? `<a class="btn small" href="#/inspections/types">${bi('in.types')}</a>` : ''}
       ${!wide ? `<a class="btn small" href="#/alerts/month">${ICON.calendar}<span>${bi('btn.month_calendar')}</span></a>` : ''}
       <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${bi('btn.schedule')}<span class="soon">${bi('tag.coming_soon')}</span></button>
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${rptBtn}
       ${canPrint && wide ? `<button type="button" class="btn small" id="in-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
       ${excelBtn}
     </div>

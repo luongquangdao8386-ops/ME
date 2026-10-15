@@ -1,12 +1,10 @@
 // Tem QR (phụ lục 1.5 mục 6.5.2): A4, nhỏ 70 × 37 mm (24 tem) hoặc lớn 105 × 74 mm (8 tem).
 // Nội dung: QR, mã hiển thị, loại hồ sơ, tên Việt, tên Trung, mã khu vực. Không logo, không chữ M&E.
 import qrcode from '../vendor/qrcode-generator-2.0.4.mjs';
-import { APP_BASE_URL, esc, bi } from './core.js';
+import { APP_BASE_URL, esc, bi, L } from './core.js';
 
-const TYPE_LABEL = {
-  EQUIPMENT: ['Thiết bị', '设备'], MATERIAL: ['Vật tư', '物料'],
-  INSPECTION_REQUIREMENT: ['Yêu cầu kiểm định', '检验要求'], CONTRACT: ['Hợp đồng thuê ngoài', '外包合同']
-};
+/** Loại hồ sơ trên tem: cùng từ điển với màn xem QR (qr.entity.*) */
+const typeLabel = (t) => L['qr.entity.' + t] || ['', ''];
 
 export function qrSvg(text) {
   const qr = qrcode(0, 'M');
@@ -22,7 +20,7 @@ export function labelSheetHtml(items, size) {
   const pages = [];
   for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
   return pages.map((page) => `<section class="label-page ${cls}">${page.map((it) => {
-    const t = TYPE_LABEL[it.entity_type] || ['', ''];
+    const t = typeLabel(it.entity_type);
     return `<div class="label">
       <div class="label-qr">${qrSvg(APP_BASE_URL + '#/r/' + it.qr_key)}</div>
       <div class="label-text">

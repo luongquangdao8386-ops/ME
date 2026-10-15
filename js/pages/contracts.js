@@ -12,6 +12,7 @@ import {
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink } from '../report-link.js';
 
 const INTERVALS = ['DAY', 'WEEK', 'MONTH', 'YEAR'];
 const money = (v, cur) => (v === undefined || v === null || v === '' ? '' : `${fmtNumber(v, cur && cur !== 'VND' ? 2 : 0)} ${esc(cur || 'VND')}`);
@@ -69,7 +70,7 @@ export async function renderContractList(view, ctx) {
     <div class="row"><select id="co-life" class="sel" aria-label="${esc(biText('co.lifecycle_filter'))}">${['ACTIVE', 'ENDED', 'NOT_RENEWED', 'ALL'].map((k) => `<option value="${k}"${filt.life === k ? ' selected' : ''}>${k === 'ALL' ? bi('due_filter.ALL') : bi('contract_lifecycle.' + k)}</option>`).join('')}</select></div>
     <div class="row tools">
       ${canCreate && wide ? `<a class="btn small primary" href="#/contracts/new">${ICON.plus}<span>${bi('co.new')}</span></a>` : ''}
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${await reportLink('RPT_CONTRACTS')}
       ${await excelLink('contracts')}
     </div>
     <p class="muted small">${bi('field.total', { N: list.length })}</p></div>`;

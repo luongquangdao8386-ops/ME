@@ -148,7 +148,8 @@ export async function renderConflict(view, { shell, params }) {
       await rebaseQueued(op.operation_id, op.conflict.server_version);
       toast(bi('conflict.rebased'), 'ok');
       await syncNow({ quiet: true });
-      const target = op.entity_type === 'WORK_ORDER' || op.entity_type === 'REPAIR' ? entityPath(op.entity_type, op.entity_id) : '/account/drafts';
+      const target = op.entity_type === 'WORK_ORDER' || op.entity_type === 'REPAIR' ? entityPath(op.entity_type, op.entity_id)
+      : (op.action === 'reading.create' && op.payload && op.payload.meter_id ? '/utilities/meters/' + encodeURIComponent(op.payload.meter_id) : '/account/drafts');
       navigate(target || '/account/drafts', { replace: true });
       return;
     }

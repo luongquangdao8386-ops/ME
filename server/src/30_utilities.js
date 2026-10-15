@@ -846,8 +846,8 @@ function utilitySummary_(ctx, f, opts) {
         meters.forEach(function (m) {
           if (!top(m)) return;
           var r = pr2[0] === a ? rows.filter(function (x) { return x.meter_id === m.meter_id; })[0] : meterPeriod_(d, m, pr2[0], pr2[1], W, nowMs);
-          var x = tt[m.utility_type] = tt[m.utility_type] || { consumption: 0, partial: false, open: false };
-          if (r.status === 'OK') x.consumption += r.consumption;
+          var x = tt[m.utility_type] = tt[m.utility_type] || { consumption: 0, partial: false, open: false, ok: 0 };
+          if (r.status === 'OK') { x.consumption += r.consumption; x.ok++; }
           else if (r.status === 'OPEN_PERIOD') x.open = true;
           else if (r.status !== 'NO_READING') x.partial = true;
         });

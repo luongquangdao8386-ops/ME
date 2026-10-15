@@ -2,6 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, invalidate, today } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -78,6 +79,7 @@ export async function renderEquipmentList(view, ctx) {
   const canCreate = await can('equipment.create');
   const canPrint = await can('qr.print');
   const excelBtn = await excelLink('equipment');
+  const rptBtn = await reportLink('RPT_EQUIPMENT', { location_id: filt.location, status: filt.status });
   shell.setScreen({
     title: 'screen.equipment_list', back: params.id && !wide ? '/equipment' : '/',
     actions: canCreate && !wide ? [{ icon: 'plus', label: biText('btn.add'), onClick: () => navigate('/equipment/new'), disabled: !navigator.onLine }] : []
@@ -98,7 +100,7 @@ export async function renderEquipmentList(view, ctx) {
     </div>
     <div class="row tools">
       ${canCreate && wide ? `<a class="btn small primary" href="#/equipment/new">${ICON.plus}<span>${bi('btn.add')}</span></a>` : ''}
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${rptBtn}
       ${canPrint && wide ? `<button type="button" class="btn small" id="eq-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
       ${excelBtn}
     </div>
@@ -194,6 +196,8 @@ async function renderPane(pane, id, tab, ctx) {
   const vendor = eq.vendor_id ? await byId('VENDOR', eq.vendor_id) : null;
   const kv = (k, v) => (v ? `<div class="kv"><span>${bi(k)}</span><strong>${v}</strong></div>` : '');
   const work = RELEASED_DOT >= 2 && !eq.archived_at ? await openWorkHtml(eq) : { html: '', buttons: '' };
+  // Đợt 3: lối sang Lộ điện khi thiết bị nối tủ hoặc là phụ tải (B2); In/xuất PDF hồ sơ
+  const links = RELEASED_DOT >= 3 ? [await (await import('./circuits.js')).equipmentCircuitLinks(eq.equipment_id), await recordPdfBtn('EQUIPMENT', eq.equipment_id)].join('').trim() : '';
   pane.innerHTML = `<section class="card eq-head">
     ${eq.archived_at ? `<p class="banner warn">${bi('eq.archived_banner')} · ${esc(fmtDateTime(eq.archived_at))}</p>` : ''}
     <div class="rec-top"><span class="code big">${esc(eq.equipment_code || biText('tag.pending_code'))}</span>${badge('equipment_status.' + eq.status)}</div>
@@ -221,6 +225,7 @@ async function renderPane(pane, id, tab, ctx) {
     </div>` : (canArchive ? `<div class="row"><button type="button" class="btn small" id="eq-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi(eq.archived_at ? 'btn.unarchive' : 'btn.archive')}</span></button></div>` : '')}
     ${!online && (canEdit || canArchive) ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     ${work.buttons}${work.html}
+    ${links ? `<div class="row">${links}</div>` : ''}
   </section>
   <div class="tabs-bar" role="tablist">${TABS.map((t) => `<button type="button" role="tab" class="tab${t === tab ? ' on' : ''}" data-tab="${t}" aria-selected="${t === tab}">${bi('tab.' + t)}</button>`).join('')}</div>
   <section class="card tab-body" id="eq-tab"></section>`;
@@ -232,6 +237,7 @@ async function renderPane(pane, id, tab, ctx) {
     navigate(base, { replace: true });
   }));
   wireRetranslate(pane, async () => { await afterCommit(); repaint(); });
+  wireRecordPdf(pane);
   const hrs = $('#eq-hours', pane);
   if (hrs) hrs.addEventListener('click', async () => { const { hoursDialog } = await import('./maintenance.js'); if (await hoursDialog(eq.equipment_id)) repaint(); });
   const arch = $('#eq-arch', pane);

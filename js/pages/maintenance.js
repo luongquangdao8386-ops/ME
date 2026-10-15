@@ -12,6 +12,7 @@ import {
 } from '../form.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.js';
 import { replaceDialog } from './partreplace.js';
@@ -78,6 +79,7 @@ export async function renderMaintenance(view, ctx) {
     ] : []
   });
   const excelBtn = await excelLink('maintenance_plans');
+  const rptBtn = await reportLink('RPT_MAINTENANCE');
   const tabs = ['wo', 'plans', 'calendar'];
   const tabLabel = { wo: 'tab.work_orders', plans: 'tab.plans', calendar: 'tab.calendar' };
   let body = '';
@@ -93,7 +95,7 @@ export async function renderMaintenance(view, ctx) {
         ${can_.cl ? `<a class="btn small" href="#/maintenance/checklists">${ICON.inspections}<span>${bi('mt.checklists')}</span></a>` : ''}
         ${can_.hours ? `<button type="button" class="btn small" id="mt-hours">${ICON.sync}<span>${bi('mt.hours_record')}</span></button>` : ''}
         ${excelBtn}
-        <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+        ${rptBtn}
       </div>
     </div>${body}`;
   const again = () => renderMaintenance(view, ctx);
@@ -692,6 +694,7 @@ export async function renderWorkOrder(view, ctx) {
       ${p.assign && ['DRAFT', 'ASSIGNED', 'IN_PROGRESS'].includes(w.status) && !localNew ? `<button type="button" class="btn small" id="wo-assign" ${online ? '' : 'disabled'}>${bi('mt.assign')}</button>` : ''}
       ${p.replace && executing && started && e ? `<button type="button" class="btn small" id="wo-replace">${bi('part.replace')}</button>` : ''}
       ${p.cancel && !localNew && ((lead && WO_OPEN.has(w.status)) || (!lead && w.status === 'DRAFT' && w.created_by === u)) ? `<button type="button" class="btn small" id="wo-cancel" ${online ? '' : 'disabled'}>${bi('mt.cancel')}</button>` : ''}
+      ${localNew ? '' : await recordPdfBtn('WORK_ORDER', w.work_order_id)}
     </div>
     ${!online && p.assign ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     ${localNew ? `<p class="muted small">${bi('mt.local_new_note')}</p>` : ''}
@@ -910,6 +913,7 @@ export async function renderWorkOrder(view, ctx) {
   on('wo-accept', () => acceptFlow('ACCEPT'));
   on('wo-return', () => acceptFlow('RETURN'));
   wireNextStep(view);
+  wireRecordPdf(view);
 }
 
 /** Nút chụp ảnh có tên lấy từ từ điển (đủ hai thứ tiếng, không cần dịch máy) */

@@ -10,6 +10,7 @@ import { selectInput, wireForm, showErrors, writeOnline, writeWithPin, oneLang, 
 import { processPhoto, uploadDoc } from '../media.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.js';
 import { replaceDialog } from './partreplace.js';
@@ -47,6 +48,7 @@ export async function renderRepairList(view, ctx) {
   const wide = isWide();
   const canReport = await can('repair.report');
   const excelBtn = await excelLink('repairs_history');
+  const rptBtn = await reportLink('RPT_REPAIRS');
   shell.setScreen({
     title: 'module.repairs', back: '/',
     actions: !wide && canReport ? [{ icon: 'plus', label: biText('rp.new'), onClick: () => navigate('/repairs/new') }] : []
@@ -73,7 +75,7 @@ export async function renderRepairList(view, ctx) {
     <div class="row tools">
       ${wide && canReport ? `<a class="btn small primary" href="#/repairs/new">${ICON.plus}<span>${bi('rp.new')}</span></a>` : ''}
       ${excelBtn}
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${rptBtn}
     </div>
     <p class="muted small">${bi('field.total', { N: list.length })}</p></div>`;
   let body;
@@ -406,6 +408,7 @@ export async function renderRepair(view, ctx) {
       ${p.replace && processing && e ? `<button type="button" class="btn small" id="rp-replace">${bi('part.replace')}</button>` : ''}
       ${canCancel ? `<button type="button" class="btn small" id="rp-cancel" ${online ? '' : 'disabled'}>${bi('rp.cancel')}</button>` : ''}
       ${p.reopen && ['COMPLETED', 'CANCELLED'].includes(r.status) && !localNew ? `<button type="button" class="btn small" id="rp-reopen" ${online ? '' : 'disabled'}>${bi('rp.reopen')}</button>` : ''}
+      ${localNew ? '' : await recordPdfBtn('REPAIR', r.repair_id)}
     </div>
     ${!online && (p.assign || canCancel) ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
     ${localNew ? `<p class="muted small">${bi('rp.local_new_note')}</p>` : ''}
@@ -604,6 +607,7 @@ export async function renderRepair(view, ctx) {
   on('rp-accept', () => acceptFlow('PASS'));
   on('rp-return', () => acceptFlow('FAIL'));
   wireNextStep(view);
+  wireRecordPdf(view);
 }
 
 /** Ảnh hiện trường còn chờ gửi (ảnh nhỏ từ hàng chờ trên máy) */

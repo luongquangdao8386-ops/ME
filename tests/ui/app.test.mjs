@@ -24,25 +24,18 @@ const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
 const noOverflow = (page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
 
 for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
-  test(`trang chủ ${name}: lưới 9 ô (3 ô Đợt 3 mờ "Sắp có"), nav/menu, logo chỉ ở trang chủ, không M&E ở header nghiệp vụ (NT1-01, 02, 04)`, async () => {
+  test(`trang chủ ${name}: lưới 9 ô (Đợt 3 đã chạy: đủ 9 ô), nav/menu, logo chỉ ở trang chủ, không M&E ở header nghiệp vụ (NT1-01, 02, 04)`, async () => {
     const app = await openApp({ env: seeded(), ...vp });
     try {
       const { page } = app;
       await login(page);
       assert.equal(await page.locator('.grid9 > .tile').count(), 9);
-      const dims = page.locator('.grid9 > .tile.dim[aria-disabled="true"]');
-      assert.equal(await dims.count(), 3, 'Đợt 2 đã chạy: còn Điện nước, Báo cáo, Tra cứu lộ điện');
-      for (let i = 0; i < 3; i++) assert.ok((await dims.nth(i).textContent()).includes('Sắp có · 即将推出'));
-      assert.equal(await page.locator('.grid9 > a.tile[href="#/maintenance"]').count(), 1);
-      assert.equal(await page.locator('.grid9 > a.tile[href="#/repairs"]').count(), 1);
+      assert.equal(await page.locator('.grid9 > .tile.dim[aria-disabled="true"]').count(), 0, 'Đợt 3 đã chạy: không còn ô "Sắp có"');
+      for (const h of ['maintenance', 'repairs', 'utilities', 'reports', 'circuits']) assert.equal(await page.locator(`.grid9 > a.tile[href="#/${h}"]`).count(), 1, h);
       const grid = await page.textContent('.grid9');
       assert.ok(grid.includes('Kho vật tư · 物料库') && grid.includes('Tra cứu lộ điện · 电路查询'), 'C1');
+      assert.ok(!grid.includes('Sắp có'));
       assert.ok(!/Kho linh kiện|备件库|mạch điện/.test(await page.textContent('body')));
-      // Chạm ô mờ: không chuyển màn, báo "Chức năng sẽ có ở đợt sau"
-      await dims.first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
-      await dims.first().click({ force: true }); // aria-disabled không chặn chạm thật
-      assert.equal(await page.evaluate(() => location.hash), '#/');
-      await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('该功能将在后续版本推出'));
       assert.equal(await page.locator('img.brand-logo').count(), 1);
       if (name === 'iphone') {
         assert.equal(await page.locator('.bnav > *').count(), 5);
@@ -60,7 +53,8 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
       await page.waitForFunction(() => document.querySelector('#hdr-title').textContent.includes('Thiết bị'));
       assert.equal(await page.locator('img.brand-logo').count(), 0);
       assert.ok(!(await page.textContent('.hdr')).includes('M&E'));
-      for (const h of ['#/alerts', '#/account', '#/account/drafts', '#/materials', '#/alerts/month', '#/work', '#/maintenance', '#/repairs', '#/maintenance/checklists']) {
+      for (const h of ['#/alerts', '#/account', '#/account/drafts', '#/materials', '#/alerts/month', '#/work', '#/maintenance', '#/repairs', '#/maintenance/checklists',
+        '#/utilities', '#/utilities/meters', '#/utilities/tariffs', '#/circuits', '#/reports', '#/reports/templates']) {
         await go(page, h);
         await page.waitForTimeout(400);
         assert.ok(await noOverflow(page), h);
@@ -86,6 +80,42 @@ test('máy chủ đã dán Code.gs Đợt 2 nhưng chưa chạy migrateSchema: a
     assert.equal(await page.getAttribute('.bnav-item[data-nav="work"]', 'aria-disabled'), 'true');
     await go(page, '#/maintenance');
     await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Chức năng sẽ có ở đợt sau'));
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('máy chủ đã dán Code.gs Đợt 3 nhưng chưa chạy migrateSchema: app giữ Đợt 2 — Điện nước, Báo cáo, Tra cứu lộ điện mờ "Sắp có", chạm báo đợt sau', async () => {
+  const env = seeded();
+  const g = env.g;
+  g.dbReset_();
+  g.withWriteLock_(() => { const st = g.readState_(); g.stateWrite_(st, { schema_version: ['STRING', '1.5.2'] }, 'TEST'); });
+  g.clearSysCaches_();
+  const app = await openApp({ env, ...IPHONE });
+  try {
+    const { page } = app;
+    await login(page);
+    const dims = page.locator('.grid9 > .tile.dim[aria-disabled="true"]');
+    assert.equal(await dims.count(), 3);
+    for (let i = 0; i < 3; i++) assert.ok((await dims.nth(i).textContent()).includes('Sắp có · 即将推出'));
+    const dimText = (await dims.allTextContents()).join('|');
+    assert.ok(dimText.includes('Điện nước') && dimText.includes('Báo cáo') && dimText.includes('Tra cứu lộ điện'), dimText);
+    assert.equal(await page.locator('.grid9 > a.tile[href="#/maintenance"]').count(), 1);
+    assert.equal(await page.getAttribute('.bnav-item[data-nav="work"]', 'aria-disabled'), null, 'Công việc vẫn mở (Đợt 2)');
+    // Chạm ô mờ: không chuyển màn, báo "Chức năng sẽ có ở đợt sau"
+    await dims.first().evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await dims.first().click({ force: true }); // aria-disabled không chặn chạm thật
+    assert.equal(await page.evaluate(() => location.hash), '#/');
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('该功能将在后续版本推出'));
+    // Mở thẳng địa chỉ màn Đợt 3 (tem QR, link cũ): báo đợt sau, không gọi action chưa bật
+    for (const h of ['#/utilities', '#/reports', '#/circuits']) {
+      await go(page, h);
+      await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Chức năng sẽ có ở đợt sau'));
+    }
+    // Nút Báo cáo ở module đã chạy (Thiết bị) còn mờ "Sắp có", chưa có nút xuất PDF hồ sơ
+    await go(page, '#/equipment');
+    await page.waitForSelector('.view button.btn[data-soon="1"]');
+    assert.ok((await page.textContent('.view button.btn[data-soon="1"]')).includes('Sắp có'));
+    assert.equal(await page.locator('a[href^="#/reports/run/"]').count(), 0);
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

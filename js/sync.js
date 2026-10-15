@@ -49,7 +49,10 @@ export const KEY = {
   // Đợt 2
   MAINTENANCE_PLAN: 'plan_id', CHECKLIST_ITEM: 'template_item_id', WORK_ORDER: 'work_order_id', WO_RESULT: 'result_id',
   OPERATING_READING: 'operating_reading_id', REPAIR: 'repair_id', REPAIR_TASK: 'repair_task_id', MATERIAL_REQUEST: 'request_id',
-  MATERIAL_REQUEST_LINE: 'request_line_id', MATERIAL_USAGE: 'usage_line_id'
+  MATERIAL_REQUEST_LINE: 'request_line_id', MATERIAL_USAGE: 'usage_line_id',
+  // Đợt 3
+  METER: 'meter_id', METER_SEGMENT: 'segment_id', METER_READING: 'reading_id', METER_EVENT: 'event_id', TARIFF: 'tariff_id',
+  PANEL: 'panel_id', CIRCUIT: 'circuit_id', CIRCUIT_LOAD: 'load_link_id', REPORT_DEFINITION: 'report_definition_id', REPORT_RUN: 'report_run_id'
 };
 
 function keyOf(type, rec) {

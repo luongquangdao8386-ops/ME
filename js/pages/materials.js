@@ -2,6 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { excelLink } from '../excel-link.js';
+import { reportLink } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -44,6 +45,7 @@ export async function renderMaterialList(view, ctx) {
   const canCreate = await can('material.create');
   const canPrint = await can('qr.print');
   const excelBtn = await excelLink('materials');
+  const rptBtn = await reportLink('RPT_MATERIALS');
   shell.setScreen({
     title: 'module.warehouse', back: '/',
     actions: canCreate && !wide ? [{ icon: 'plus', label: biText('btn.add'), onClick: () => navigate('/materials/new'), disabled: !navigator.onLine }] : []
@@ -83,7 +85,7 @@ export async function renderMaterialList(view, ctx) {
     </div>
     <div class="row tools">
       ${canCreate && wide ? `<a class="btn small primary" href="#/materials/new">${ICON.plus}<span>${bi('btn.add')}</span></a>` : ''}
-      <button type="button" class="btn small dim" data-soon="1" aria-disabled="true">${ICON.reports}<span>${bi('btn.report')}</span><span class="soon">${bi('tag.coming_soon')}</span></button>
+      ${rptBtn}
       ${canPrint && wide ? `<button type="button" class="btn small" id="mt-print" ${selected.size ? '' : 'disabled'}>${ICON.print}<span>${bi('btn.print_qr')}</span> <span class="count">${selected.size ? '(' + selected.size + ')' : ''}</span></button>` : ''}
       ${excelBtn}
     </div>

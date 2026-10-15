@@ -19,13 +19,26 @@ export async function deadlineText(it) {
   return nameText(it.rec, 'title');
 }
 
-const KIND_KEY = { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', REPAIR: 'home.item_repair' };
+const KIND_KEY = { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', REPAIR: 'home.item_repair', READING: 'home.item_reading' };
 function kindTag(kind) {
   return `<span class="kind k-${kind.toLowerCase()}">${bi(KIND_KEY[kind] || 'home.item_service')}</span>`;
 }
 
-/** Đợt 2 đã chạy trên máy chủ */
+/** Đợt 2, Đợt 3 đã chạy trên máy chủ */
 const dot2 = () => shellMod.RELEASED_DOT >= 2;
+const dot3 = () => shellMod.RELEASED_DOT >= 3;
+
+/** Đồng hồ đang dùng và chỉ số của từng đồng hồ (máy chủ + chờ gửi trên máy) — Đợt 3 */
+async function meterReads() {
+  const meters = (await recs('METER')).filter((m) => !m.archived_at && m.active !== false);
+  const by = new Map(meters.map((m) => [m.meter_id, []]));
+  (await recs('METER_READING')).forEach((r) => { if (by.has(r.meter_id) && !r.archived_at) by.get(r.meter_id).push(r); });
+  const { queueItems } = await import('../sync.js');
+  (await queueItems().catch(() => [])).forEach((o) => {
+    if (o.action === 'reading.create' && o.state !== 'REJECTED' && by.has(o.payload.meter_id)) by.get(o.payload.meter_id).push({ ...o.payload, status: 'VALID' });
+  });
+  return { meters, by };
+}
 
 /** Mục trong lịch tuần: hạn kiểm định, hạn hợp đồng (hạn báo gia hạn, ngày hết hạn), dịch vụ HĐ chưa làm (6.6) */
 async function weekItems(from, to) {
@@ -43,6 +56,17 @@ async function weekItems(from, to) {
   for (const s of await recs('CONTRACT_SERVICE')) {
     if (s.performed_at || !s.due_date) continue;
     if (s.due_date >= from && s.due_date <= to) out.push({ date: s.due_date, kind: 'SERVICE', code: '', href: '/contracts/' + s.contract_id });
+  }
+  // Mốc đọc chỉ số (Đợt 3): một mục mỗi ngày có mốc, kèm số đồng hồ; đã đọc đủ thì mờ
+  if (dot3()) {
+    const { lastBoundary, readingDue } = await import('../meters.js');
+    const { meters, by } = await meterReads();
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      const due = meters.filter((m) => lastBoundary(m, d) === d);
+      if (!due.length) continue;
+      const done = d <= today() && due.every((m) => readingDue(m, by.get(m.meter_id) || [], d).state === 'DONE');
+      out.push({ date: d, kind: 'READING', code: String(due.length), href: '/utilities/meters', done });
+    }
   }
   // Phiếu bảo trì theo hạn (Đợt 2)
   if (dot2()) {
@@ -93,6 +117,19 @@ async function gridHtml() {
     open.maintenance = (await recs('WORK_ORDER')).filter((w) => WO_OPEN.has(w.status)).length;
     open.repairs = (await recs('REPAIR')).filter((r) => REPAIR_OPEN.has(r.status)).length;
   }
+  // Điện nước: số đồng hồ cần đọc ở mốc hiện tại; Lộ điện: số lộ; Báo cáo: số mẫu được xem (Đợt 3)
+  const extra = {};
+  if (dot3()) {
+    const { readingDue } = await import('../meters.js');
+    const { meters, by } = await meterReads();
+    const due = meters.filter((m) => readingDue(m, by.get(m.meter_id) || []).state !== 'DONE').length;
+    if (due) extra.utilities = bi('home.meters_due', { N: due });
+    else if (meters.length) extra.utilities = bi('home.records', { N: meters.length });
+    const nc = (await recs('CIRCUIT')).filter((c) => !c.archived_at).length;
+    if (nc) extra.circuits = bi('home.circuits_n', { N: nc });
+    const nr = (await recs('REPORT_DEFINITION')).filter((d) => !d.archived_at && d.active !== false).length;
+    if (nr) extra.reports = bi('home.reports_n', { N: nr });
+  }
   return `<section class="grid9" aria-label="${esc(biText('menu.title'))}">${MODULES.map((m) => {
     const soon = m.dot > shellMod.RELEASED_DOT;
     if (soon) {
@@ -100,7 +137,8 @@ async function gridHtml() {
     }
     const n = counts[m.key];
     const o = open[m.key];
-    return `<a class="tile" href="#${m.path}">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span>${o ? `<span class="tile-count">${bi('home.open_n', { N: o })}</span>` : (n ? `<span class="tile-count">${bi('home.records', { N: n })}</span>` : '')}</a>`;
+    const tail = o ? bi('home.open_n', { N: o }) : (extra[m.key] || (n ? bi('home.records', { N: n }) : ''));
+    return `<a class="tile" href="#${m.path}">${ICON[m.icon]}<span class="tile-label">${bi('module.' + m.key)}</span>${tail ? `<span class="tile-count">${tail}</span>` : ''}</a>`;
   }).join('')}</section>`;
 }
 
