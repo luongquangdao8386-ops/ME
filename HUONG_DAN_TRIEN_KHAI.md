@@ -16,7 +16,7 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Thứ tự lần này (Đợt 2):** Phần J (đưa máy chủ Đợt 2 lên THỬ) → Phần K (thử Đợt 2 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần L. Phần F, G, H (dựng THẬT, tạo `ME-thu`) đã làm xong ngày 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
+**Thứ tự lần này (Đợt 2):** Phần J (đưa máy chủ Đợt 2 lên THỬ) → Phần K (thử Đợt 2 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần L. **Trạng thái 15/10/2026:** Phần J, K đã làm xong trên THỬ (app 1.0.0-d2.13, máy chủ THỬ chạy Code.gs d2.1 — phần máy chủ sau d2.1 chỉ khác số phiên bản và bỏ dấu chấm cuối do dịch máy); còn Phần L. Phần F, G, H (dựng THẬT, tạo `ME-thu`) đã làm xong ngày 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 
@@ -59,11 +59,13 @@ Gặp lỗi: chụp màn hình (có mã phiếu, giờ) gửi Claude. Nháp mấ
 
 ## Phần L — Phát hành Đợt 2 lên THẬT (chỉ sau khi nói "phát hành THẬT")
 
-1. Claude đưa đúng bản đã thử lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 1 tới khi máy chủ THẬT chạy `migrateSchema`).
-2. App THẬT: **Quản trị → Sao lưu ngay** → chờ **Đã kiểm chứng**.
-3. Dán **cùng bản** `Code.gs` (link raw nhánh `main`) vào **`ME_MayChu_THAT`** → Lưu → chạy **`migrateSchema`** → **`healthCheck`**.
-4. **Triển khai → Quản lý bản triển khai → bút chì → Phiên bản mới** → Mô tả `THẬT d2.1` → Triển khai → kiểm link ẩn danh `?action=system.health`.
-5. Mở `/ME/` → Ctrl+Shift+R → Trạng thái hệ thống: schema 1.5.2. Tạo mẫu checklist, kế hoạch thật (hoặc nhập Excel), cấp vai trò Kỹ thuật/Báo sự cố cho người dùng.
+1. Claude đưa đúng bản đã thử (nhánh `claude/upbeat-heisenberg-tdnmpa`, bản 1.0.0-d2.13 trở lên) lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 1 tới khi máy chủ THẬT chạy `migrateSchema`). Chờ 2–3 phút (tab **Actions** của repo `ME` xanh) rồi mới làm bước 5; ngay sau khi phát hành, trình duyệt có thể còn nhận tệp cũ — gặp màn lỗi thì bấm **Tải lại bản mới**.
+2. App THẬT: **Tài khoản → Quản trị → Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C → <https://script.google.com> → dự án **`ME_MayChu_THAT`** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+4. Ô chọn hàm → **`migrateSchema`** → **Chạy** → Nhật ký có `schema_version=1.5.2`. Chạy **`healthCheck`** → các dòng ĐẠT (trừ cảnh báo đã biết).
+5. **Triển khai → Quản lý bản triển khai → bút chì → Phiên bản: Phiên bản mới** → Mô tả `THẬT d2` → **Triển khai** (giữ nguyên link) → cửa sổ ẩn danh mở link `/exec` THẬT thêm `?action=system.health` → thấy `"ok":true`.
+6. Mở `/ME/` → Ctrl+Shift+R → **Tài khoản**: phiên bản app đúng bản đã thử; **Trạng thái hệ thống**: schema **1.5.2**. Lưới 9 ô: Bảo trì, Sửa chữa sáng; nút Công việc dùng được.
+7. Dữ liệu thật: **Danh mục chung → Danh mục tra cứu → Nguyên nhân** (mã nguyên nhân hỏng), **Mẫu checklist**, **Kế hoạch bảo trì** (hoặc nhập Excel "Kế hoạch bảo trì và checklist"), sự cố cũ (Excel "Sự cố (lịch sử)": người nhập gửi duyệt, người khác cấp 3–4 Nhập dữ liệu + PIN). Cấp vai trò **Kỹ thuật** / **Báo sự cố** cho người dùng cấp 2 (Tài khoản → Quản trị → Người dùng).
 
 ## Phần F — Dựng máy chủ THẬT (làm một lần)
 
