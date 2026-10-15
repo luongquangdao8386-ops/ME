@@ -303,7 +303,8 @@ export function statusBadge(kind, status) {
 
 /** Thẻ phụ: ưu tiên, mức độ (C4) */
 export function prioBadges(rec, kind) {
-  const p = rec.priority && rec.priority !== 'NORMAL' ? badge('priority.' + rec.priority) : '';
+  // Đứng cạnh nhãn mức độ (cùng chữ "Cao") → ghi rõ "Ưu tiên cao"
+  const p = rec.priority && rec.priority !== 'NORMAL' ? badge('priority_tag.' + rec.priority) : '';
   const s = kind === 'REPAIR' && rec.severity ? badge('severity.' + rec.severity) : '';
   return [s, p].filter(Boolean).join(' ');
 }

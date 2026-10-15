@@ -85,7 +85,7 @@ export async function renderRepairList(view, ctx) {
       <th>${bi('rp.reported_at')}</th><th>${bi('rp.reported_by')}</th><th>${bi('wk.col.assignee')}</th><th>${bi('rp.downtime')}</th><th>${bi('col.status')}</th></tr></thead>
       <tbody>${shown.map((r) => { const e = eqs.get(r.equipment_id); const l = e ? locs.get(e.location_id) : null; return `<tr class="click" data-href="/repairs/${esc(r.repair_id)}">
         <td class="code">${r.repair_code ? esc(r.repair_code) : bi('tag.pending_code')}</td><td>${esc(eqText(e))}${l ? `<div class="muted small">${esc(l.location_code)}</div>` : ''}</td>
-        <td>${biName(r, 'symptom')}</td><td>${r.severity ? badge('severity.' + r.severity) : ''} ${r.priority && r.priority !== 'NORMAL' ? badge('priority.' + r.priority) : ''}</td>
+        <td>${biName(r, 'symptom')}</td><td>${r.severity ? badge('severity.' + r.severity) : ''} ${r.priority && r.priority !== 'NORMAL' ? badge('priority_tag.' + r.priority) : ''}</td>
         <td class="num">${esc(fmtDateTime(r.reported_at))}</td><td>${esc(r.reported_by_name || '')}</td><td>${esc(r.assignee_name || '')}</td>
         <td>${r.stopped_at && !r.restored_at ? badge('rp.machine_down') : esc(downtimeText(r))}</td>
         <td>${statusBadge('REPAIR', r.status)} ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>

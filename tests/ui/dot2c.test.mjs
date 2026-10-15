@@ -621,3 +621,21 @@ test('web C3: lô Sự cố (lịch sử) do KT gửi duyệt → Lô gần đâ
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('web: danh sách Sửa chữa — mức độ Cao và ưu tiên Cao không trùng chữ ("Cao" + "Ưu tiên cao")', async () => {
+  const { env, c, ktId, rid } = setup();
+  const r0 = env.rows('Repairs')[0];
+  assert.equal(c.write('repair.assign', { repair_id: rid, assignee_user_id: ktId, priority: 'HIGH' }, { expected_version: r0.record_version }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, '#/repairs');
+    await page.waitForSelector(`tr[data-href="/repairs/${rid}"]`);
+    const cell = await page.textContent(`tr[data-href="/repairs/${rid}"]`);
+    assert.ok(cell.includes('Ưu tiên cao · 高优先'), cell);
+    await go(page, `#/repairs/${rid}`);
+    await page.waitForFunction(() => ((document.querySelector('.rec-top') || {}).textContent || '').includes('Ưu tiên cao'), null, { timeout: 15000 });
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
