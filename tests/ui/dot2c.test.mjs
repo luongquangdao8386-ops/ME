@@ -538,3 +538,30 @@ test('lẫn bản (tệp work.js cũ chưa có hàm mới, như CDN trả tệp 
     assert.equal(await page.locator('[data-reload-fresh]').count(), 0);
   } finally { await app.close(); }
 });
+
+test('web: trang kế hoạch theo giờ chạy hiện "còn N h" cạnh mốc (như danh sách), tới mốc thì "đã tới mốc" và có phiếu', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  const eq = uuid();
+  assert.equal(c.write('equipment.create', { equipment_id: eq, name_vi: 'Máy nén khí 01' }).ok, true);
+  const rec = (h) => { const r = c.write('maintenance.hours.record', { operating_reading_id: uuid(), equipment_id: eq, cumulative_hours: h }); assert.equal(r.ok, true, JSON.stringify(r)); return r; };
+  rec(1000);
+  const plan = uuid();
+  const pr = c.write('maintenance.plan.edit', { plan_id: plan, equipment_id: eq, title_vi: 'Bảo dưỡng 500 giờ', interval_type: 'OPERATING_HOURS', interval_value: 500 });
+  assert.equal(pr.ok, true, JSON.stringify(pr));
+  assert.equal(Number(env.rows('MaintenancePlans')[0].operating_hours_target), 1500);
+  rec(1400);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, `#/maintenance/plans/${plan}`);
+    await page.waitForFunction(() => ((document.querySelector('.view') || {}).textContent || '').includes('còn 100 h'), null, { timeout: 15000 });
+    assert.equal(env.rows('WorkOrders').length, 0);
+    rec(1500);
+    assert.equal(env.rows('WorkOrders').length, 1, 'tới mốc sinh phiếu');
+    await page.reload();
+    await page.waitForFunction(() => ((document.querySelector('.view') || {}).textContent || '').includes('đã tới mốc'), null, { timeout: 15000 });
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

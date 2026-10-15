@@ -48,8 +48,12 @@ function intervalText(p) {
 }
 
 /** Giờ chạy mới nhất của thiết bị */
+/** Số đọc giờ chạy mới hơn trước: theo thời điểm đọc, lúc ghi; cùng lúc thì lần đặt lại đồng hồ, rồi số lớn hơn (giờ chạy chỉ tăng) */
+const newestReading = (a, b) => String(b.measured_at).localeCompare(String(a.measured_at)) || String(b.created_at || '').localeCompare(String(a.created_at || ''))
+  || (b.is_reset === true) - (a.is_reset === true) || Number(b.cumulative_hours) - Number(a.cumulative_hours);
+
 async function latestHours(eqId) {
-  const list = (await recs('OPERATING_READING')).filter((r) => r.equipment_id === eqId).sort((a, b) => String(b.measured_at).localeCompare(String(a.measured_at)));
+  const list = (await recs('OPERATING_READING')).filter((r) => r.equipment_id === eqId && !r.archived_at).sort(newestReading);
   return list[0] || null;
 }
 
@@ -105,6 +109,13 @@ export async function renderMaintenance(view, ctx) {
   if (hb) hb.addEventListener('click', async () => { if (await hoursDialog(null)) again(); });
 }
 
+/** " · còn N h" / " · đã tới mốc" của kế hoạch theo giờ chạy (danh sách và trang kế hoạch dùng chung) */
+function hoursLeftText(p, h0) {
+  if (!h0 || p.operating_hours_target === '' || p.operating_hours_target === null || p.operating_hours_target === undefined) return '';
+  const left = Number(p.operating_hours_target) - Number(h0.cumulative_hours);
+  return ` · ${left > 0 ? bi('mt.hours_left', { N: fmtNumber(left) }) : bi('mt.hours_reached')}`;
+}
+
 const WO_FILTERS = { OPEN: ['DRAFT', 'ASSIGNED', 'IN_PROGRESS'], PENDING_ACCEPTANCE: ['PENDING_ACCEPTANCE'], COMPLETED: ['COMPLETED'], CANCELLED: ['CANCELLED'], ALL: null };
 
 async function woTab(wide) {
@@ -148,7 +159,7 @@ async function plansTab(wide, can_) {
   const eqs = await mapOf('EQUIPMENT');
   const cls = await checklistMap();
   const readings = await recs('OPERATING_READING');
-  const latest = (id) => readings.filter((r) => r.equipment_id === id).sort((a, b) => String(b.measured_at).localeCompare(String(a.measured_at)))[0];
+  const latest = (id) => readings.filter((r) => r.equipment_id === id && !r.archived_at).sort(newestReading)[0];
   const ql = st.q.trim().toLowerCase();
   const all = (await recs('MAINTENANCE_PLAN')).filter((p) => {
     const e = eqs.get(p.equipment_id);
@@ -162,8 +173,7 @@ async function plansTab(wide, can_) {
   const nextText = (p) => {
     if (p.interval_type === 'OPERATING_HOURS') {
       const h0 = latest(p.equipment_id);
-      const left = h0 && p.operating_hours_target !== '' && p.operating_hours_target !== null ? Number(p.operating_hours_target) - Number(h0.cumulative_hours) : null;
-      return `${bi('mt.hours_target')}: <strong>${fmtNumber(p.operating_hours_target)} h</strong>${left !== null ? ` · ${left > 0 ? bi('mt.hours_left', { N: fmtNumber(left) }) : bi('mt.hours_reached')}` : ''}`;
+      return `${bi('mt.hours_target')}: <strong>${fmtNumber(p.operating_hours_target)} h</strong>${hoursLeftText(p, h0)}`;
     }
     return `${bi('mt.next_due')}: <strong>${esc(fmtDate(p.next_due_date) || biText('field.not_set'))}</strong>`;
   };
@@ -281,7 +291,7 @@ export async function renderPlan(view, ctx) {
       ${kv('mt.interval', intervalText(p))}
       ${p.interval_type !== 'OPERATING_HOURS' ? kv('mt.anchor_date', esc(fmtDate(p.anchor_date))) : ''}
       ${p.interval_type !== 'OPERATING_HOURS' ? kv('mt.next_due', esc(fmtDate(p.next_due_date) || biText('field.not_set'))) : ''}
-      ${p.interval_type === 'OPERATING_HOURS' ? kv('mt.hours_target', `${fmtNumber(p.operating_hours_target)} h`) : ''}
+      ${p.interval_type === 'OPERATING_HOURS' ? kv('mt.hours_target', `${fmtNumber(p.operating_hours_target)} h${hoursLeftText(p, last)}`) : ''}
       ${p.interval_type === 'OPERATING_HOURS' ? kv('mt.hours_latest', last ? `${fmtNumber(last.cumulative_hours)} h · ${esc(fmtDateTime(last.measured_at))}` : esc(biText('field.not_set'))) : ''}
       ${kv('mt.checklist', cl ? `${tplName(cl)} · ${bi('mt.revision')} ${cl.revision}` : esc(biText('field.not_set')))}
       ${kv('mt.default_assignee', esc(p.assignee_name || biText('field.not_set')))}
