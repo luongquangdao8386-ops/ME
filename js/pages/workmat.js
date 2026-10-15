@@ -5,7 +5,7 @@ import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
 import { recs, mapOf, can, costModules } from '../data.js';
 import { afterCommit } from '../app.js';
 import { enqueue } from '../sync.js';
-import { writeOnline, writeWithPin, busy, oneLang, parseNumberInput, wireForm, readField, showErrors, dateInput, textInput } from '../form.js';
+import { writeOnline, writeWithPin, busy, evBtn, oneLang, parseNumberInput, wireForm, readField, showErrors, dateInput, textInput } from '../form.js';
 import { handleWriteError } from './equipment.js';
 import { myQueue, uid, level, qtyText, WO_OPEN, REPAIR_OPEN } from '../work.js';
 import { isWide } from '../shell.js';
@@ -319,9 +319,9 @@ async function requestDialog(kind, work, req, reqLines = []) {
         await enqueue('matreq.create', p, { entity_type: 'MATERIAL_REQUEST', entity_id: p.request_id, expected_version: ev0, parent_id: work[KEY[kind]], chain: true, merge: mergeReq });
         wrap.remove(); toast(bi('sync.local_saved'), 'ok'); resolve(true); return;
       }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('matreq.create', p, { expected_version: ev0 });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { $('.form-err', wrap).textContent = (res.errors || []).map((e) => `${e.message_vi} · ${e.message_zh}`).join(' — '); return; }
       wrap.remove(); await handleWriteError(res); resolve(false);
@@ -392,9 +392,9 @@ async function usageDialog(kind, work, line) {
         await enqueue('usage.record', p, { entity_type: 'MATERIAL_USAGE', entity_id: 'usage:' + wid, parent_id: wid, merge: mergeUsage });
         wrap.remove(); toast(bi('sync.local_saved'), 'ok'); resolve(true); return;
       }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('usage.record', p);
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { $('.form-err', wrap).textContent = (res.errors || []).map((e) => `${e.message_vi} · ${e.message_zh}`).join(' — '); return; }
       wrap.remove(); await handleWriteError(res); resolve(false);
@@ -443,9 +443,9 @@ async function costDialog(kind, work) {
       }
       if (uc.length) p.usage_costs = uc;
       if (Object.keys(p).length <= 2) { wrap.remove(); resolve(false); return; }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('work.cost.edit', p, { expected_version: work.record_version });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { $('.form-err', wrap).textContent = (res.errors || []).map((e) => `${e.message_vi} · ${e.message_zh}`).join(' — '); return; }
       wrap.remove(); await handleWriteError(res); resolve(false);

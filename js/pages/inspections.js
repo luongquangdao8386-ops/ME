@@ -10,7 +10,7 @@ import { enqueue, queueItems } from '../sync.js';
 import { processPhoto, uploadDoc } from '../media.js';
 import {
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, assistedFields,
-  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap
+  loadFormDraft, saveFormDraft, clearFormDraft, busy, evBtn, unconfirmedAmbiguous, fieldWrap
 } from '../form.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { handleWriteError } from './equipment.js';
@@ -481,9 +481,9 @@ export async function renderTypes(view, ctx) {
       if (!as.ok) errs.push(...as.errors);
       if (errs.length) { showErrors(wrap, errs); return; }
       if (as.bases.length) payload.i18n_assisted = as.bases;
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('inspection.type.edit', payload, { expected_version: t ? t.record_version : 0 });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); renderTypes(view, ctx); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove();

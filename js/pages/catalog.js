@@ -3,7 +3,7 @@ import { api, bi, esc, badge, biName, nameText, uuid, resMsg } from '../core.js'
 import { $, $$, h, ICON, toast } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, can } from '../data.js';
-import { textInput, textArea, selectInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, busy } from '../form.js';
+import { textInput, textArea, selectInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, busy, evBtn } from '../form.js';
 import { afterCommit } from '../app.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
@@ -28,9 +28,9 @@ function formDialog(titleHtml, inner, save) {
     $('[data-x="cancel"]', wrap).addEventListener('click', () => { wrap.remove(); resolve(false); });
     $('[data-x="save"]', wrap).addEventListener('click', async (ev) => {
       if (!navigator.onLine) { toast(bi('sync.need_network'), 'err'); return; }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await save(wrap);
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (!res) return;
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }

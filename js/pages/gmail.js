@@ -3,7 +3,7 @@ import { api, bi, esc, badge, fmtDate, fmtDateTime, session, uuid } from '../cor
 import { $, $$, h, ICON, dialog } from '../ui.js';
 import { isWide } from '../shell.js';
 import { mapOf } from '../data.js';
-import { textInput, selectInput, fieldWrap, wireForm, readField, showErrors, writeWithPin, busy, toast } from '../form.js';
+import { textInput, selectInput, fieldWrap, wireForm, readField, showErrors, writeWithPin, busy, evBtn, toast } from '../form.js';
 import { handleWriteError } from './equipment.js';
 
 const SCOPES = ['ALL', 'INSPECTION', 'CONTRACT'];
@@ -128,9 +128,9 @@ async function recipientDialog(x, users) {
       // Chỉ gửi cờ xác nhận khi đổi (không ghi đè người/thời điểm xác nhận cũ)
       const conf = readField(wrap, 'confirm');
       if (!x || p.email || conf !== !!x.confirmed_at) p.confirm = conf;
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeWithPin('notify.recipient.edit', p, { expected_version: x ? x.record_version : 0 });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove();

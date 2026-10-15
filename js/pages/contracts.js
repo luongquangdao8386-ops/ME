@@ -7,7 +7,7 @@ import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
 import {
-  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, fieldWrap, assistedFields, retranslateButton, wireRetranslate
+  textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn, fieldWrap, assistedFields, retranslateButton, wireRetranslate
 } from '../form.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { handleWriteError } from './equipment.js';
@@ -259,9 +259,9 @@ async function termsDialog(c, showCost) {
       for (const f of ['start_date', 'end_date', 'renewal_notice_date']) { const val = readField(wrap, f); if (val === null) { showErrors(wrap, [{ field: f, key: 'field.invalid_date' }]); return; } if (val !== (c[f] || '')) p[f] = val; }
       if (showCost) { const val = readField(wrap, 'value'); if (Number.isNaN(val)) { showErrors(wrap, [{ field: 'value', key: 'field.invalid' }]); return; } if (String(val ?? '') !== String(c.value ?? '')) p.value = val === null ? '' : val; }
       if (!p.reason) { showErrors(wrap, [{ field: 'reason', key: 'field.reason_required' }]); return; }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeWithPin('contract.editTerms', p, { expected_version: c.record_version });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove();
@@ -303,9 +303,9 @@ async function serviceDialog(c, s, ces, eqs, showCost) {
         await enqueue('contract.service.record', p, { entity_type: 'CONTRACT_SERVICE', entity_id: p.service_id, expected_version: s ? s.record_version : 0 });
         wrap.remove(); toast(bi('sync.local_saved'), 'ok'); resolve(true); return;
       }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('contract.service.record', p, { expected_version: s ? s.record_version : 0 });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove(); await handleWriteError(res); resolve(false);

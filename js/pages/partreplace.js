@@ -4,7 +4,7 @@ import { toast, h, $ } from '../ui.js';
 import { recs, mapOf } from '../data.js';
 import { afterCommit } from '../app.js';
 import { enqueue } from '../sync.js';
-import { writeOnline, busy, oneLang, parseNumberInput } from '../form.js';
+import { writeOnline, busy, evBtn, oneLang, parseNumberInput } from '../form.js';
 import { handleWriteError } from './equipment.js';
 import { qtyText } from '../work.js';
 
@@ -64,9 +64,9 @@ export async function replaceDialog(kind, work, presetPartId = '') {
         await enqueue('part.replace', p, { entity_type: 'EQUIPMENT_PART_EVENT', entity_id: p.event_id, parent_id: work[KEY[kind]] });
         wrap.remove(); toast(bi('sync.local_saved'), 'ok'); resolve(true); return;
       }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('part.replace', p);
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { err.textContent = (res.errors || []).map((e) => `${e.message_vi} · ${e.message_zh}`).join(' — '); return; }
       wrap.remove(); await handleWriteError(res); resolve(false);

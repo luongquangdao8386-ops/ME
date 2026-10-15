@@ -2,7 +2,7 @@
 import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, uuid, resMsg, session, BUILD_VERSION } from '../core.js';
 import { $, $$, ICON, toast, dialog } from '../ui.js';
 import { can, roleLevel } from '../data.js';
-import { writeOnline, writeWithPin, busy } from '../form.js';
+import { writeOnline, writeWithPin, busy, evBtn } from '../form.js';
 import { afterCommit } from '../app.js';
 import { loadXlsx, readImportFile, buildSheet, aoaSheet, workbookFile } from '../xlsx.js';
 import { shareFileNow } from '../media.js';
@@ -207,20 +207,20 @@ export async function renderExcel(view, { shell, params }) {
   const chips = group.length > 1 ? `<div class="chips">${group.map((k) => `<a class="chip${k === key ? ' on' : ''}" href="#/excel/${k}">${bi('excel.tpl.' + k)}</a>`).join('')}</div>` : `<p><strong>${bi('excel.tpl.' + key)}</strong></p>`;
   view.innerHTML = `${chips}${exportCard}${importCard}${state.summary ? summaryHtml(key, state.summary) : ''}${list}`;
   const ex = $('#x-export', view);
-  if (ex) ex.addEventListener('click', async (ev) => { busy(ev.currentTarget, true); try { await exportFile(key, ($('#x-due', view) || {}).value || 'ALL'); } finally { busy(ev.currentTarget, false); } });
+  if (ex) ex.addEventListener('click', async (ev) => { busy(evBtn(ev), true); try { await exportFile(key, ($('#x-due', view) || {}).value || 'ALL'); } finally { busy(evBtn(ev), false); } });
   const tp = $('#x-template', view);
-  if (tp) tp.addEventListener('click', async (ev) => { busy(ev.currentTarget, true); try { await templateFile(key); } finally { busy(ev.currentTarget, false); } });
+  if (tp) tp.addEventListener('click', async (ev) => { busy(evBtn(ev), true); try { await templateFile(key); } finally { busy(evBtn(ev), false); } });
   const fi = $('#x-file', view);
   if (fi) fi.addEventListener('change', () => { const f = fi.files && fi.files[0]; if (f) previewFile(view, key, sheets, f, repaint); });
   const er = $('#x-errors', view);
   if (er) er.addEventListener('click', () => errorsFile(key, state.summary.errors || []));
   const cm = $('#x-commit', view);
-  if (cm) cm.addEventListener('click', async (ev) => { busy(ev.currentTarget, true); await commitBatch(repaint); });
+  if (cm) cm.addEventListener('click', async (ev) => { busy(evBtn(ev), true); await commitBatch(repaint); });
   const sb = $('#x-submit', view);
   if (sb) sb.addEventListener('click', async (ev) => {
-    busy(ev.currentTarget, true);
+    busy(evBtn(ev), true);
     const r = await writeOnline('import.submit', { import_batch_id: state.batch });
-    if (r.ok) { state.summary = { ...state.summary, ...r.data }; state.list = null; repaint(); } else { busy(ev.currentTarget, false); await handleWriteError(r); }
+    if (r.ok) { state.summary = { ...state.summary, ...r.data }; state.list = null; repaint(); } else { busy(evBtn(ev), false); await handleWriteError(r); }
   });
   const cc = $('#x-cancel', view);
   if (cc) cc.addEventListener('click', async () => {

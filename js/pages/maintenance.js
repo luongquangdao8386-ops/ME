@@ -8,7 +8,7 @@ import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
 import {
   selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, assistedFields,
-  oneLang, busy, loadFormDraft, saveFormDraft, clearFormDraft, parseNumberInput
+  oneLang, busy, evBtn, loadFormDraft, saveFormDraft, clearFormDraft, parseNumberInput
 } from '../form.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
@@ -246,9 +246,9 @@ export async function hoursDialog(eqId) {
         await queueWork('maintenance.hours.record', p, { entity_type: 'OPERATING_READING', entity_id: p.operating_reading_id, expected_version: 0, chain: false });
         wrap.remove(); toast(bi('sync.local_saved'), 'ok'); resolve(true); return;
       }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeOnline('maintenance.hours.record', p);
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) {
         wrap.remove(); await afterCommit();
         const g = (res.data && res.data.generated_work_orders) || [];
@@ -833,12 +833,12 @@ export async function renderWorkOrder(view, ctx) {
     await handleWriteError(res); return false;
   };
   on('wo-start', async (ev) => {
-    busy(ev.currentTarget, true);
+    busy(evBtn(ev), true);
     const res = await sendExec({ work_order_id: w.work_order_id, start_at: isoNowVN(), ...draft.fields });
-    busy(ev.currentTarget, false);
+    busy(evBtn(ev), false);
     await afterWrite(res);
   });
-  on('wo-save', async (ev) => { busy(ev.currentTarget, true); const res = await sendExec(execPayload()); busy(ev.currentTarget, false); await afterWrite(res); });
+  on('wo-save', async (ev) => { busy(evBtn(ev), true); const res = await sendExec(execPayload()); busy(evBtn(ev), false); await afterWrite(res); });
   on('wo-submit', async (ev) => {
     let severity = '';
     if (chk.anyFail && !w.repair_id) {

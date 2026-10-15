@@ -129,9 +129,9 @@ export function wireForm(root) {
       const from = vi.value.trim() && !zh.value.trim() ? 'vi' : (zh.value.trim() && !vi.value.trim() ? 'zh' : '');
       if (!from) { toast(bi('i18n.suggest_need_one'), 'err'); return; }
       if (!navigator.onLine) { toast(bi('sync.need_network'), 'err'); return; }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const r = await api('i18n.suggest', { module: box.dataset.suggest, text: (from === 'vi' ? vi : zh).value.trim(), from }, { retry: true });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (!r.ok) { toast(esc(resMsg(r)), 'err'); return; }
       (from === 'vi' ? zh : vi).value = r.data.text;
       box.dataset.assisted = '1';
@@ -264,6 +264,15 @@ export async function saveFormDraft(key, values) {
   await setMeta('form:' + key, { user_id: session.user && session.user.user_id, values, at: Date.now() });
 }
 export async function clearFormDraft(key) { await setMeta('form:' + key, null); }
+
+/**
+ * Nút của sự kiện, dùng được cả sau await: ev.currentTarget về null khi sự kiện phát xong, nên busy(evBtn(ev), false)
+ * sau await không tắt được vòng quay (nút kẹt "đang chạy" nếu màn không vẽ lại, vd Xuất Excel, lưu bị báo lỗi).
+ */
+export function evBtn(ev) {
+  if (ev.currentTarget) ev.__meBtn = ev.currentTarget;
+  return ev.__meBtn || null;
+}
 
 export function busy(btn, on) {
   if (!btn) return;

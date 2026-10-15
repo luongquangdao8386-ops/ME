@@ -3,7 +3,7 @@ import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, session, uuid, res
 import { $, $$, h, ICON, dialog, toast } from '../ui.js';
 import { isWide } from '../shell.js';
 import { roleLevel, isOwner, mapOf, CODE } from '../data.js';
-import { textInput, selectInput, dateInput, wireForm, readField, showErrors, writeWithPin, busy } from '../form.js';
+import { textInput, selectInput, dateInput, wireForm, readField, showErrors, writeWithPin, busy, evBtn } from '../form.js';
 import { callWithPin } from './account.js';
 import { handleWriteError } from './equipment.js';
 
@@ -99,9 +99,9 @@ async function addUserDialog() {
       if (!p.employee_code) errs.push({ field: 'employee_code', key: 'field.required' });
       if (!p.display_name) errs.push({ field: 'display_name', key: 'field.required' });
       if (errs.length) { showErrors(wrap, errs); return; }
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeWithPin('user.create', p);
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) {
         wrap.remove();
         if (res.data && res.data.temp_pin) await showTempPin(res.data.employee_code, res.data.temp_pin, res.data.temp_pin_expires_at);
@@ -132,9 +132,9 @@ async function setRoleDialog(u) {
     $('[data-x="cancel"]', wrap).addEventListener('click', () => { wrap.remove(); resolve(false); });
     $('[data-x="save"]', wrap).addEventListener('click', async (ev) => {
       const p = { user_id: u.user_id, display_name: readField(wrap, 'display_name'), email: readField(wrap, 'email'), ...readRole(wrap) };
-      busy(ev.currentTarget, true);
+      busy(evBtn(ev), true);
       const res = await writeWithPin('user.setRole', p, { expected_version: u.record_version });
-      busy(ev.currentTarget, false);
+      busy(evBtn(ev), false);
       if (res.ok) { wrap.remove(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove();
@@ -244,9 +244,9 @@ export async function renderPermissions(view, { shell }) {
     const reason = await askText('btn.save', 'field.reason');
     if (!reason) return;
     const changes = changed().map((x) => ({ role_level: x.role_level, module: x.module, flags: want.get(x.role_level + '|' + x.module) }));
-    busy(ev.currentTarget, true);
+    busy(evBtn(ev), true);
     const res = await writeWithPin('permission.edit', { changes, reason });
-    busy(ev.currentTarget, false);
+    busy(evBtn(ev), false);
     if (res.ok) { toast(bi('adm.perm.saved'), 'ok'); renderPermissions(view, { shell }); } else if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
   });
 }
@@ -279,9 +279,9 @@ export async function renderBackup(view, { shell }) {
     </section>${list}</div>`;
   const run = $('#bk-run', view);
   if (run) run.addEventListener('click', async (ev) => {
-    busy(ev.currentTarget, true);
+    busy(evBtn(ev), true);
     const res = await writeWithPin('backup.run', {});
-    busy(ev.currentTarget, false);
+    busy(evBtn(ev), false);
     if (res.ok) renderBackup(view, { shell }); else if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
   });
   // Hỏi lại mỗi 5 giây tới khi xong (3.15); dừng khi rời màn

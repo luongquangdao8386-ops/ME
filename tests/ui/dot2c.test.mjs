@@ -565,3 +565,22 @@ test('web: trang kế hoạch theo giờ chạy hiện "còn N h" cạnh mốc (
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('web: Xuất Excel / Tải mẫu tải tệp xong thì nút hết quay (trước: kẹt "đang chạy" vì ev.currentTarget về null sau await)', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  assert.equal(c.write('equipment.create', { equipment_id: uuid(), name_vi: 'Máy nén khí 01' }).ok, true);
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page);
+    await go(page, '#/excel/maintenance_plans');
+    await page.waitForSelector('#x-export:not([disabled])');
+    for (const id of ['#x-export', '#x-template']) {
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click(id)]);
+      assert.match(dl.suggestedFilename(), /\.xlsx$/);
+      await page.waitForFunction((sel) => { const b = document.querySelector(sel); return b && !b.disabled && !b.classList.contains('busy'); }, id, { timeout: 10000 });
+    }
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

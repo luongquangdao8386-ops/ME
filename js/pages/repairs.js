@@ -6,7 +6,7 @@ import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
-import { selectInput, wireForm, showErrors, writeOnline, writeWithPin, oneLang, busy, loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
+import { selectInput, wireForm, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn, loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
 import { processPhoto, uploadDoc } from '../media.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
@@ -541,12 +541,12 @@ export async function renderRepair(view, ctx) {
     await handleWriteError(res); return false;
   };
   on('rp-start', async (ev) => {
-    busy(ev.currentTarget, true);
+    busy(evBtn(ev), true);
     const res = await sendProcess({ repair_id: r.repair_id, repair_start_at: isoNowVN() });
-    busy(ev.currentTarget, false);
+    busy(evBtn(ev), false);
     await afterWrite(res);
   });
-  on('rp-save', async (ev) => { busy(ev.currentTarget, true); const res = await sendProcess(processPayload()); busy(ev.currentTarget, false); await afterWrite(res); });
+  on('rp-save', async (ev) => { busy(evBtn(ev), true); const res = await sendProcess(processPayload()); busy(evBtn(ev), false); await afterWrite(res); });
   on('rp-submit', async (ev) => {
     const btn = ev.currentTarget;
     busy(btn, true);
