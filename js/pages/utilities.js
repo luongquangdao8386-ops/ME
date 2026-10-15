@@ -99,12 +99,35 @@ async function loadSummary(f) {
   const key = JSON.stringify(f);
   if (navigator.onLine) {
     const r = await api('utility.view', { summary: f }, { retry: true });
-    if (r.ok) { await setMeta('ut:summary', { key, at: isoNowVN(), data: r.data }).catch(() => {}); return { data: r.data, at: null }; }
+    if (r.ok) { await storeSummary(key, r.data); return { data: r.data, at: null }; }
     if (r.code !== 'NETWORK_ERROR') return { error: r };
   }
   const c = await getMeta('ut:summary');
   return c ? { data: c.data, at: c.at, offline: true, other: c.key !== key } : { offline: true, data: null };
 }
+
+/* Đệm tổng hợp theo bộ lọc (8 bộ lọc gần nhất, lưu cả trên máy): mở màn hiện ngay số đã có rồi hỏi lại máy chủ ở nền,
+   số đổi thì vẽ lại; chưa có thì hiện khung màn + vòng chờ ở phần số liệu (không chờ trắng cả màn). */
+const SUM = new Map();
+async function cachedSummary(key) {
+  if (SUM.has(key)) return SUM.get(key);
+  const c = await getMeta('ut:summaries').catch(() => null);
+  const e = c && c[key];
+  if (!e) return null;
+  const hit = { data: e.data, at: e.at, ms: 0 };
+  SUM.set(key, hit);
+  return hit;
+}
+async function storeSummary(key, data) {
+  const at = isoNowVN();
+  SUM.set(key, { data, at, ms: Date.now() });
+  await setMeta('ut:summary', { key, at, data }).catch(() => {});
+  const c = (await getMeta('ut:summaries').catch(() => null)) || {};
+  c[key] = { at, data };
+  Object.keys(c).sort((x, y) => String(c[y].at).localeCompare(String(c[x].at))).slice(8).forEach((k) => delete c[k]);
+  await setMeta('ut:summaries', c).catch(() => {});
+}
+let pendingRes = null; // kết quả hỏi nền khi chưa có đệm (lỗi / bản ngoại tuyến) — dùng cho lần vẽ kế tiếp cùng bộ lọc
 
 /** Nhãn kỳ ngắn (trục) và đầy đủ (chú giải, bảng) */
 function periodLabel(type, a, b) {
@@ -154,7 +177,13 @@ export async function renderUtilities(view, ctx) {
   });
   const f = summaryFilter();
   const [a, b] = F.period === 'CUSTOM' ? [f.from, f.to] : periodOf(F.period, f.date);
-  const res = await loadSummary(f);
+  const key = JSON.stringify(f);
+  const hit = await cachedSummary(key);
+  let res;
+  if (pendingRes && pendingRes.key === key) { res = pendingRes.res; pendingRes = null; }
+  else if (hit) res = { data: hit.data, at: hit.at, offline: !navigator.onLine };
+  else if (navigator.onLine) res = { loading: true };
+  else res = await loadSummary(f);
   const ld = await localData();
   const mById = new Map(ld.meters.map((m) => [m.meter_id, m]));
   const locOpts = await locOptions();
@@ -178,7 +207,8 @@ export async function renderUtilities(view, ctx) {
     ${canTariff ? `<a class="btn small" href="#/utilities/tariffs">${bi('ut.tariffs')}</a>` : ''}
     ${excel}${rpt}</div>`;
   let body = '';
-  if (res.error) body = `<div class="card"><p class="banner warn">${esc(resMsg(res.error))}</p></div>`;
+  if (res.loading) body = `<div class="card ut-loading" aria-busy="true"><div class="spinner small"></div><p class="muted small">${bi('ut.loading')}</p></div>`;
+  else if (res.error) body = `<div class="card"><p class="banner warn">${esc(resMsg(res.error))}</p></div>`;
   else if (!res.data) body = `<div class="card"><p class="banner info">${bi('ut.summary_offline', { T: '—' })}</p></div>`;
   else {
     const d = res.data;
@@ -238,6 +268,24 @@ export async function renderUtilities(view, ctx) {
   const pp = $('#ut-pp', view), np = $('#ut-np', view);
   if (pp) pp.addEventListener('click', () => { F.page = Math.max(0, F.page - 1); again().then(toTop); });
   if (np) np.addEventListener('click', () => { F.page++; again().then(toTop); });
+  // Hỏi lại máy chủ ở nền (trừ lần vẽ lại do chính lượt hỏi nền vừa xong); kết quả khác thì vẽ lại đúng màn đang mở
+  const skip = view._utSkip === key;
+  view._utSkip = null;
+  if (navigator.onLine && !skip) {
+    const seq = (view._utSeq = (view._utSeq || 0) + 1);
+    const h0 = location.hash;
+    loadSummary(f).then((r) => {
+      if (view._utSeq !== seq || location.hash !== h0 || !view.isConnected) return;
+      if (r.data && !r.offline) {
+        if (!hit || JSON.stringify(hit.data) !== JSON.stringify(r.data)) { view._utSkip = key; again(); }
+        // Lấy sẵn kỳ trước để bấm ‹ là hiện ngay
+        if (F.period !== 'CUSTOM') {
+          const pf = { ...f, date: prevPeriod(F.period, a)[0] };
+          if (!SUM.has(JSON.stringify(pf))) api('utility.view', { summary: pf }).then((x) => { if (x.ok) storeSummary(JSON.stringify(pf), x.data); });
+        }
+      } else if (!hit) { pendingRes = { key, res: r }; view._utSkip = key; again(); }
+    });
+  }
 }
 
 /* ======================= UT-02 Đồng hồ ======================= */

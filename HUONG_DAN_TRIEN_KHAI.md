@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d3.2 (Đợt 1, Đợt 2 đang chạy THẬT · Đợt 3 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d3.3 (Đợt 1, Đợt 2 đang chạy THẬT · Đợt 3 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -28,15 +28,15 @@ Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và 
 
 Thứ tự lần này **khác Phần J**: cấp quyền → triển khai bản mới → **sau cùng** mới `migrateSchema`. Lý do: máy chủ đang triển khai (mã Đợt 2) mà thấy sheet đã nâng thì tự lùi về Đợt 1 — Bảo trì, Sửa chữa mờ đi cho tới khi triển khai bản mới. Mã mới thì chạy như Đợt 2 cho tới khi `migrateSchema` xong, nên làm theo thứ tự dưới đây app không lúc nào bị gián đoạn.
 
-1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d3.2**. Lúc này Điện nước, Báo cáo, Tra cứu lộ điện còn mờ "Sắp có" — đúng (máy chủ chưa nâng).
+1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d3.3**. Lúc này Điện nước, Báo cáo, Tra cứu lộ điện còn mờ "Sắp có" — đúng (máy chủ chưa nâng).
 2. **Sao lưu THỬ trước:** Tài khoản → Quản trị → **Sao lưu ngay** → PIN → chờ dòng **Đã kiểm chứng**.
 3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/dot-3/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 4. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu** (Ctrl+S).
 5. **Cấp quyền mới:** ô chọn hàm → **`healthCheck`** → **Chạy** → Google hỏi quyền: **Xem xét quyền** → chọn tài khoản M&E → **Nâng cao** → **Đi tới ME_MayChu_THU (không an toàn)** → **Cho phép** (có thêm dòng xem/sửa/tạo Google Tài liệu). Nhật ký: dòng `CẢNH BÁO schema_version: 1.5.2 (1.5.3)` — đúng, chưa nâng. Không hỏi quyền cũng được (đã cấp trước đó).
-6. **Triển khai** → **Quản lý bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → Mô tả `THỬ d3.2` → **Triển khai** (giữ nguyên link). Cửa sổ ẩn danh → link `/exec` của THỬ thêm `?action=system.health` → thấy `"ok":true`, `"app_id":"ME"`. App THỬ lúc này vẫn chạy như Đợt 2 (Bảo trì, Sửa chữa dùng bình thường).
+6. **Triển khai** → **Quản lý bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → Mô tả `THỬ d3.3` → **Triển khai** (giữ nguyên link). Cửa sổ ẩn danh → link `/exec` của THỬ thêm `?action=system.health` → thấy `"ok":true`, `"app_id":"ME"`. App THỬ lúc này vẫn chạy như Đợt 2 (Bảo trì, Sửa chữa dùng bình thường).
 7. Ô chọn hàm → **`migrateSchema`** → **Chạy**. Nhật ký: `migrateSchema xong. Thêm: Documents(approval_status,approved_by,approved_at); Meters; MeterSegments; MeterReadings; MeterEvents; UtilityTariffs; Panels; Circuits; CircuitLoads; ReportDefinitions; ReportRuns. schema_version=1.5.3`. Chạy lại nhiều lần vẫn an toàn (lần sau: `Thêm: không có`).
-8. Chạy **`healthCheck`** → `schema_version: 1.5.3`, `server_version: 1.0.0-d3.2` ĐẠT (cảnh báo cũ đã biết thì bỏ qua). Không cần cài thêm trigger.
-9. App THỬ: Ctrl+Shift+R (máy tính) / đóng hẳn rồi mở lại app (iPhone; app đang mở thì hiện thông báo "mở lại app") → lưới 9 ô **sáng hết**. **Tài khoản → Quản trị → Trạng thái hệ thống**: schema **1.5.3**, máy chủ **d3.2**.
+8. Chạy **`healthCheck`** → `schema_version: 1.5.3`, `server_version: 1.0.0-d3.3` ĐẠT (cảnh báo cũ đã biết thì bỏ qua). Không cần cài thêm trigger.
+9. App THỬ: Ctrl+Shift+R (máy tính) / đóng hẳn rồi mở lại app (iPhone; app đang mở thì hiện thông báo "mở lại app") → lưới 9 ô **sáng hết**. **Tài khoản → Quản trị → Trạng thái hệ thống**: schema **1.5.3**, máy chủ **d3.3**.
 
 ## Phần N — Thử Đợt 3 trên THỬ
 
@@ -176,7 +176,7 @@ Báo kết quả theo dạng "Bước 1 đạt, 2 đạt, … 7 lỗi" kèm ản
 
 THẬT đang dùng Bảo trì, Sửa chữa hằng ngày: giữ đúng thứ tự **cấp quyền → triển khai → `migrateSchema`** (như Phần M) để không lúc nào bị lùi đợt. Nên làm ngoài giờ có người đang ghi phiếu.
 
-1. Claude đưa đúng bản đã thử trên THỬ (nhánh `claude/dot-3`, bản **1.0.0-d3.2** trở lên) lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 2 tới khi máy chủ THẬT nâng). Chờ 2–3 phút (tab **Actions** của repo `ME` xanh); gặp màn lỗi thì bấm **Tải lại bản mới**.
+1. Claude đưa đúng bản đã thử trên THỬ (nhánh `claude/dot-3`, bản **1.0.0-d3.3** trở lên) lên nhánh `main` của repo `ME` → trang `/ME/` tự cập nhật app (vẫn chạy như Đợt 2 tới khi máy chủ THẬT nâng). Chờ 2–3 phút (tab **Actions** của repo `ME` xanh); gặp màn lỗi thì bấm **Tải lại bản mới**.
 2. App THẬT: **Tài khoản → Quản trị → Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.
 3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C → <https://script.google.com> → dự án **`ME_MayChu_THAT`** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
 4. Ô chọn hàm → **`healthCheck`** → **Chạy** → cấp quyền mới như Phần M bước 5 (**Đi tới ME_MayChu_THAT (không an toàn)** → **Cho phép**). Dòng `schema_version: 1.5.2 (1.5.3)` báo CẢNH BÁO — đúng.

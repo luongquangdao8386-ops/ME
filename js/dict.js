@@ -1701,4 +1701,5 @@ export const DICT = {"nav.home":["Trang chủ","首页"],
 "ut.take_photo":["Chụp ảnh","拍照"],
 "ut.type_fixed":["Loại đồng hồ không đổi sau khi thêm","新增后不可更改表计类型"],
 "chart.no_data":["Dấu tròn: kỳ chưa đủ số liệu để tính","圆点：该期数据不足，无法计算"],
-"ut.no_valid":["Chưa đủ số liệu để tính","数据不足，无法计算"]};
+"ut.no_valid":["Chưa đủ số liệu để tính","数据不足，无法计算"],
+"ut.loading":["Đang lấy số liệu kỳ từ máy chủ…","正在从服务器获取本期数据…"]};

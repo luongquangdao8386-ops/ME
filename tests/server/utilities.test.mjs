@@ -372,3 +372,22 @@ test('QR đồng hồ mở hồ sơ (qr.resolve), in tem (qr.print) có mã khu 
   assert.equal(read(dn, id, '2026-10-01T07:00', 1).r.errors[0].code, 'METER_INACTIVE');
   assert.equal(dn.call('qr.resolve', { qr_key: r.data.qr_key }).data.qr_state, 'INACTIVE');
 });
+
+test('tổng hợp kỳ có lưu đệm máy chủ: gọi lại trả cùng số; ghi chỉ số / biểu giá mới thì tính lại ngay (không trả số cũ); người không có quyền giá không nhận bản có chi phí', () => {
+  const { env, c, dn, c3 } = setup();
+  const { id } = addMeter(c);
+  read(dn, id, '2026-10-01T07:45', 12350);
+  read(dn, id, '2026-10-06T08:00', 12480);
+  const f = { period_type: 'DAY_5', date: '2026-10-03' };
+  assert.equal(rowOf(summary(c, f), id).consumption, 130);
+  assert.equal(rowOf(summary(c, f), id).consumption, 130);
+  // Số chốt sớm hơn trong cửa sổ → 120 ngay lần gọi sau
+  assert.equal(read(dn, id, '2026-10-06T07:00', 12470).r.ok, true);
+  assert.equal(rowOf(summary(c, f), id).consumption, 120);
+  // Biểu giá được duyệt → có chi phí ngay
+  const t = uuid();
+  assert.equal(c3.write('tariff.edit', { tariff_id: t, utility_type: 'ELECTRICITY', effective_from: '2026-01-01', unit_price: 2000, tax_rate: 0 }).ok, true);
+  assert.equal(c.write('tariff.approve', { tariff_id: t, decision: 'APPROVE' }, { expected_version: env.rows('UtilityTariffs')[0].record_version, reauth_token: c.reauth() }).ok, true);
+  assert.equal(rowOf(summary(c, f), id).cost, 240000);
+  assert.ok(!('cost' in rowOf(summary(dn, f), id)), 'ĐN không nhận bản đệm có chi phí');
+});

@@ -868,6 +868,29 @@ function utilitySummary_(ctx, f, opts) {
   return out;
 }
 
+/**
+ * Tổng hợp kỳ cho màn Điện nước có lưu đệm (CacheService, 10 phút): khóa = bộ lọc + quyền giá + phiên bản các bảng nguồn
+ * (ghi chỉ số, sự kiện, biểu giá, đồng hồ, khu vực → phiên bản tăng → khóa mới; cửa sổ W nằm trong khóa) + khối 10 phút (trạng thái theo giờ
+ * như Kỳ chưa kết thúc tự đổi). Đọc 1 sheet SystemState thay vì 5 sheet nguồn khi trúng đệm.
+ */
+function utilitySummaryCached_(ctx, f) {
+  var cost = can_(ctx, 'tariff.view', { module: 'utilities' });
+  var key = null;
+  try {
+    var sm = readState_().map;
+    var revs = ['Meters', 'MeterSegments', 'MeterReadings', 'MeterEvents', 'UtilityTariffs', 'Locations']
+      .map(function (n) { return sm['table_rev.' + n] || 0; }).join('.');
+    var raw = JSON.stringify(f) + '|' + (cost ? 1 : 0) + '|' + revs + '|W' + windowHours_() + '|' + (sm.last_restore_at || '') + '|' + (sm.last_reset_at || '') + '|' +
+      Math.floor(now_().getTime() / 600000) + '|' + SERVER_VERSION;
+    key = 'ut:sum:' + b64url_(sha256_(raw)).slice(0, 40);
+    var hit = cache_().get(key);
+    if (hit) return JSON.parse(hit);
+  } catch (e) { key = null; }
+  var out = utilitySummary_(ctx, f, { cost: cost });
+  if (key) { try { var js = JSON.stringify(out); if (js.length < 95000) cache_().put(key, js, 600); } catch (e2) { /* quá lớn: bỏ qua đệm */ } }
+  return out;
+}
+
 /* ---------------- Xem (utility.view) ---------------- */
 
 /**
@@ -876,7 +899,7 @@ function utilitySummary_(ctx, f, opts) {
  */
 function utilityView_(ctx) {
   var p = ctx.req.payload || {};
-  if (p.summary) return utilitySummary_(ctx, p.summary || {});
+  if (p.summary) return utilitySummaryCached_(ctx, p.summary || {});
   var qm = qrMap_();
   if (p.meter_id) {
     var m = meterOrThrow_(p.meter_id);

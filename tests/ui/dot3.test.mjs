@@ -255,3 +255,41 @@ test('web C4: WEB-UT-01 bảng đồng hồ + hai biểu đồ; WEB-CI-01 bảng
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('iPhone: Điện nước mở nhanh — vào lại hiện ngay số đã lưu trên máy, hỏi lại máy chủ ở nền rồi vẽ lại khi số đổi; ‹ dùng kỳ lấy sẵn', async () => {
+  const s = setup();
+  const app = await openApp({ env: s.env, ...IPHONE });
+  const { page, calls } = app;
+  const sumCalls = () => calls.filter((x) => x === 'utility.view').length;
+  const elecKpi = () => page.textContent('.kpi.tone-elec .kpi-value').catch(() => '');
+  try {
+    await login(page);
+    await go(page, '#/utilities');
+    await page.waitForSelector('.ut-filters');
+    await page.click('[data-period="DAY_5"]');
+    await page.waitForSelector('.kpi.tone-elec');
+    for (let i = 0; i < 4 && !(await elecKpi()).includes('130'); i++) { await page.click('#ut-prev'); await page.waitForTimeout(700); }
+    assert.ok((await elecKpi()).includes('130'));
+    // Máy khác ghi số chốt sớm hơn trong cửa sổ (07:00 = 12 470) → tiêu thụ kỳ đó thành 120
+    assert.equal(s.dn.write('reading.create', { reading_id: uuid(), meter_id: s.elec, measured_at: T(s.b, '07:00'), cumulative_value: 12470 }).ok, true);
+    await go(page, '#/');
+    await page.waitForSelector('.grid9');
+    // Ghi lại mọi giá trị ô Điện xuất hiện khi vào lại màn
+    await page.evaluate(() => {
+      window.__kpi = [];
+      new MutationObserver(() => { const el = document.querySelector('.kpi.tone-elec .kpi-value'); const t = el ? el.textContent : ''; if (t && window.__kpi[window.__kpi.length - 1] !== t) window.__kpi.push(t); })
+        .observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+    const before = sumCalls();
+    await page.evaluate(() => history.back());
+    await page.waitForFunction(() => (window.__kpi || []).some((t) => t.includes('120')), null, { timeout: 15000 });
+    const seen = await page.evaluate(() => window.__kpi);
+    assert.ok(seen[0].includes('130'), 'hiện ngay số đã lưu: ' + JSON.stringify(seen));
+    assert.ok(sumCalls() > before, 'có hỏi lại máy chủ ở nền');
+    // Kỳ trước đã lấy sẵn: bấm ‹ là có số ngay (không vòng chờ)
+    await page.click('#ut-prev');
+    await page.waitForSelector('.ut-filters');
+    assert.equal(await page.locator('.ut-loading').count(), 0, 'kỳ trước hiện ngay');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
