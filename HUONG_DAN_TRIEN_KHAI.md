@@ -54,7 +54,7 @@ Quét QR khi chưa in tem: trên máy tính mở hồ sơ → biểu tượng **
 3. Khung **Chỉ số ban đầu**: ô **Chỉ số trên đồng hồ** `12350`, ô **Đọc lúc** `01/10/2026 07:45` → **Lưu**.
 4. Thêm đồng hồ thứ hai: Tên `Nước xưởng A`, Loại **Đồng hồ nước**, chu kỳ **5 ngày**, chỉ số ban đầu `600` lúc `01/10/2026 07:00` → Lưu.
 
-**Đúng khi:** có **DH-0001** (kWh) và **DH-0002** (m³). Nhãn **Đã qua mốc chưa đọc** là bình thường (ngày đọc lùi về đầu tháng).
+**Đúng khi:** có **DH-0001** (kWh) và **DH-0002** (m³). Nhãn trạng thái theo mốc đọc của **hôm nay** (chu kỳ 5 ngày: mốc ngày 1, 6, 11, 16, 21, 26): hôm nay là ngày mốc và chưa hết ngày → **Cần đọc** (vàng); qua hết ngày mốc mà chưa đọc → **Đã qua mốc chưa đọc** (đỏ); đã đọc trong ngày mốc → **Đã đọc mốc này** (xanh).
 
 ### Bước 2 — Ví dụ B1: 130 kWh
 1. Máy tính: mở DH-0001 → **Xem QR**.
