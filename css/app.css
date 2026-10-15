@@ -545,6 +545,9 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 textarea.inp { min-height: 70px; resize: vertical; }
 .inp:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(23,50,79,0.12); }
 .inp.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* iPhone: ô ngày giờ gốc của iOS có bề rộng tự nhiên lớn hơn khung (thò ra mép phải) và chữ căn giữa → bó theo khung, căn trái */
+input.inp[type="datetime-local"], input.inp[type="date"], input.inp[type="time"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; }
+input.inp[type="datetime-local"]::-webkit-date-and-time-value, input.inp[type="date"]::-webkit-date-and-time-value { text-align: left; }
 select.inp[size] { min-height: 160px; padding: 4px; }
 .hint { font-size: 12.5px; color: var(--graphite); margin-top: 4px; }
 .ferr { color: var(--red); font-size: 13px; min-height: 0; }
