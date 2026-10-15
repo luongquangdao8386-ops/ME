@@ -987,6 +987,7 @@
   "excel.sending": ["Đang gửi kiểm tra {N}/{T} dòng…", "正在提交校验 {N}/{T} 行…"],
   "excel.waiting_server": ["Máy chủ còn đang ghi, chờ rồi ghi tiếp…", "服务器仍在写入，稍候继续…"],
   "excel.committing": ["Đang ghi {N}/{T} dòng…", "正在写入 {N}/{T} 行…"],
+  "excel.committing_wait": ["Đang ghi dữ liệu lên máy chủ, có thể mất đến 1 phút. Không đóng trang.", "正在写入服务器，可能需要1分钟，请勿关闭页面。"],
   "excel.summary": ["Kết quả kiểm tra", "校验结果"],
   "excel.add": ["Thêm mới", "新增"],
   "excel.update": ["Cập nhật", "更新"],

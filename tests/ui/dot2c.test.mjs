@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { openApp, SHOTS } from './harness.mjs';
 import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
 
@@ -581,6 +582,42 @@ test('web: Xuất Excel / Tải mẫu tải tệp xong thì nút hết quay (tr�
       assert.match(dl.suggestedFilename(), /\.xlsx$/);
       await page.waitForFunction((sel) => { const b = document.querySelector(sel); return b && !b.disabled && !b.classList.contains('busy'); }, id, { timeout: 10000 });
     }
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('web C3: lô Sự cố (lịch sử) do KT gửi duyệt → Lô gần đây → Nhập dữ liệu: báo ngay "Đang ghi…", hỏi PIN, ghi xong "Đã nhập" + 2 phiếu Hoàn thành', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  assert.equal(c.write('equipment.create', { equipment_id: uuid(), name_vi: 'Máy nén khí 01' }).ok, true);
+  const eqCode = env.rows('Equipment')[0].equipment_code;
+  const kt = userClient(env, 'U-KT', 2, '583016', 'KY_THUAT');
+  userClient(env, 'U-C3', 3, '730194');
+  const rows = [
+    { sheet: 'repairs_history', row_number: 3, values: { equipment_code: eqCode, reported_at: '01/09/2026 08:00', symptom_vi: 'Rò dầu', severity: 'MEDIUM', repair_start_at: '01/09/2026 08:30', repair_end_at: '01/09/2026 10:00', test_run_result: 'PASS' } },
+    { sheet: 'repairs_history', row_number: 4, values: { equipment_code: eqCode, reported_at: '05/09/2026 14:00', symptom_vi: 'Kêu to', severity: 'LOW', repair_start_at: '05/09/2026 14:15', repair_end_at: '05/09/2026 15:30', test_run_result: 'PASS' } }];
+  const batch = uuid();
+  const pv = kt.write('import.preview', { import_batch_id: batch, template_key: 'repairs_history', chunk_index: 0, chunk_count: 1, total_rows: 2, source_sha256: crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex'), rows });
+  assert.equal(pv.data.status, 'READY', JSON.stringify(pv.data.errors));
+  assert.equal(kt.write('import.submit', { import_batch_id: batch }).data.status, 'PENDING_APPROVAL');
+  const app = await openApp({ env, viewport: { width: 1440, height: 900 }, mobile: false });
+  try {
+    const { page } = app;
+    await login(page, 'U-C3', '730194');
+    await go(page, '#/excel/repairs_history');
+    await page.waitForSelector('[data-batch]', { timeout: 15000 });
+    await page.click('[data-batch]');
+    await page.waitForSelector('#x-commit', { timeout: 15000 });
+    await page.click('#x-commit');
+    await page.waitForSelector('#x-commit-status');
+    assert.ok((await page.textContent('#x-commit-status')).includes('Đang ghi dữ liệu lên máy chủ'));
+    await page.waitForSelector('.modal .pin-input', { timeout: 15000 });
+    await page.fill('.modal .pin-input', '730194');
+    await page.click('.modal-actions .btn.primary');
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('Đã ghi 2 dòng'), null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Đã nhập'), null, { timeout: 15000 });
+    assert.equal(await page.locator('#x-commit-status').count(), 0);
+    assert.deepEqual(env.rows('Repairs').map((r) => r.status), ['COMPLETED', 'COMPLETED']);
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

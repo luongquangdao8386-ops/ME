@@ -215,7 +215,19 @@ export async function renderExcel(view, { shell, params }) {
   const er = $('#x-errors', view);
   if (er) er.addEventListener('click', () => errorsFile(key, state.summary.errors || []));
   const cm = $('#x-commit', view);
-  if (cm) cm.addEventListener('click', async (ev) => { busy(evBtn(ev), true); await commitBatch(repaint); });
+  // Nhập dữ liệu: báo ngay đang ghi (máy chủ ghi + dịch máy có thể mất vài chục giây; PIN còn hạn thì không hỏi lại);
+  // lỗi bất ngờ thì báo lỗi và trả nút, không để nút im lặng
+  if (cm) cm.addEventListener('click', async (ev) => {
+    busy(evBtn(ev), true);
+    const row = cm.closest('.row');
+    if (row && !$('#x-commit-status', view)) row.insertAdjacentHTML('afterend', `<p class="banner info" id="x-commit-status" role="status">${bi('excel.committing_wait')}</p>`);
+    try { await commitBatch(repaint); } catch (e) {
+      console.error(e);
+      toast(`${bi('err.client')}: ${esc(e && e.message)}`, 'err');
+      busy(evBtn(ev), false);
+      const stl = $('#x-commit-status', view); if (stl) stl.remove();
+    }
+  });
   const sb = $('#x-submit', view);
   if (sb) sb.addEventListener('click', async (ev) => {
     busy(evBtn(ev), true);
