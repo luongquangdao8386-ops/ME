@@ -70,6 +70,33 @@ test('báo cáo Điện nước khớp nguồn (130 kWh, 280 800 đ) với C3; �
   assert.equal(c3.call('report.run', { code: 'RPT_UTILITIES', filters: { period_type: 'X' } }).errors[0].field, 'filters.period_type');
 });
 
+test('báo cáo Điện nước: loại chưa đồng hồ nào đủ số trong kỳ (nước thiếu số chốt) → tóm tắt không ghi 0 mà ghi "Chưa đủ số liệu để tính"; PDF cùng chữ', () => {
+  const { env, c, c3, dn } = setup();
+  utilityData(env, c, c3, dn);
+  const w = uuid();
+  ok(c.write('meter.edit', { meter_id: w, name_vi: 'Nước xưởng A', utility_type: 'WATER', multiplier: 1, reading_cycle_type: 'DAY_5', opening_value: 600, opening_at: T('2026-10-01T07:00') }));
+  // Lần đọc đầu sau mốc 06/10 00:00 là 07/10 00:30 (quá W = 24 giờ) → kỳ 01–05/10 thiếu số chốt
+  ok(dn.write('reading.create', { reading_id: uuid(), meter_id: w, measured_at: T('2026-10-07T00:30'), cumulative_value: 625 }));
+  const r = ok(c3.call('report.run', { code: 'RPT_UTILITIES', filters: UF })).data;
+  assert.equal(r.rows.find((x) => x.meter_code === 'DH-0002').status, 'MISSING_READING');
+  const water = r.summary.find((s) => s.enum === 'WATER' && !s.money);
+  assert.equal(water.value, null, 'không ghi 0 giả');
+  assert.equal(water.na_key, 'ut.no_valid');
+  assert.ok(!water.partial);
+  assert.ok(r.summary.some((s) => s.enum === 'ELECTRICITY' && s.value === 130), 'điện vẫn đủ số');
+  // Kỳ đang chạy (có số mở, chưa tới mốc chốt): ghi "Kỳ chưa kết thúc", không 0
+  const e = env.rows('Meters').find((x) => x.meter_code === 'DH-0001').meter_id;
+  ok(dn.write('reading.create', { reading_id: uuid(), meter_id: e, measured_at: T('2026-10-16T08:00'), cumulative_value: 12600 }));
+  const cur = ok(c3.call('report.run', { code: 'RPT_UTILITIES', filters: { period_type: 'DAY_5', date: '2026-10-20' } })).data;
+  assert.equal(cur.rows.find((x) => x.meter_code === 'DH-0001').status, 'OPEN_PERIOD');
+  const ce = cur.summary.find((s) => s.enum === 'ELECTRICITY' && !s.money);
+  assert.equal(ce.value, null);
+  assert.equal(ce.na_key, 'utility_status.OPEN_PERIOD');
+  const pdf = ok(c3.call('report.export', { format: 'PDF', code: 'RPT_UTILITIES', filters: UF }));
+  const text = Buffer.from(pdf.data.content_b64, 'base64').toString('utf8');
+  assert.ok(text.includes('Chưa đủ số liệu để tính'), 'PDF ghi lý do thay vì 0');
+});
+
 test('báo cáo Thiết bị và Sự cố khớp nguồn: số thiết bị, sự cố đang mở theo máy, thời gian dừng máy; lọc khu vực gồm khu vực con', () => {
   const { c, kt } = setup();
   const a = uuid(), a1 = uuid();

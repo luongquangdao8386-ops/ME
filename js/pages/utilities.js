@@ -675,7 +675,7 @@ export async function renderMeterForm(view, ctx) {
     <div id="ut-custom" ${m && m.reading_cycle_type === 'CUSTOM' ? '' : 'hidden'}>${numberInput('reading_cycle_value', 'ut.cycle_value', m ? m.reading_cycle_value : '', { integer: true })}${dateInput('reading_cycle_anchor_date', 'ut.anchor', m ? m.reading_cycle_anchor_date : today())}</div>
     ${people.length ? selectInput('assigned_user_id', 'ut.assigned', people.map((u) => [u.user_id, esc(u.employee_code + ' · ' + u.display_name)]), m ? m.assigned_user_id : '') : ''}
     ${bilingualInputs('position', m, { required: false, labelKey: 'ut.position' })}
-    ${m ? '' : `<fieldset class="bi-pair"><legend>${bi('ut.opening_create')}</legend>${numberInput('opening_value', 'ut.opening_value', '', { hint: bi('ut.opening_hint') })}
+    ${m ? '' : `<fieldset class="bi-pair"><legend>${bi('ut.opening_create')}</legend>${numberInput('opening_value', 'ut.opening_reading', '', { hint: bi('ut.opening_hint') })}
       <div class="fld" data-field="opening_at"><label for="f-opening_at">${bi('ut.opening_at')}</label><input class="inp" type="datetime-local" id="f-opening_at" value="${esc(toLocalInput(isoNowVN()))}"><div class="ferr"></div></div></fieldset>`}
     ${m ? `<label class="check"><input type="checkbox" id="f-active" ${m.active !== false ? 'checked' : ''}><span>${bi('ut.active')}</span></label>` : ''}
   </div><p class="form-err err" role="alert"></p>

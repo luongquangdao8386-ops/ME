@@ -1548,6 +1548,7 @@
   "ut.event_pending": ["Có sự kiện chờ duyệt", "有待审批事件"],
   "ut.event_self": ["Bạn đã lập sự kiện này nên không tự duyệt", "您创建了此事件，不能自行审批"],
   "ut.opening_create": ["Chỉ số ban đầu", "初始读数"],
+  "ut.opening_reading": ["Chỉ số trên đồng hồ", "表上读数"],
   "ut.opening_at": ["Đọc lúc", "读取时间"],
   "ut.opening_hint": ["Bỏ trống: lần đọc đầu tiên là mốc gốc", "留空：首次读数即为基准"],
   "ut.parent_meter": ["Đồng hồ tổng", "总表"],
@@ -1732,5 +1733,6 @@
   "ut.take_photo": ["Chụp ảnh", "拍照"],
   "ut.type_fixed": ["Loại đồng hồ không đổi sau khi thêm", "新增后不可更改表计类型"],
 
-  "chart.no_data": ["Dấu tròn: kỳ chưa đủ số liệu để tính", "圆点：该期数据不足，无法计算"]
+  "chart.no_data": ["Dấu tròn: kỳ chưa đủ số liệu để tính", "圆点：该期数据不足，无法计算"],
+  "ut.no_valid": ["Chưa đủ số liệu để tính", "数据不足，无法计算"]
 }

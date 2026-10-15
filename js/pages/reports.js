@@ -69,7 +69,7 @@ const isNumCol = (c) => c.type === 'num' || c.type === 'money';
 function summaryRows(d) {
   return (d.summary || []).map((s) => {
     const label = s.enumKey ? biText(s.enumKey + '.' + s.enum) + (s.label_vi ? ` — ${s.label_vi} · ${s.label_zh}` : '') : `${s.label_vi} · ${s.label_zh}`;
-    const val = s.money ? `${fmtNumber(s.value, s.currency === 'VND' ? 0 : 2)}\u00A0${s.currency || ''}` : (s.value === null ? biText('field.not_set') : fmtNumber(s.value) + (s.unit ? (s.unit === '%' ? '%' : '\u00A0' + s.unit) : ''));
+    const val = s.money ? `${fmtNumber(s.value, s.currency === 'VND' ? 0 : 2)}\u00A0${s.currency || ''}` : (s.value === null ? biText(s.na_key || 'field.not_set') : fmtNumber(s.value) + (s.unit ? (s.unit === '%' ? '%' : '\u00A0' + s.unit) : ''));
     return { label, val: val + (s.partial ? ` (${biText('ut.partial')})` : ''), raw: s };
   });
 }

@@ -834,7 +834,8 @@ function utilitySummary_(ctx, f, opts) {
       } else if (r.status !== 'NO_READING' && r.status !== 'OPEN_PERIOD') missing++;
     });
     totals[ut] = { consumption: Math.round(sum * 1000) / 1000, unit: UTILITY_UNIT_[ut], meters: list.length, missing: missing,
-      partial: missing > 0, open: list.filter(function (r) { return r.status === 'OPEN_PERIOD'; }).length };
+      partial: missing > 0, open: list.filter(function (r) { return r.status === 'OPEN_PERIOD'; }).length,
+      ok: list.filter(function (r) { return r.status === 'OK'; }).length };
     if (costOk) { totals[ut].cost = cost; totals[ut].cost_missing = costMissing; }
   });
   var out = { period_type: type, period_start: a, period_end: b, window_hours: W, rows: rows, totals: totals, cost_visible: !!costOk, today: todayVN_() };

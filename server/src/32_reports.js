@@ -256,7 +256,10 @@ var REPORT_DATASETS_ = {
       var summary = [];
       Object.keys(s.totals).forEach(function (ut) {
         var t = s.totals[ut];
-        summary.push(sumItem_('', '', t.consumption, { enumKey: 'utility_type', enum: ut, unit: t.unit, partial: t.partial, missing: t.missing }));
+        // Chưa đồng hồ nào đủ số trong kỳ: không ghi 0 (số giả), ghi lý do — kỳ chưa kết thúc hoặc chưa đủ số liệu
+        var none = !t.ok;
+        summary.push(sumItem_('', '', none ? null : t.consumption, { enumKey: 'utility_type', enum: ut, unit: t.unit, partial: !none && t.partial, missing: t.missing,
+          na_key: none ? (t.open ? 'utility_status.OPEN_PERIOD' : 'ut.no_valid') : undefined }));
         if (s.cost_visible) Object.keys(t.cost || {}).forEach(function (cur) { summary.push(sumItem_('Chi phí', '费用', t.cost[cur], { enumKey: 'utility_type', enum: ut, currency: cur, money: true })); });
       });
       return {
@@ -806,7 +809,7 @@ function reportPdf_(data) {
     if ((data.summary || []).length) {
       var sumRows = data.summary.map(function (s) {
         var label = s.enumKey ? lab_(s.enumKey + '.' + s.enum) + (s.label_vi ? ' — ' + s.label_vi + ' · ' + s.label_zh : '') : s.label_vi + ' · ' + s.label_zh;
-        var val = s.money ? fmtMoneySrv_(s.value, s.currency) : (s.value === null ? lab_('field.not_set') : fmtNumSrv_(s.value) + (s.unit ? (s.unit === '%' ? '%' : ' ' + s.unit) : ''));
+        var val = s.money ? fmtMoneySrv_(s.value, s.currency) : (s.value === null ? lab_(s.na_key || 'field.not_set') : fmtNumSrv_(s.value) + (s.unit ? (s.unit === '%' ? '%' : ' ' + s.unit) : ''));
         if (s.partial) val += ' (' + lab_('ut.partial') + ')';
         return [label, val];
       });
