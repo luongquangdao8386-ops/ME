@@ -197,7 +197,7 @@ function enforceMaxSessions_(userId) {
 /** Thu hồi một phiên: ghi Sheet trước rồi mới ghi cache (3.7) */
 function revokeSessionRow_(s, reason) {
   writeCells_('Sessions', s.__row, { revoked_at: isoVN_(now_()), revoke_reason: reason });
-  cache_().put('rv:' + s.session_id, '1', 21600);
+  cache_().put('rv:' + s.session_id, reason === 'DATASET_RESET' ? 'DATASET_RESET' : '1', 21600);
   cache_().remove('ss:' + s.session_id);
 }
 
@@ -298,6 +298,9 @@ function authLoginCheck_(req, code, pin) {
   }
 
   var user = findOne_('Users', 'employee_code', code);
+  // Bảo trì (Đợt 4, 1.4 §21.5.1): chỉ owner còn quyền xóa sạch được đăng nhập, nhận phiên phục hồi; người khác không kiểm PIN
+  var maint = sysProps_().maintenance_mode;
+  if (maint && !(user && user.active && user.is_system_owner && Number(user.role_level) === 4 && hasFlag_(4, 'system', 'R'))) throw apiError_('SYSTEM_MAINTENANCE');
   var preLocked = lockedRemaining_(user, eh);
   if (preLocked > 0) {
     withWriteLock_(function () { logAttempt_('LOGIN', 'LOCKED', eh, user, req); });
@@ -354,6 +357,12 @@ function authLoginCheck_(req, code, pin) {
     upd.last_login_at = isoVN_(now_());
     writeCells_('Users', user.__row, upd);
     cache_().remove('us:' + user.user_id);
+    if (maint) {
+      var rs = createSession_(user, 'RECOVERY', req);
+      logAttempt_('LOGIN', 'SUCCESS', eh, user, req);
+      var open = resetOpenRun_();
+      return { token: rs.token, expires_at: rs.expires_at, session_kind: 'RECOVERY', user: publicUser_(user), reset_run_id: open ? open.reset_run_id : '' };
+    }
     var s = createSession_(user, 'FULL', req);
     logAttempt_('LOGIN', 'SUCCESS', eh, user, req);
     return { token: s.token, expires_at: s.expires_at, session_kind: 'FULL', user: publicUser_(user) };
@@ -361,6 +370,9 @@ function authLoginCheck_(req, code, pin) {
 }
 
 /* ---------------- Kiểm phiên ở mỗi request ---------------- */
+
+/** Phiên phục hồi (Đợt 4) chỉ chạy các action này */
+var RECOVERY_ACTIONS_ = { 'system.reset.status': 1, 'system.reset.resume': 1, 'auth.logout': 1 };
 
 function authRequired_(reason) {
   return apiError_('AUTH_REQUIRED', { reason: reason });
@@ -379,7 +391,7 @@ function requireSession_(req, action) {
 
   var c = cache_();
   var got = c.getAll(['ss:' + sid, 'rv:' + sid]);
-  if (got['rv:' + sid]) throw authRequired_('REVOKED');
+  if (got['rv:' + sid]) throw got['rv:' + sid] === 'DATASET_RESET' ? apiError_('DATASET_RESET') : authRequired_('REVOKED');
   var ss = got['ss:' + sid] ? JSON.parse(got['ss:' + sid]) : null;
   if (!ss) {
     var row = findOne_('Sessions', 'session_id', sid);
@@ -392,6 +404,8 @@ function requireSession_(req, action) {
     c.put('ss:' + sid, JSON.stringify(ss), Math.max(1, Math.min(21600, exp - nowSec)));
   }
   if (!ctEqualStr_(ss.token_hash, tokenHash_(token))) throw authRequired_('INVALID');
+  // Phiên bị thu hồi do Xóa sạch/khôi phục: báo DATASET_RESET để app xóa dữ liệu cũ, giữ nháp thành "Nháp thế hệ dữ liệu cũ"
+  if (ss.revoked_at && ss.revoke_reason === 'DATASET_RESET') throw apiError_('DATASET_RESET');
   if (ss.revoked_at) throw authRequired_(ss.revoke_reason === 'AUTH_VERSION' ? 'AUTH_VERSION' : 'REVOKED');
 
   var u = userCached_(ss.user_id);
@@ -401,7 +415,11 @@ function requireSession_(req, action) {
     throw authRequired_('AUTH_VERSION');
   }
   var props = sysProps_();
-  if (ss.dataset_epoch !== props.dataset_epoch || req.dataset_epoch !== props.dataset_epoch) throw apiError_('DATASET_RESET');
+  // Phiên phục hồi (Đợt 4) gắn epoch phía máy chủ (đổi epoch giữa đợt thì máy chủ gắn lại), chỉ chạy tiến độ/tiếp tục/đăng xuất
+  if (ss.session_kind === 'RECOVERY') {
+    if (ss.dataset_epoch !== props.dataset_epoch) throw apiError_('DATASET_RESET');
+    if (!RECOVERY_ACTIONS_[action]) throw apiError_(props.maintenance_mode ? 'SYSTEM_MAINTENANCE' : 'FORBIDDEN');
+  } else if (ss.dataset_epoch !== props.dataset_epoch || req.dataset_epoch !== props.dataset_epoch) throw apiError_('DATASET_RESET');
   if (ss.session_kind === 'CHANGE_PIN' && action !== 'pin.change' && action !== 'auth.logout') {
     throw apiError_('MUST_CHANGE_PIN');
   }

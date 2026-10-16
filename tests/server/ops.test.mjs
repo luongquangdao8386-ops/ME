@@ -174,7 +174,8 @@ test('sync.bootstrap: user, settings phía client, permissions, records; sync.ch
   assert.equal(b.data.settings.email_hour, undefined, 'khóa Client=Không không gửi xuống');
   assert.ok(b.data.permissions.actions.includes('equipment.create'));
   assert.ok(b.data.permissions.actions.includes('utility.view'), 'Đợt 3 đã bật');
-  assert.ok(!b.data.permissions.actions.includes('system.reset.preview'), 'Đợt 4 chưa bật');
+  assert.ok(b.data.permissions.actions.includes('system.reset.preview'), 'Đợt 4: owner thấy Xóa sạch');
+  assert.ok(!b.data.permissions.actions.includes('system.restore.preview'), 'khôi phục trong app hoãn');
   assert.ok(b.data.permissions.actions.includes('maintenance.view'));
   assert.ok(b.data.permissions.cost_modules.includes('contracts'));
   const cursor = b.data.sync_cursor;

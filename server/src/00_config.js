@@ -5,15 +5,15 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d3.10';
+var SERVER_VERSION = '1.0.0-d4.1';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.3';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3 (migrateSchema)
+var SCHEMA_VERSION = '1.5.4';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 3;       // đợt đang phát hành
+var RELEASED_DOT = 4;       // đợt đang phát hành
 
 /** schema_version của dữ liệu → đợt dữ liệu đã có đủ sheet (migrateSchema ghi schema_version) */
-var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3 };
+var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4 };
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */

@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d3.10 (Đợt 1, 2, 3 đang chạy THẬT từ 16/10/2026)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.1 (Đợt 1, 2, 3 đang chạy THẬT từ 16/10/2026 · Đợt 4 thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,13 +16,83 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Thứ tự lần này (Đợt 3):** Phần M (đưa máy chủ Đợt 3 lên THỬ) → Phần N (thử Đợt 3 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng thật, nói **"phát hành THẬT"** → Phần O. **Trạng thái 15/10/2026:** Đợt 2 đã thử xong trên THỬ và **đã phát hành THẬT** (Phần J, K, L xong). Phần F, G, H (dựng THẬT, tạo `ME-thu`) xong 14/10/2026; Phần A–E là việc của THỬ ở Đợt 1 — giữ để tra cứu.
+**Thứ tự lần này (Đợt 4 — Xóa sạch dữ liệu):** Phần P (đưa máy chủ Đợt 4 lên THỬ) → Phần Q (thử Đợt 4 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng ở THẬT, nói **"phát hành THẬT"** → Phần R. **Trạng thái 16/10/2026:** Đợt 1, 2, 3 đang chạy THẬT (Phần M, N, O của Đợt 3 đã xong). Phần J–L (Đợt 2), F–I (dựng THẬT), A–E (Đợt 1) giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 
 ---
 
-## Phần M — Đưa Đợt 3 lên THỬ (`ME_MayChu_THU`)
+## Phần P — Đưa Đợt 4 (Xóa sạch dữ liệu) lên THỬ (`ME_MayChu_THU`)
+
+Đợt 4 thêm **2 sheet** (`ResetRuns` — các đợt xóa sạch, `ResetFiles` — danh sách file tạm trong lúc xóa) và mục **Tài khoản → Quản trị → Dữ liệu hệ thống** (chỉ owner). Không thêm cấu hình, không cần cài trigger: khi xóa sạch, máy chủ tự tạo trigger `resetContinue` (mỗi phút) và tự gỡ khi xong.
+
+Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới `migrateSchema`** (máy chủ đang chạy mã Đợt 3 mà thấy sheet đã nâng thì tự lùi về Đợt 1).
+
+1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.1**. Lúc này chưa có mục **Dữ liệu hệ thống** — đúng (máy chủ chưa nâng).
+2. **Sao lưu THỬ trước:** Tài khoản → Quản trị → **Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/dot-4/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+4. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+5. Ô chọn hàm → **`healthCheck`** → **Chạy** (Google hỏi quyền thì cho phép như Phần M bước 5). Nhật ký: `CẢNH BÁO schema_version: 1.5.3 (1.5.4)` — đúng, chưa nâng.
+6. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.1` → **Triển khai** (giữ nguyên link). Cửa sổ ẩn danh → link `/exec` của THỬ thêm `?action=system.health` → `"ok":true`.
+7. Ô chọn hàm → **`migrateSchema`** → **Chạy**. Nhật ký: `migrateSchema xong. Thêm: ResetRuns; ResetFiles. schema_version=1.5.4`.
+8. **`healthCheck`** → `schema_version: 1.5.4`, `server_version: 1.0.0-d4.1`, dòng `reset_run: OK` — ĐẠT.
+9. App THỬ: Ctrl+Shift+R → đăng nhập **NV001** (owner) → **Tài khoản → Quản trị** có thêm **Dữ liệu hệ thống**. Tài khoản cấp 4 khác, cấp 3 không có mục này.
+
+(Tùy chọn) Chế độ **Xóa vĩnh viễn file** cần dịch vụ nâng cao Drive API: trình soạn → **Dịch vụ (+)** → **Drive API** → **Thêm** → Lưu → **Phiên bản mới**. Không bật thì lựa chọn này mờ; hai chế độ kia (giữ file, thùng rác) vẫn dùng được.
+
+## Phần Q — Thử Đợt 4 trên THỬ
+
+**Lưu ý:** Xóa sạch trên THỬ xóa **toàn bộ dữ liệu thử** (dữ liệu MẪU, mọi thứ đã nhập khi thử Phần N). Muốn có lại dữ liệu mẫu: trình soạn `ME_MayChu_THU` → **`pocSeedSampleData`** → Chạy. Tài khoản, PIN, phân quyền giữ nguyên.
+
+### Bước 1 — Chuẩn bị
+1. iPhone, **MAU-KT**: bật **chế độ máy bay** → Sửa chữa → Báo sự cố một máy → Lưu (nằm ở **Chờ gửi**). Giữ máy bay.
+2. Ghi lại mã một hồ sơ có tem QR thử (ví dụ thiết bị hoặc đồng hồ `DH-0001`) để quét lại ở bước 5.
+
+### Bước 2 — SYS-RESET-01 Dữ liệu hệ thống (máy tính, NV001)
+**Tài khoản → Quản trị → Dữ liệu hệ thống.**
+
+**Đúng khi:** có mã **Thế hệ dữ liệu hiện tại** (8 ký tự), bảng **Dữ liệu hiện có** 8 nhóm (Danh mục, Công việc, Điện nước–lộ điện, Hợp đồng–kiểm định, Báo cáo–Excel, Nhắc hạn, Tem QR, Ảnh–tài liệu) kèm số bản ghi, **Lần sao lưu gần nhất**, nút đỏ **Xóa sạch dữ liệu vận hành**, dòng hướng dẫn khôi phục thủ công. Không có logo. Đăng nhập MAU-C3: không có mục này.
+
+### Bước 3 — SYS-RESET-02 Xem trước và xác nhận
+1. Bấm **Xóa sạch dữ liệu vận hành**.
+   **Đúng khi:** dòng vàng "Tất cả tem QR hiện có sẽ hết hiệu lực…", bảng **Sẽ xóa (máy chủ đếm)**, **Được giữ** (tài khoản/PIN, phân quyền, cấu hình, người nhận Gmail, từ điển thuật ngữ…), 3 lựa chọn **Ảnh và tài liệu** (Giữ file — chọn sẵn; Thùng rác; Xóa vĩnh viễn — mờ nếu chưa bật Drive API), đếm ngược **10:00**.
+2. Nhập PIN, gõ `XOA TOAN BO` (không dấu) → nút **Xác nhận xóa sạch** vẫn mờ. Gõ đúng `XÓA TOÀN BỘ` → nút sáng. Giữ **Giữ file, bỏ khỏi app**.
+3. (Tùy chọn) Để đếm ngược về 0 → báo hết hạn, có nút **Xem lại**.
+
+### Bước 4 — SYS-RESET-03 Tiến độ
+1. Bấm **Xác nhận xóa sạch** → app rời khung, sang trang **Tiến độ xóa sạch**: Chuẩn bị → Sao lưu → Xóa → Kiểm tra → Hoàn tất (thường vài phút), số đã xóa/tổng theo nhóm.
+2. Trong lúc đang chạy: iPhone **MAU-C3** (có mạng) mở app / đăng nhập → báo **Hệ thống đang bảo trì**.
+
+**Đúng khi:** **Hoàn tất**, có số đã xóa theo nhóm, dòng File (giữ … · thùng rác 0 · …), **Bản sao lưu trước khi xóa: yyyy-mm-dd_HHmm**, dòng vàng nhắc in tem QR mới, nút **Đăng nhập lại** và **Nhập dữ liệu mới**.
+
+### Bước 5 — Sau khi xóa
+1. Bấm **Đăng nhập lại** → đăng nhập NV001 → Thiết bị, Kho vật tư, Điện nước, Lộ điện… **trống**; Tài khoản → Quản trị → **Người dùng**, **Phân quyền** còn nguyên; Báo cáo còn 8 mẫu chuẩn.
+2. Drive của tài khoản M&E: `ME_HeThong_THU` → `ME_Backups_THU` có thư mục mới đúng tên ở biên nhận; ảnh cũ trong `ME_Data_THU` vẫn còn nhưng **Quyền truy cập chung: Bị hạn chế** (link cũ không xem được).
+3. Thêm 1 thiết bị mới → mã **tiếp số cũ** (không quay về số 1, để không trùng chữ in trên tem cũ).
+4. Quét tem QR cũ (bước 1.2) → **Tem đã hết hiệu lực** kèm ngày đặt lại.
+5. iPhone **MAU-KT** tắt máy bay → mở app → **Dữ liệu đã được đặt lại, cần tải lại** → đăng nhập → **Tài khoản → Nháp**: phiếu báo sự cố ở mục **Nháp thế hệ dữ liệu cũ**, không tự gửi (xuất dự phòng hoặc xóa được).
+6. **Nhập dữ liệu mới** (nút ở biên nhận, hoặc mỗi module → Nhập/xuất Excel) theo thứ tự: khu vực, nhà cung cấp, danh mục → vật tư → thiết bị → linh kiện theo máy → tủ, lộ, đồng hồ → kế hoạch, hợp đồng, kiểm định.
+
+### Bước 6 — (Tùy chọn) Ngắt giữa chừng
+1. `pocSeedSampleData` để có dữ liệu lại → làm lại Bước 3–4; ngay khi thấy bước **Sao lưu** đang chạy thì **đóng hẳn trình duyệt**.
+2. Chờ 2–3 phút → mở lại app THỬ → màn đăng nhập báo **Hệ thống đang bảo trì (Xóa sạch dữ liệu)…** → đăng nhập NV001 → vào thẳng trang **Tiến độ** đúng đợt đó, chạy tiếp tới **Hoàn tất** (máy chủ tự làm tiếp mỗi phút kể cả khi app đóng).
+3. Nếu trang Tiến độ báo **Lỗi, cần xử lý tiếp**: đọc mã lỗi, nhập PIN → **Tiếp tục** (cùng đợt, không đổi lại dữ liệu đã xóa). Lỗi ở bước Sao lưu (chưa xóa gì) thì có thêm **Hủy đợt** → app mở lại bình thường với dữ liệu cũ. Chụp màn hình gửi Claude.
+
+**Đúng khi (toàn Phần Q):** chỉ owner thấy/dùng; sao lưu trước khi xóa; không nhắc hạn/Gmail cũ; tem cũ hết hiệu lực; nháp cũ không gửi lại; tài khoản/quyền/cấu hình còn nguyên.
+
+## Phần R — Phát hành Đợt 4 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+
+Phát hành **chỉ thêm chức năng**, không xóa gì. Không bấm Xóa sạch trên THẬT trừ khi thật sự muốn xóa toàn bộ dữ liệu vận hành và nhập lại từ đầu.
+
+1. Claude đưa đúng bản đã thử (nhánh `claude/dot-4`) lên `main` của repo `ME` → trang `/ME/` tự cập nhật app.
+2. App THẬT: **Sao lưu ngay** → chờ **Đã kiểm chứng**.
+3. Link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → dán vào **`ME_MayChu_THAT`** → Lưu.
+4. **`healthCheck`** (cho phép quyền nếu hỏi) → `schema_version: 1.5.3 (1.5.4)` CẢNH BÁO — đúng.
+5. **Phiên bản mới** → `THẬT d4` → Triển khai (giữ link) → `?action=system.health` → `"ok":true`.
+6. **`migrateSchema`** → `Thêm: ResetRuns; ResetFiles. schema_version=1.5.4` → **`healthCheck`** ĐẠT.
+7. App THẬT: Ctrl+Shift+R → owner thấy **Tài khoản → Quản trị → Dữ liệu hệ thống**; mọi chức năng khác như cũ.
+
+## Phần M — Đưa Đợt 3 lên THỬ (`ME_MayChu_THU`) — đã xong 16/10/2026
 
 Đợt 3 thêm **10 sheet** (Đồng hồ, Giai đoạn đồng hồ, Chỉ số, Sự kiện đồng hồ, Biểu giá, Tủ điện, Lộ điện, Phụ tải, Mẫu báo cáo, Báo cáo đã lưu), 3 cột duyệt bản vẽ ở sheet Tài liệu, 2 cấu hình (`meter_boundary_window_hours` = 24: số chốt kỳ là lần đọc hợp lệ đầu tiên trong 24 giờ sau mốc 00:00; `reading_self_edit_hours` = 24: người đọc tự sửa chỉ số của mình trong 24 giờ) và **8 mẫu báo cáo** có sẵn. Máy chủ mới cần thêm **một quyền Google**: tạo Google Tài liệu tạm để xuất PDF (báo cáo, hồ sơ thiết bị, phiếu).
 
@@ -40,7 +110,7 @@ Thứ tự lần này **khác Phần J**: cấp quyền → triển khai bản m
 
 **Đã làm Phần M rồi, chỉ cập nhật bản mới** (ví dụ bản 1.0.0-d3.10): làm bước 3, 4 (dán Code.gs mới vào `ME_MayChu_THU` → Lưu) rồi bước 6 (**Phiên bản mới**, mô tả theo số bản). **Không** cần chạy lại `migrateSchema`. App: máy tính Ctrl+Shift+R, iPhone đóng hẳn rồi mở lại → **Tài khoản → Thông tin** đúng số bản.
 
-## Phần N — Thử Đợt 3 trên THỬ
+## Phần N — Thử Đợt 3 trên THỬ — đã xong 16/10/2026
 
 Làm sau Phần M, **theo đúng thứ tự** (bước sau dùng dữ liệu của bước trước). Máy tính: Chrome, trang `/ME-thu/`. iPhone: app **M&E THỬ**. Tài khoản: **NV001** (quản trị), **MAU-C3** (trưởng bộ phận), **MAU-KT** (kỹ thuật, không xem giá), **MAU-DN** (tạo ở bước 0). Người lập **không** tự duyệt việc của mình (biểu giá, sự kiện đồng hồ, xác minh, bản vẽ).
 

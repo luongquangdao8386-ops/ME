@@ -139,6 +139,11 @@ var HANDLERS_ = {
   'report.export': function (ctx) { return reportExport_(ctx); },
   'report.definition.edit': function (ctx) { return reportDefinitionEdit_(ctx); },
   'export.pdf': function (ctx) { return exportPdf_(ctx); },
+  // Đợt 4: Xóa sạch dữ liệu vận hành (chỉ owner; PIN nhập ngay trong request/resume)
+  'system.reset.preview': function (ctx) { return systemResetPreview_(ctx); },
+  'system.reset.request': function (ctx) { return systemResetRequest_(ctx); },
+  'system.reset.status': function (ctx) { return systemResetStatus_(ctx); },
+  'system.reset.resume': function (ctx) { return systemResetResume_(ctx); },
   'qr.resolve': function (ctx) { return qrResolve_(ctx); },
   'qr.print': function (ctx) { return qrPrint_(ctx); },
   'poc.vectors': function (ctx) { return pocVectors_(ctx); },
@@ -153,7 +158,14 @@ var HANDLERS_ = {
 };
 
 /** Khúc commit Excel tiếp theo không hỏi lại PIN (3.8) */
-var PIN_WAIVERS_ = { 'import.commit': function (ctx) { return importCommitPinWaived_(ctx); } };
+var PIN_WAIVERS_ = {
+  'import.commit': function (ctx) { return importCommitPinWaived_(ctx); },
+  // Xóa sạch không dùng reauth_token (3.8): request/resume kiểm PIN gửi kèm; xem trước/tiến độ chỉ cần owner
+  'system.reset.preview': function () { return true; },
+  'system.reset.request': function () { return true; },
+  'system.reset.status': function () { return true; },
+  'system.reset.resume': function () { return true; }
+};
 
 /** Thao tác làm đổi hạn: ghi xong thì tính lại Alerts ngay (không đợi trigger hằng ngày) */
 var DUE_ACTIONS_ = {
@@ -164,8 +176,10 @@ var DUE_ACTIONS_ = {
 /** Action không cần phiên (chỉ qua bước 1 và 3 của 4.2) */
 var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1 };
 
-/** Action được chạy khi bảo trì (Đợt 1–3) */
-var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth.logout': 1 };
+/**
+ * Action được chạy khi bảo trì. Đợt 4 (1.4 §21.5.1): đăng nhập (chỉ owner, nhận phiên phục hồi), tiến độ và tiếp tục đợt Xóa sạch.
+ */
+var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth.logout': 1, 'auth.login': 1, 'system.reset.status': 1, 'system.reset.resume': 1 };
 
 function doPost(e) {
   var t0 = Date.now();

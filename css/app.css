@@ -959,3 +959,33 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .vz-num { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .vz-lbl { overflow-wrap: anywhere; }
 @media print { .vz-table { display: none; } }
+
+/* Đợt 4 — Xóa sạch dữ liệu (SYS-RESET-01..03): nút đỏ có tiết chế, các bước tiến độ, trang riêng ngoài khung app */
+.btn.danger-solid { background: var(--red, #B42318); border-color: var(--red, #B42318); color: #fff; }
+.btn.danger-solid:disabled { background: #E9B8B2; border-color: #E9B8B2; }
+.banner.ok { background: #E3F4EA; color: var(--green); }
+.banner.rs-qr, .rs-done .banner.warn { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; }
+.banner.rs-qr svg, .rs-done .banner.warn svg { width: 20px; height: 20px; flex: none; }
+.rs-page { display: flex; flex-direction: column; gap: 12px; }
+.rs-groups .kv { gap: 12px; }
+.rs-groups .kv strong { white-space: nowrap; }
+.rs-mode { align-items: flex-start; padding: 8px 0; }
+.rs-mode.disabled { opacity: 0.6; }
+.rs-confirm .inp { margin-bottom: 8px; }
+.rs-danger { border: 1px solid #F3C6C0; }
+.rs-progress { max-width: 760px; margin: 0 auto; padding: 0 12px 24px; }
+.rs-progress .bar h1 { font-size: 18px; }
+.rs-body { display: flex; flex-direction: column; gap: 12px; }
+.rs-steps { list-style: none; margin: 12px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.rs-steps li { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.rs-steps .st-ico { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); display: inline-flex; align-items: center; justify-content: center; }
+.rs-steps .st-ico svg { width: 13px; height: 13px; stroke-width: 2.6; opacity: 0; color: #fff; }
+.rs-steps li.done .st-ico { background: var(--green); border-color: var(--green); }
+.rs-steps li.done .st-ico svg { opacity: 1; }
+.rs-steps li.active { color: var(--navy); font-weight: 700; }
+.rs-steps li.active .st-ico { border-color: var(--line); border-top-color: var(--navy); animation: spin 0.9s linear infinite; }
+.rs-steps li.failed { color: var(--red, #B42318); font-weight: 700; }
+.rs-steps li.failed .st-ico { border-color: var(--red, #B42318); }
+.rs-running { display: flex; align-items: center; gap: 6px; }
+.rs-groups .kv { display: flex; justify-content: space-between; align-items: baseline; }
+.rs-groups .kv > span { flex: 1; min-width: 0; }

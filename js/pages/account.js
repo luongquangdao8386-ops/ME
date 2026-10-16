@@ -70,6 +70,8 @@ export async function renderAccount(view, { shell }) {
   if (await can('backup.view')) admin.push(['admin.backup', '/admin/backup']);
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
+  // Đợt 4: chỉ owner có quyền xóa sạch (1.4 §21.1)
+  if (isOwner() && await can('system.reset.status')) admin.push(['admin.system_data', '/admin/system-data']);
   view.innerHTML = `
   <section class="card"><h2>${bi('account.profile')}</h2>
     ${row(bi('account.display_name'), esc(u.display_name || ''))}

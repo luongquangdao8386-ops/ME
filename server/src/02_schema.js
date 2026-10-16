@@ -156,6 +156,17 @@ var SHEETS = {
     cols: 'report_run_id report_definition_id generated_at generated_by filters_json source_revision snapshot_at status ' +
       'file_document_id access_scope dataset_epoch report_run_code title_vi title_zh row_count pdf_document_id dataset' },
 
+  // ---- Đợt 4 (2): Xóa sạch dữ liệu vận hành (1.4 §10.3.1, §21; phụ lục 6.9.3). Chỉ máy chủ đọc/ghi, không đồng bộ xuống app.
+  // Cột ngoài 1.4: run_kind/source_backup_ref (§10.3.1, RESTORE hoãn), bản kế hoạch lúc xem trước, phiên phục hồi, chi tiết lỗi;
+  // ResetFiles: loại file (chính/ảnh nhỏ/thư mục), kết quả đưa về riêng tư.
+  ResetRuns: { book: 'B', dot: 4, key: 'reset_run_id',
+    cols: 'reset_run_id requested_by requested_at before_epoch after_epoch scope_key file_mode plan_hash confirmation_nonce_hash ' +
+      'confirmation_expires_at backup_ref backup_verified_at status phase cursor_json summary_counts_json completed_at error_code ' +
+      'run_kind source_backup_ref plan_json recovery_session_id error_detail updated_at' },
+  ResetFiles: { book: 'B', dot: 4, key: 'reset_file_id',
+    cols: 'reset_file_id reset_run_id drive_file_id source_document_id managed_folder_id owned_by_app file_mode status processed_at ' +
+      'error_code file_kind privacy_status' },
+
   // ---- Bảo mật (5) ----
   Users: { book: 'S', dot: 1, key: 'user_id',
     cols: 'user_id employee_code display_name email role_level active pin_hash salt pin_hash_version failed_attempts ' +

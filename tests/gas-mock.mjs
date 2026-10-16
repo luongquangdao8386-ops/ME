@@ -153,6 +153,11 @@ class MockRange {
     return this;
   }
   setFontWeight() { return this; }
+  clearContent() {
+    this.sheet._ss._app._stats.writes++;
+    for (let i = 0; i < this.nr; i++) for (let j = 0; j < this.nc; j++) this.sheet._set(this.r + i, this.c + j, '');
+    return this;
+  }
   createTextFinder(text) {
     const range = this;
     const f = {
@@ -384,6 +389,7 @@ function makeScriptApp() {
       const spec = { fn };
       const b = {
         timeBased: () => b, everyDays: (n) => { spec.everyDays = n; return b; }, everyHours: (n) => { spec.everyHours = n; return b; },
+        everyMinutes: (n) => { spec.everyMinutes = n; return b; },
         atHour: (h) => { spec.atHour = h; return b; }, onWeekDay: (d) => { spec.weekDay = d; return b; },
         inTimezone: (tz) => { spec.tz = tz; return b; }, after: (ms) => { spec.after = ms; return b; },
         create: () => { const uid = 't' + (++seq); const t = { spec, getHandlerFunction: () => fn, getEventType: () => 'CLOCK', getUniqueId: () => uid }; triggers.push(t); return t; }

@@ -104,6 +104,8 @@ function executeWrite_(ctx, opts) {
   var req = ctx.req;
   var hash = payloadHash_(ctx);
   return withWriteLock_(function () {
+    // Bảo trì vừa bật (Xóa sạch, 1.4 §21.5 bước 3): ghi đã qua bước kiểm ở dispatcher cũng dừng dưới khóa ghi
+    if (PropertiesService.getScriptProperties().getProperty('MAINTENANCE_MODE') === 'true') throw apiError_('SYSTEM_MAINTENANCE');
     var ex = findOne_('Operations', 'operation_id', req.operation_id);
     if (ex) return existingOpResponse_(ctx, ex, hash);
     var st = readState_();

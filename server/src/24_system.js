@@ -323,6 +323,12 @@ function healthRows_() {
   var leftover = TEMP_PROP_KEYS_.concat(isTestEnv_() ? [] : TEST_PROP_KEYS_).filter(function (k) { return prop_(k) !== null && prop_(k) !== ''; });
   add('temp_props', !leftover.length, leftover.join(', '), leftover.length ? 'Xóa ở Cài đặt dự án → Thuộc tính tập lệnh' : '');
   add('maintenance', !props.maintenance_mode, props.maintenance_mode ? 'ON' : 'OFF');
+  // Đợt 4: đợt Xóa sạch còn dở (đang chạy hoặc lỗi chờ owner tiếp tục) — chỉ đọc khi đã có sheet ResetRuns
+  if (releasedDot_() >= 4) {
+    var openRun = null;
+    try { openRun = resetOpenRun_(); } catch (e) { openRun = null; }
+    add('reset_run', !openRun, openRun ? openRun.status + ' · ' + openRun.phase : 'OK', openRun ? 'Owner mở Tài khoản → Quản trị → Dữ liệu hệ thống để tiếp tục' : '');
+  }
   var trig = ScriptApp.getProjectTriggers().map(function (t) { return t.getHandlerFunction(); });
   var missing = TRIGGER_FUNCS_.filter(function (f) { return trig.indexOf(f) < 0; });
   add('triggers', !missing.length, trig.join(', '), missing.length ? 'Thiếu: ' + missing.join(', ') + ' — chạy installTriggers' : '');

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
 import { freshServer, makeClient, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN } from '../helpers.mjs';
 
-test('setup tạo 51 sheet Đợt 1–3, Settings, SystemState, 60 dòng RolePermissions, 8 mẫu báo cáo tích hợp', () => {
+test('setup tạo 53 sheet Đợt 1–4, Settings, SystemState, 60 dòng RolePermissions, 8 mẫu báo cáo tích hợp', () => {
   const env = freshServer();
   const g = env.g;
   const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
   const sec = env.ssApp.openById(env.props.getProperty('SECURITY_SPREADSHEET_ID'));
-  assert.equal(biz.getSheets().length, 46);
+  assert.equal(biz.getSheets().length, 48);
+  for (const n of ['ResetRuns', 'ResetFiles']) assert.ok(biz.getSheetByName(n), n);
   assert.equal(sec.getSheets().length, 5);
   for (const n of ['Meters', 'MeterSegments', 'MeterReadings', 'MeterEvents', 'UtilityTariffs', 'Panels', 'Circuits', 'CircuitLoads', 'ReportDefinitions', 'ReportRuns']) assert.ok(biz.getSheetByName(n), n);
   const defs = env.rows('ReportDefinitions');
@@ -24,7 +25,7 @@ test('setup tạo 51 sheet Đợt 1–3, Settings, SystemState, 60 dòng RolePer
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
-  assert.equal(st.schema_version, '1.5.3');
+  assert.equal(st.schema_version, '1.5.4');
   assert.equal(st.perm_version, 1);
   assert.equal(st.dataset_epoch, env.props.getProperty('DATASET_EPOCH'));
   assert.match(env.props.getProperty('DATASET_EPOCH'), /^[0-9a-f-]{36}$/);
@@ -283,4 +284,37 @@ test('dán Code.gs Đợt 3 mà chưa chạy migrateSchema: app chạy như Đ�
   assert.ok(b2.data.permissions.actions.includes('utility.view'));
   assert.equal(b2.data.records.REPORT_DEFINITION.length, 8);
   assert.equal(c.call('utility.view', {}).code, 'OK');
+});
+
+test('dán Code.gs Đợt 4 mà chưa chạy migrateSchema: app chạy như Đợt 3 (Xóa sạch FEATURE_NOT_ENABLED, không lộ sheet chưa có); chạy xong thì owner thấy Xóa sạch', () => {
+  const env = loadServer();
+  const g = env.g;
+  g.RELEASED_DOT = 3;
+  g.SCHEMA_VERSION = '1.5.3';
+  env.props.setProperty('ENV', 'THU');
+  g.setup();
+  env.props.setProperty('SETUP_OWNER_CODE', OWNER_CODE);
+  env.props.setProperty('SETUP_OWNER_NAME', 'Chủ');
+  env.props.setProperty('SETUP_OWNER_TEMP_PIN', OWNER_TEMP_PIN);
+  g.adminSetupOwner();
+  const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
+  assert.equal(biz.getSheetByName('ResetRuns'), null);
+  g.RELEASED_DOT = 4;
+  g.SCHEMA_VERSION = '1.5.4';
+  g.clearSysCaches_();
+  const c = makeClient(env);
+  c.login(OWNER_CODE, OWNER_TEMP_PIN);
+  c.token = c.call('pin.change', { current_pin: OWNER_TEMP_PIN, new_pin: OWNER_PIN }).data.token;
+  const b = c.call('sync.bootstrap', {});
+  assert.equal(b.data.released_dot, 3);
+  assert.ok(!b.data.permissions.actions.includes('system.reset.preview'));
+  assert.equal(c.call('system.reset.status', {}).code, 'FEATURE_NOT_ENABLED');
+  assert.equal(c.call('utility.view', {}).code, 'OK', 'Đợt 3 vẫn chạy');
+  const health = g.healthCheck();
+  assert.ok(health, 'healthCheck chạy được khi chưa có ResetRuns');
+  g.migrateSchema();
+  assert.ok(biz.getSheetByName('ResetRuns') && biz.getSheetByName('ResetFiles'));
+  assert.equal(c.call('sync.changes', { cursor: 0 }).data.released_dot, 4);
+  assert.ok(c.call('sync.bootstrap', {}).data.permissions.actions.includes('system.reset.preview'));
+  assert.equal(c.call('system.reset.status', { overview: true }).ok, true);
 });

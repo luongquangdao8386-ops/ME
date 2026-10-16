@@ -45,6 +45,11 @@ async function saveSession(data, epoch) {
   else await idb.put('me_auth', 'kv', 'session', s);
 }
 
+/** Đợt 4: sau khi owner xác nhận Xóa sạch (hoặc Tiếp tục), máy chủ cấp phiên phục hồi — dùng thay phiên thường (phiên thường sẽ bị thu hồi) */
+export async function useRecoverySession(rec) {
+  await saveSession({ token: rec.token, expires_at: rec.expires_at, session_kind: 'RECOVERY', user: session.user }, session.epoch);
+}
+
 export async function clearSession() {
   session.token = null; session.user = null; session.kind = null; session.reauth = null;
   ss.del('session');
@@ -179,7 +184,8 @@ export async function login(code, pin, shared, { onStatus } = {}) {
     if (shared) await idb.del('me_auth', 'kv', 'session').catch(() => {});
     await saveSession(r.data, r.dataset_epoch);
     bindServer();
-    if (r.ok) {
+    // Phiên phục hồi (đang Xóa sạch) không tạo PIN ngoại tuyến: không mở app ngoại tuyến vào dữ liệu đang bị xóa
+    if (r.ok && r.data.session_kind !== 'RECOVERY') {
       try { await createVerifier(pin, r.data.user, r.data.expires_at); } catch (e) { /* không chặn đăng nhập */ }
       if (!isSharedDevice() && navigator.storage && navigator.storage.persist) {
         try { ls.set('persist_granted', String(await navigator.storage.persist())); } catch (e) { /* bỏ qua */ }

@@ -1,6 +1,6 @@
 // Khởi động app M&E: Service Worker, phiên, mở offline (2.5), đăng nhập, vào khung app
 import { api, session, ls, ss, bi, esc, execUrl, resMsg, isoNowVN, applyEnvTitle } from './core.js';
-import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding, serverBound, bindServer } from './auth.js';
+import { loadSession, logout, handleRevoked, flushPendingLogout, isIosSafariTab, getVerifier, isSharedDevice, clearUserData, checkServerBinding, serverBound, bindServer, useRecoverySession } from './auth.js';
 import { bootstrap, pullChanges, getMeta, queueItems, exportBackup, deleteQueued } from './sync.js';
 import { shareFileNow } from './media.js';
 import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, $, reloadFreshHtml, wireReloadFresh } from './ui.js';
@@ -64,6 +64,23 @@ async function renderDraftsOnly() {
   $('#dr-login', root).addEventListener('click', () => showLogin());
 }
 
+/** SYS-RESET-03: trang tiến độ Xóa sạch ngoài khung app (đang bảo trì; phiên phục hồi của owner) */
+async function showRecovery(runId) {
+  const { renderResetProgress } = await import('./pages/sysreset.js');
+  const relogin = async (target) => {
+    await logout().catch(() => {});
+    ls.del('reset_run');
+    if (target) ss.set('pending_route', target);
+    showLogin(bi('reset.relogin_note'));
+  };
+  renderResetProgress(root, {
+    runId: runId || ls.get('reset_run') || '',
+    onRelogin: () => relogin(),
+    onImport: () => relogin('#/excel/locations'),
+    onRecovery: (rec) => useRecoverySession(rec)
+  });
+}
+
 async function goApp(offline = false) {
   const target = takeTarget();
   if (target) history.replaceState(null, '', target);
@@ -119,6 +136,8 @@ function showLogin(reason) {
   renderLogin(root, {
     reason,
     onLoggedIn: async (_r, { status } = {}) => {
+      // Đang bảo trì (Xóa sạch): owner nhận phiên phục hồi → trang tiến độ, không tải dữ liệu
+      if (_r && _r.data && _r.data.session_kind === 'RECOVERY') { if (_r.data.reset_run_id) ls.set('reset_run', _r.data.reset_run_id); return showRecovery(_r.data.reset_run_id); }
       const b = await bootstrap({ onPage: (n) => status && status(n > 1 ? 'auth.loading_page' : 'auth.loading_data', { N: n }), page1: _r && _r.data && _r.data.bootstrap });
       if (!b.ok) toast(esc(resMsg(b)), 'err');
       await goApp(false);
@@ -153,6 +172,14 @@ async function handleSessionError(r) {
 }
 
 app.onLogout = doLogout;
+/** Đợt 4: owner vừa xác nhận Xóa sạch → dùng phiên phục hồi, rời khung app, sang trang tiến độ */
+app.onResetStarted = async (d) => {
+  await useRecoverySession(d.recovery);
+  ls.set('reset_run', d.reset_run_id);
+  leaveApp();
+  await showRecovery(d.reset_run_id);
+};
+app.onResetProgress = async (id) => { ls.set('reset_run', id); leaveApp(); await showRecovery(id); };
 app.onSessionError = handleSessionError;
 app.onRevoked = async () => { await handleRevoked(); showLogin(bi('auth.revoked')); };
 app.onRelogin = async () => { await logout(); showLogin(bi('btn.relogin')); };
@@ -188,6 +215,7 @@ async function start() {
   rememberTarget();
   if (!execUrl() || !session.token) return showLogin();
   if (session.kind === 'CHANGE_PIN') return showLogin();
+  if (session.kind === 'RECOVERY') return showRecovery();
 
   // Mở app: có mạng thì hỏi máy chủ (tối đa offline_probe_seconds); không thì mở khóa ngoại tuyến (2.5)
   const probeSec = Number(session.settings.offline_probe_seconds || 12);
@@ -234,7 +262,12 @@ async function start() {
   if (r.code === 'NETWORK_ERROR') return tryOffline();
   if (await handleSessionError(r)) return;
   if (r.ok) bindServer(); // máy chủ đang dùng đã nhận phiên trên máy
-  if (r.code === 'SYSTEM_MAINTENANCE') { toast(bi('sys.maintenance'), 'err'); return tryOffline(); }
+  if (r.code === 'SYSTEM_MAINTENANCE') {
+    // Owner: có thể đang Xóa sạch → đăng nhập lại để nhận phiên phục hồi và xem tiến độ (1.4 §21.5.1)
+    if (session.user && session.user.is_system_owner) return showLogin(bi('reset.login_owner'));
+    toast(bi('sys.maintenance'), 'err');
+    return tryOffline();
+  }
   bootUi.step(2);
   flushPendingLogout();
   const onPage = (n) => bootUi.page(n);

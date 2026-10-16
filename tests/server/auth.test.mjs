@@ -19,7 +19,7 @@ test('system.health qua GET và getPublicState không cần phiên', () => {
   assert.match(s.server_time, /\+07:00$/);
 });
 
-test('body không phải JSON → VALIDATION_ERROR; action lạ → FORBIDDEN; Đợt 4 → FEATURE_NOT_ENABLED', () => {
+test('body không phải JSON → VALIDATION_ERROR; action lạ → FORBIDDEN; khôi phục trong app (hoãn) → FEATURE_NOT_ENABLED', () => {
   const env = freshServer();
   assert.equal(env.post('not json').code, 'VALIDATION_ERROR');
   const c = ownerClient(env);
@@ -27,7 +27,8 @@ test('body không phải JSON → VALIDATION_ERROR; action lạ → FORBIDDEN; �
   assert.equal(c.call('utility.view').code, 'OK', 'Đợt 3 đã bật');
   assert.equal(c.call('maintenance.view').code, 'OK', 'Đợt 2 đã bật');
   assert.equal(c.call('inspection.schedule').code, 'FEATURE_NOT_ENABLED');
-  assert.equal(c.call('system.reset.preview').code, 'FEATURE_NOT_ENABLED');
+  assert.equal(c.call('system.restore.preview').code, 'FEATURE_NOT_ENABLED', 'khôi phục trong app vẫn hoãn');
+  assert.equal(c.call('system.reset.status').code, 'OK', 'Đợt 4 đã bật');
   const old = c.call('sync.bootstrap', {}, { api_contract_version: '0.9' });
   assert.equal(old.code, 'CLIENT_UPDATE_REQUIRED');
   assert.equal(c.call('sync.bootstrap', {}, { app_version: '0.9.0' }).code, 'CLIENT_UPDATE_REQUIRED');
@@ -219,16 +220,24 @@ test('tài khoản bị khóa (active=false) chỉ báo ACCOUNT_DISABLED khi PIN
   assert.equal(d.login('NV-300', '482916').code, 'ACCOUNT_DISABLED');
 });
 
-test('bảo trì: chỉ system.health, getPublicState, auth.logout chạy', () => {
+test('bảo trì: chỉ system.health, getPublicState, auth.logout chạy; owner đăng nhập được phiên phục hồi (chỉ xem/tiếp tục Xóa sạch), người khác bị chặn', () => {
   const env = freshServer();
   const c = ownerClient(env);
+  userClient(env, 'U-C3M', 3, '694128');
   env.g.adminMaintenanceOn();
   assert.equal(c.call('sync.bootstrap').code, 'SYSTEM_MAINTENANCE');
   assert.equal(c.call('system.getPublicState').data.maintenance_mode, true);
-  assert.equal(makeClient(env).login(OWNER_CODE, OWNER_PIN).code, 'SYSTEM_MAINTENANCE');
+  assert.equal(makeClient(env).login('U-C3M', '694128').code, 'SYSTEM_MAINTENANCE', 'không phải owner');
+  const ow = makeClient(env);
+  const lr = ow.login(OWNER_CODE, OWNER_PIN);
+  assert.equal(lr.ok, true);
+  assert.equal(lr.data.session_kind, 'RECOVERY');
+  assert.equal(ow.call('system.reset.status').code, 'OK');
+  assert.equal(ow.call('sync.bootstrap').code, 'SYSTEM_MAINTENANCE');
   assert.equal(c.call('auth.logout').ok, true);
   env.g.adminMaintenanceOff();
-  assert.equal(makeClient(env).login(OWNER_CODE, OWNER_PIN).ok, true);
+  assert.equal(ow.call('sync.bootstrap').code, 'FORBIDDEN', 'phiên phục hồi không dùng cho nghiệp vụ');
+  assert.equal(makeClient(env).login(OWNER_CODE, OWNER_PIN).data.session_kind, 'FULL');
 });
 
 test('Sessions lưu token_hash, không lưu token; AuthAttempts không có PIN', () => {
