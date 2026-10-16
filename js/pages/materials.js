@@ -1,6 +1,6 @@
 // Kho vật tư: MAT-01 danh mục, MAT-02 hồ sơ, WEB-MAT-01; tab Linh kiện của thiết bị (EQ-03). Không chốt tồn (C3, 1.4 §5.4)
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -26,6 +26,7 @@ const notConnected = () => (session.settings.warehouse_connected ? '' : `<p clas
 /* ======================= Danh mục (MAT-01 / WEB-MAT-01) ======================= */
 
 const filt = { q: '', group: '', kind: '', comp: false, inactive: false, tab: 'catalog', wq: '' };
+const FILT0 = { ...filt };
 const selected = new Set();
 let inactiveCache = null;
 
@@ -40,6 +41,7 @@ async function listRows() {
 
 export async function renderMaterialList(view, ctx) {
   const { shell, params, query } = ctx;
+  freshFilters(ctx, filt, FILT0, ['tab']);
   const wide = isWide();
   const selId = params.id || '';
   const canCreate = await can('material.create');

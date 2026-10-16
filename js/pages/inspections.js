@@ -1,6 +1,6 @@
 // Kiểm định: IN-01 danh sách yêu cầu, IN-02 hồ sơ yêu cầu, IN-03 nộp chứng nhận, WEB-IN-01; loại kiểm định (4.4.9, 3.17, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, blobToB64, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide } from '../shell.js';
@@ -42,10 +42,12 @@ function statusBadges(x) {
 /* ======================= IN-01 / WEB-IN-01 ======================= */
 
 const filt = { q: '', state: 'ALL', type: '', location: '', month: '' };
+const FILT0 = { ...filt };
 const selected = new Set();
 
 export async function renderInspectionList(view, ctx) {
   const { shell } = ctx;
+  freshFilters(ctx, filt, FILT0);
   const wide = isWide();
   const canReq = await can('inspection.requirement.edit');
   const canType = await can('inspection.type.edit');

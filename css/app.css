@@ -836,6 +836,7 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .ci-ico { width: 36px; height: 36px; border-radius: 10px; background: #EEF2F7; color: var(--navy); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .ci-ico.big { width: 48px; height: 48px; }
 .ci-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ci-badge { margin-top: 4px; }
 .ci-rows { list-style: none; margin: 0; padding: 0 8px 8px; border-top: 1px solid var(--bg); }
 .ci-rows li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--bg); }
 .ci-rows li:last-child { border-bottom: 0; }
@@ -904,6 +905,8 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .rp-web .tbl th, .rp-web .tbl td, .ut-table th, .ut-table td, .ci-table th, .ci-table td { overflow-wrap: break-word; }
 .ci-mode { flex: 0 0 auto; flex-wrap: nowrap; margin-top: 0; }
 .ci-mode .seg { flex: 0 0 auto; min-width: 96px; }
+/* iPhone: hai nút Lộ điện / Tủ điện chia đều bề ngang */
+@media (max-width: 899px) { .ci-toolbar .ci-mode { width: 100%; } .ci-toolbar .ci-mode .seg { flex: 1 1 0; } }
 .ci-safe > span { display: inline; }
 .ut-read .form-actions { flex-wrap: nowrap; }
 .ut-read .form-actions .btn { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 0; }

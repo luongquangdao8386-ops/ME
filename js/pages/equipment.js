@@ -1,6 +1,6 @@
 // Thiết bị: EQ-01 danh sách, EQ-02..04 hồ sơ 4 tab, WEB-EQ-01 bảng + vùng hồ sơ; biểu mẫu thêm/sửa (4.4.1, 5.5, 6.3)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -53,6 +53,7 @@ async function locLabel(id) {
 /* ======================= Danh sách (EQ-01 / WEB-EQ-01) ======================= */
 
 const filt = { q: '', status: '', location: '', category: '', retired: false };
+const FILT0 = { ...filt };
 let selected = new Set();
 let retiredCache = null;
 
@@ -74,6 +75,7 @@ async function listRows() {
 
 export async function renderEquipmentList(view, ctx) {
   const { shell, params, query } = ctx;
+  freshFilters(ctx, filt, FILT0);
   const wide = isWide();
   const selId = params.id || query.get('sel') || '';
   const canCreate = await can('equipment.create');

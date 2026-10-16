@@ -42,9 +42,17 @@ test('đăng nhập: nút giữ trạng thái đang chạy tới khi vào app (t
     const { page, calls } = app;
     await page.fill('#emp', OWNER_CODE);
     await page.fill('#pin', OWNER_PIN);
+    // Ghi trạng thái nút ngay lúc hiện "Đang tải dữ liệu" (đăng nhập kèm dữ liệu đầu có thể vào app rất nhanh)
+    await page.evaluate(() => {
+      window.__lb = null;
+      new MutationObserver(() => {
+        const st = document.querySelector('#login-status'), b = document.querySelector('#login-btn');
+        if (window.__lb === null && st && st.textContent.includes('Đang tải dữ liệu')) window.__lb = b ? b.disabled : 'gone';
+      }).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
     await page.click('#login-btn');
-    await page.waitForFunction(() => (document.querySelector('#login-status') || {}).textContent?.includes('Đang tải dữ liệu'), null, { timeout: 10000 });
-    assert.equal(await page.isDisabled('#login-btn'), true);
+    await page.waitForFunction(() => window.__lb !== null, null, { timeout: 10000 });
+    assert.equal(await page.evaluate(() => window.__lb), true);
     await page.screenshot({ path: path.join(SHOTS, 'login-loading-iphone.png') });
     await page.click('#login-btn', { force: true }).catch(() => {});
     await page.dispatchEvent('form.login-card', 'submit').catch(() => {});

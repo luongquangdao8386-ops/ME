@@ -3,16 +3,21 @@ const routes = [];
 let onRoute = null;
 let depth = 0;
 let lastHash = null, lastAt = 0;
+let navKind = 'push';
 
 /** Gọi màn hiện tại; popstate và hashchange cùng bắn khi lùi lịch sử → chỉ vẽ một lần */
-function fire(force) {
+function fire(force, kind = 'push') {
   if (!onRoute) return;
   const h = location.hash || '#/';
   const t = Date.now();
   if (!force && h === lastHash && t - lastAt < 300) return;
   lastHash = h; lastAt = t;
+  navKind = kind;
   onRoute();
 }
+
+/** Cách tới màn đang vẽ: 'push' (bấm link/nút, navigate), 'pop' (‹ hoặc lùi lịch sử), 'hash' (gõ địa chỉ), 'refresh' (vẽ lại) */
+export function lastNavKind() { return navKind; }
 
 /** route('/equipment/:id', handler, {parent: '/equipment'}) */
 export function route(pattern, handler, opts = {}) {
@@ -74,12 +79,12 @@ export function startRouter(fn) {
   started = true;
   window.addEventListener('popstate', (e) => {
     depth = (e.state && e.state.meDepth) || 0;
-    fire(false);
+    fire(false, 'pop');
   });
   // Gõ tay địa chỉ hoặc liên kết ngoài app: hashchange không kèm popstate ở mọi trình duyệt
   window.addEventListener('hashchange', () => {
     if (!history.state || history.state.meDepth === undefined) history.replaceState({ meDepth: depth }, '', location.hash);
-    fire(false);
+    fire(false, 'hash');
   });
   // Liên kết trong app (<a href="#/...">) đi qua navigate để giữ độ sâu lịch sử
   document.addEventListener('click', (e) => {
@@ -93,4 +98,4 @@ export function startRouter(fn) {
 export function stopRouter() { onRoute = null; }
 
 /** Vẽ lại màn hiện tại (sau đồng bộ, đổi bố cục) */
-export function refresh() { fire(true); }
+export function refresh() { fire(true, 'refresh'); }

@@ -1,6 +1,6 @@
 // Công việc · 工单 (iPhone nav 2, menu web) — 5.2: lọc Của tôi / Trong phạm vi, loại, nhóm theo hạn; thẻ iPhone, bảng web
 import { bi, biText, esc, fmtDate, fmtDateTime, badge } from '../core.js';
-import { ICON, toTop, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toTop, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { navigate } from '../router.js';
 import { can, roleLevel } from '../data.js';
@@ -8,10 +8,12 @@ import { workItems, statusBadge, prioBadges, workTitle, eqText, pendingForMe, pe
 
 const GROUPS = ['OVERDUE', 'TODAY', 'UPCOMING', 'PENDING_ACCEPTANCE'];
 const filt = { scope: null, kind: 'ALL', q: '', page: 0 };
+const FILT0 = { ...filt };
 const PAGE = 50;
 
 export async function renderWork(view, ctx) {
   const { shell } = ctx;
+  freshFilters(ctx, filt, FILT0);
   const wide = isWide();
   const canReport = await can('repair.report');
   const canWo = await can('maintenance.wo.create');

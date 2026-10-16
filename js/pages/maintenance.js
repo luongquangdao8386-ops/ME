@@ -1,7 +1,7 @@
 // Bảo trì (Đợt 2): MT-01 Kế hoạch / Phiếu thực hiện / Lịch; MT-02 chi tiết phiếu; MT-03 checklist, số đo, ảnh trước/sau, vật tư,
 // gửi nghiệm thu (C7, C8, 5.1.1); kế hoạch lặp lại (ngày/tháng/giờ chạy), mẫu checklist có phiên bản; WEB-MT-01 (1.4 §5.2, phụ lục 4.4.3)
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, weekStart, weekday, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -24,6 +24,7 @@ import {
 const INTERVALS = ['DAY', 'MONTH', 'OPERATING_HOURS'];
 const RESULT_TYPES = ['PASS_FAIL', 'NUMBER', 'TEXT'];
 const st = { tab: 'wo', woFilter: 'OPEN', planFilter: 'ACTIVE', q: '', week: 0 };
+const ST0 = { ...st };
 
 /* ---------------- Dữ liệu ---------------- */
 
@@ -66,6 +67,7 @@ const fromLocalInput = (v) => (v ? `${v}:00+07:00` : '');
 
 export async function renderMaintenance(view, ctx) {
   const { shell } = ctx;
+  freshFilters(ctx, st, ST0, ['tab']);
   const wide = isWide();
   const can_ = {
     plan: await can('maintenance.plan.edit'), cl: await can('maintenance.checklist.edit'), wo: await can('maintenance.wo.create'),

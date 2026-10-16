@@ -2,7 +2,7 @@
 // ảnh đồng hồ); sự kiện thay/reset/đổi hệ số (chờ duyệt); sửa/hủy chỉ số; biểu giá (quyền giá). 1.4 §5.5, phụ lục 3.12, 4.4.6, 6.9.2.
 // Tổng hợp kỳ tính ở máy chủ (cần mạng); không mạng: xem bản đã tải gần nhất, vẫn nhập chỉ số được (gửi khi có mạng).
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, resMsg, session, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -28,6 +28,7 @@ const PAGE = 20;
 const MAX_PHOTOS = 3;
 const F = { period: 'DAY_5', date: '', from: '', to: '', loc: '', cycle: '', page: 0 };
 const ML = { q: '', type: '', loc: '' };
+const ML0 = { ...ML };
 /** Tab đang xem của từng đồng hồ (đổi tab vẽ lại tại chỗ, không nhảy lên đầu trang); hồ sơ đầy đủ tải gần nhất (30 giây) */
 const meterTab = new Map();
 let fullCache = { id: '', at: 0, data: null };
@@ -292,6 +293,7 @@ export async function renderUtilities(view, ctx) {
 
 export async function renderMeterList(view, ctx) {
   const { shell, query } = ctx;
+  freshFilters(ctx, ML, ML0);
   const wide = isWide();
   const pickRead = query.get('read') === '1';
   if (query.get('type') && ML.type !== query.get('type')) ML.type = query.get('type');

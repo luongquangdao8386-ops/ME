@@ -1,6 +1,6 @@
 // Hợp đồng thuê ngoài: CO-01 danh sách, CO-02 hồ sơ, CO-03 gia hạn, WEB-CO-01 (1.4 §5.8; phụ lục 2.7, 3.17, 4.4.8, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -37,9 +37,11 @@ function lifeBadge(c) {
 /* ======================= CO-01 / WEB-CO-01 ======================= */
 
 const filt = { q: '', state: 'ALL', life: 'ACTIVE' };
+const FILT0 = { ...filt };
 
 export async function renderContractList(view, ctx) {
   const { shell } = ctx;
+  freshFilters(ctx, filt, FILT0);
   const wide = isWide();
   const canCreate = await can('contract.create');
   shell.setScreen({

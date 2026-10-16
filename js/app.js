@@ -2,7 +2,7 @@
 import { bi, esc, session, resMsg } from './core.js';
 import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges } from './sync.js';
 import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
-import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh } from './router.js';
+import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh, lastNavKind } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
 import { toast, dialog, reloadFreshHtml, wireReloadFresh } from './ui.js';
 import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
@@ -55,11 +55,15 @@ async function renderRoute() {
   // Không để nội dung màn trước (vd cụm logo trang chủ) còn hiện trong lúc màn mới đang tải. Vẽ lại cùng màn (đồng bộ xong,
   // xoay máy) thì giữ nội dung cũ tới khi có nội dung mới: không nháy, không mất chỗ đang xem
   if (!redraw && (!view.querySelector('.pane') || !path.startsWith(main.dataset.path || '\u0000'))) view.innerHTML = '<div class="loading"><div class="spinner small" aria-hidden="true"></div></div>';
-  main.dataset.path = path.split('/').slice(0, 2).join('/');
+  // Vào module từ chỗ khác (trang chủ, menu, link) — không phải ‹/lùi lịch sử, không phải vẽ lại — thì danh sách bỏ ô tìm/bộ lọc cũ
+  const mod = path.split('/').slice(0, 2).join('/');
+  const kind = lastNavKind();
+  const entered = mod !== main.dataset.path && kind !== 'pop' && kind !== 'refresh';
+  main.dataset.path = mod;
   // Màn đã bị thay không được đổi tiêu đề/nút trên header nữa
   const pageShell = Object.assign(Object.create(shell), { setScreen: (o) => { if (seq === renderSeq) shell.setScreen(o); } });
   try {
-    await m.route.handler(view, { params: m.params, query: queryParams(), shell: pageShell, app, seq, isCurrent: () => seq === renderSeq });
+    await m.route.handler(view, { params: m.params, query: queryParams(), shell: pageShell, app, seq, entered, isCurrent: () => seq === renderSeq });
   } catch (e) {
     if (seq !== renderSeq) return;
     view.innerHTML = `<div class="card"><p class="banner warn">${bi('err.client')}: ${esc(e && e.message)}</p>${reloadFreshHtml()}</div>`;

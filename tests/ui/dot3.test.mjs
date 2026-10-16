@@ -209,6 +209,50 @@ test('iPhone C4: Lộ điện — danh sách theo tủ, hồ sơ lộ (thông s�
   } finally { await app.close(); }
 });
 
+test('iPhone C4: Tra cứu lộ điện — vào lại từ trang chủ thì ô tìm và bộ lọc trống; ‹ quay lại từ hồ sơ lộ thì giữ; nút Lộ điện / Tủ điện như web', async () => {
+  const s = setup();
+  const app = await openApp({ env: s.env, ...IPHONE });
+  const { page } = app;
+  try {
+    await login(page);
+    await page.click('.grid9 a.tile[href="#/circuits"]');
+    await page.waitForSelector('.ci-group');
+    // Lọc theo tủ + gõ tìm → mở lộ → ‹ quay lại: giữ nguyên
+    await page.selectOption('#ci-panel', s.DB);
+    await page.waitForFunction(() => document.querySelectorAll('.ci-group').length === 1);
+    await page.focus('#ci-q');
+    await page.keyboard.type('máy nén', { delay: 50 });
+    await page.waitForTimeout(500);
+    await page.click(`a.ci-row[href="#/circuits/c/${s.c5}"]`);
+    await page.waitForSelector('.ci-detail');
+    await page.click('#hdr-back');
+    await page.waitForSelector('#ci-q');
+    await page.waitForTimeout(300);
+    assert.deepEqual(await page.evaluate(() => [document.querySelector('#ci-q').value, document.querySelector('#ci-panel').value]), ['máy nén', s.DB]);
+    // Về trang chủ (nút dưới) rồi bấm lại ô Tra cứu lộ điện: ô tìm và bộ lọc trống, đủ 4 tủ
+    await page.click('.bnav-item[data-path="/"]');
+    await page.waitForSelector('.grid9');
+    await page.click('.grid9 a.tile[href="#/circuits"]');
+    await page.waitForSelector('.ci-group');
+    await page.waitForTimeout(300);
+    assert.deepEqual(await page.evaluate(() => [document.querySelector('#ci-q').value, document.querySelector('#ci-panel').value]), ['', '']);
+    assert.equal(await page.locator('.ci-group').count(), 4);
+    // Nút Tủ điện: danh sách 4 tủ (loại tủ, số lộ), chạm mở hồ sơ tủ
+    assert.equal(await page.locator('.ci-mode .seg').count(), 2);
+    await page.click('.ci-mode .seg[data-mode="panels"]');
+    await page.waitForSelector('.ci-panels');
+    assert.equal(await page.locator('.ci-panels a.ci-row').count(), 4);
+    const pt = await page.textContent('.ci-panels');
+    assert.ok(pt.includes('Tủ tổng MSB') && pt.includes('Tổng 1 lộ'), pt);
+    assert.ok(await noOverflow(page));
+    await page.screenshot({ path: path.join(SHOTS, 'd3-ci01-panels-iphone.png'), fullPage: true });
+    await page.click(`.ci-panels a.ci-row[href="#/circuits/p/${s.DB}"]`);
+    await page.waitForSelector('.ci-detail');
+    assert.ok((await viewText(page)).includes('Lộ máy nén khí'));
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
 test('iPhone ĐN: quét tem đồng hồ mở thẳng màn nhập chỉ số; KT quét cùng tem thì sang hồ sơ đồng hồ (không ghi chỉ số)', async () => {
   const s = setup();
   const qr = s.env.rows('QrRegistry').find((q) => q.entity_id === s.water).qr_key;

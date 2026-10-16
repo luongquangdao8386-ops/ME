@@ -8,7 +8,7 @@ import { freshServer, ownerClient, OWNER_CODE, OWNER_PIN } from '../helpers.mjs'
 const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
 
-test('iPhone C4: gõ "TU-0" vào ô tìm kiếm của 9 danh sách — ô giữ nguyên phần tử và focus sau mỗi lần vẽ lại; Thiết bị lọc đúng theo mã', async () => {
+test('iPhone C4: gõ "TU-0" vào ô tìm kiếm của 9 danh sách — ô giữ nguyên phần tử và focus sau mỗi lần vẽ lại; Thiết bị lọc đúng theo mã; về trang chủ rồi vào lại thì ô tìm trống', async () => {
   const env = freshServer();
   ownerClient(env);
   env.g.pocSeedSampleData();
@@ -48,6 +48,15 @@ test('iPhone C4: gõ "TU-0" vào ô tìm kiếm của 9 danh sách — ô giữ 
     const txt = await page.textContent('.view');
     assert.ok(txt.includes(eqs[1]) && !txt.includes(eqs[0]), txt.slice(0, 300));
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), 'eq-q');
+    // Về trang chủ rồi bấm lại ô Thiết bị: ô tìm trống, đủ danh sách
+    await page.click('.bnav-item[data-path="/"]');
+    await page.waitForSelector('.grid9');
+    await page.click('.grid9 a.tile[href="#/equipment"]');
+    await page.waitForSelector('#eq-q');
+    await page.waitForTimeout(300);
+    assert.equal(await page.inputValue('#eq-q'), '');
+    const all = await page.textContent('.view');
+    assert.ok(eqs.every((c) => all.includes(c)), 'đủ danh sách');
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

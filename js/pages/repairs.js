@@ -1,7 +1,7 @@
 // Sửa chữa (Đợt 2): RP-01 danh sách, RP-03 báo sự cố (cả offline, ảnh hiện trường), RP-02 chi tiết: 6 mốc (C9), phân công,
 // xử lý, việc con, chạy thử, gửi nghiệm thu, nghiệm thu không tự duyệt, hủy, mở lại; vật tư MAT-03; WEB-RP-01 (1.4 §5.3, phụ lục 4.4.4)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, toTop, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -20,6 +20,7 @@ import {
 } from '../work.js';
 
 const st = { filter: 'OPEN', sev: '', q: '', page: 0 };
+const ST0 = { ...st };
 const PAGE = 50;
 const FILTERS = { OPEN: ['REPORTED', 'ASSIGNED', 'IN_PROGRESS'], PENDING_ACCEPTANCE: ['PENDING_ACCEPTANCE'], COMPLETED: ['COMPLETED'], CANCELLED: ['CANCELLED'], ALL: null };
 const MAX_PHOTOS = 5;
@@ -45,6 +46,7 @@ async function repairsAll(ops) {
 
 export async function renderRepairList(view, ctx) {
   const { shell } = ctx;
+  freshFilters(ctx, st, ST0);
   const wide = isWide();
   const canReport = await can('repair.report');
   const excelBtn = await excelLink('repairs_history');

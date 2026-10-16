@@ -2,7 +2,7 @@
 // hồ sơ tủ (nối hồ sơ thiết bị — B2: thấy phiếu sửa, bảo trì của thiết bị), CI-03 đường cấp điện (truy trên máy, dùng được khi mất mạng),
 // bản vẽ có phiên bản và duyệt, xác minh dữ liệu (PIN). Tra cứu không xác nhận đã cô lập điện (1.4 §5.7, phụ lục 3.13, 4.4.7).
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session } from '../core.js';
-import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch } from '../ui.js';
+import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -24,6 +24,7 @@ const ROLES = ['PRIMARY', 'BACKUP'];
 const DEPTH_MAX = 50;
 const PAGE = 20;
 const FL = { q: '', loc: '', panel: '', mode: 'circuits', modeChosen: false, page: 0 };
+const FL0 = { ...FL };
 const open = new Set();
 /** Tab đang xem của từng lộ: đổi tab vẽ lại tại chỗ (không đổi địa chỉ → không nhảy lên đầu trang) */
 const tabOf = new Map();
@@ -143,6 +144,7 @@ async function perms() {
 
 export async function renderCircuitList(view, ctx) {
   const { shell, params } = ctx;
+  freshFilters(ctx, FL, FL0, ['mode', 'modeChosen']);
   const wide = isWide();
   const sel = params.cid ? 'C:' + params.cid : (params.pid ? 'P:' + params.pid : '');
   const p = await perms();
@@ -170,7 +172,7 @@ export async function renderCircuitList(view, ctx) {
   const toolbar = `<div class="toolbar ci-toolbar">
     <div class="search"><span>${ICON.search}</span><input id="ci-q" type="search" value="${esc(FL.q)}" placeholder="${esc(biText('ci.search_ph'))}" autocomplete="off"></div>
     <div class="row">${selBox('ci-loc', 'field.location', locOpts, FL.loc)}${selBox('ci-panel', 'ci.panel', panelOpts, FL.panel)}</div>
-    ${wide ? `<div class="segs ci-mode"><button type="button" class="seg${FL.mode === 'circuits' ? ' on' : ''}" data-mode="circuits">${bi('ci.circuit')}</button><button type="button" class="seg${FL.mode === 'panels' ? ' on' : ''}" data-mode="panels">${bi('ci.panel')}</button></div>` : ''}
+    ${g.panels.size || wide ? `<div class="segs ci-mode"><button type="button" class="seg${FL.mode === 'circuits' ? ' on' : ''}" data-mode="circuits">${bi('ci.circuit')}</button><button type="button" class="seg${FL.mode === 'panels' ? ' on' : ''}" data-mode="panels">${bi('ci.panel')}</button></div>` : ''}
     <div class="row tools">${excel}${rpt}
       ${p.edit ? `<a class="btn small" href="#/circuits/p/new">${ICON.panel}<span>${bi('ci.add_panel')}</span></a>` : ''}
       ${p.edit && wide ? `<a class="btn small primary" href="#/circuits/c/new${FL.panel ? '?panel=' + esc(FL.panel) : ''}">${ICON.plus}<span>${bi('ci.add_circuit')}</span></a>` : ''}</div></div>`;
@@ -195,6 +197,15 @@ export async function renderCircuitList(view, ctx) {
         <td>${c.qr_key ? `<a class="icon-btn" href="#/qr/CIRCUIT/${esc(c.circuit_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
       <div class="row pager"><span class="muted small">${bi('ut.showing', { A: circuits.length ? FL.page * PAGE + 1 : 0, B: Math.min(circuits.length, (FL.page + 1) * PAGE), N: circuits.length })}</span>
         ${circuits.length > PAGE ? `<button type="button" class="btn small" id="ci-pp" ${FL.page ? '' : 'disabled'}>‹</button><span class="muted small">${FL.page + 1} / ${Math.ceil(circuits.length / PAGE)}</span><button type="button" class="btn small" id="ci-np" ${(FL.page + 1) * PAGE < circuits.length ? '' : 'disabled'}>›</button>` : ''}</div>`;
+  } else if (FL.mode === 'panels') {
+    // iPhone: danh sách tủ (như bảng Tủ điện của web) — loại tủ, khu vực, số lộ, xác minh; chạm mở hồ sơ tủ
+    const list = panels.filter((pn) => !ql || textOfP(pn).includes(ql));
+    body = `<div class="card-head ci-head"><h2>${bi('ci.panel_list')}</h2><span class="muted small">${bi('ci.total_panels', { N: list.length })}</span></div>
+      ${list.length ? `<div class="card ci-group ci-panels"><ul class="ci-rows">${list.map((pn) => { const l = locs.get(pn.location_id); const e = eqs.get(pn.equipment_id); return `<li><a class="ci-row" href="#/circuits/p/${esc(pn.panel_id)}"><span class="ci-ico">${panelIcon(pn)}</span>
+          <span class="ci-text"><span class="code">${esc(pn.panel_code)}</span><span class="small">${biName(pn)}</span>
+          <span class="muted small">${bi('panel_type.' + pn.panel_type)}${l ? ' · ' + esc(l.location_code) : ''}${e ? ' · ' + esc(e.equipment_code) : ''} · ${bi('ci.total_circuits', { N: (g.circuitsByPanel.get(pn.panel_id) || []).length })}</span>
+          <span class="ci-badge">${verifiedBadge(pn)}</span></span></a>
+        ${pn.qr_key ? `<a class="icon-btn" href="#/qr/PANEL/${esc(pn.panel_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</li>`; }).join('')}</ul></div>` : `<p class="muted">${bi('field.no_records')}</p>`}`;
   } else {
     const groups = panels.map((pn) => ({ pn, list: circuits.filter((c) => c.panel_id === pn.panel_id) })).filter((x) => !ql || x.list.length || textOfP(x.pn).includes(ql));
     body = `<div class="card-head ci-head"><h2>${bi('ci.list_title')}</h2><span class="muted small">${bi('ci.total_circuits', { N: circuits.length })}</span></div>

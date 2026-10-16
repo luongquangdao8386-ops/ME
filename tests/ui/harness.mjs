@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 import { freshServer } from '../helpers.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const PNG_1X1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 export const EXEC = 'https://script.google.com/macros/s/TESTONLY_fake_deployment_id_000/exec';
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 
@@ -50,6 +51,8 @@ export async function openApp({ env = freshServer(), viewport = { width: 390, he
     serviceWorkers: sw ? 'allow' : 'block', permissions
   });
   const calls = [];
+  // Ảnh link-view (lh3) không ra mạng ngoài trong test: trả ảnh PNG 1×1
+  await context.route('https://lh3.googleusercontent.com/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(PNG_1X1, 'base64') }));
   await context.route(EXEC + '**', async (route) => {
     const req = route.request();
     let body;

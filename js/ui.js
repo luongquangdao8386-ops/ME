@@ -67,6 +67,16 @@ export function wireSearch(root, sel, onText, again) {
   });
 }
 
+/**
+ * Danh sách vừa được mở từ chỗ khác (trang chủ, menu — ctx.entered): đưa ô tìm, bộ lọc, trang về như lúc đầu (`init`), giữ các khóa
+ * trong `keep` (tab, kiểu bảng). Quay lại bằng ‹ hoặc vẽ lại thì giữ nguyên. Chỉ chạy một lần cho mỗi lần mở (vẽ lại khi gõ dùng cùng ctx).
+ */
+export function freshFilters(ctx, state, init, keep = []) {
+  if (!ctx || !ctx.entered) return;
+  ctx.entered = false;
+  Object.keys(init).forEach((k) => { if (!keep.includes(k)) state[k] = init[k]; });
+}
+
 export function h(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();

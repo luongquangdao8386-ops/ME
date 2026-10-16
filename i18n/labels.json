@@ -1613,6 +1613,8 @@
   "ci.search_ph": ["Tìm tủ, lộ hoặc thiết bị…", "搜索配电柜、回路或设备…"],
   "ci.list_title": ["Danh sách tủ và lộ điện", "配电柜和回路列表"],
   "ci.total_circuits": ["Tổng {N} lộ", "共 {N} 回路"],
+  "ci.panel_list": ["Danh sách tủ điện", "配电柜列表"],
+  "ci.total_panels": ["Tổng {N} tủ", "共 {N} 个配电柜"],
   "ci.panel": ["Tủ điện", "配电柜"],
   "ci.circuit": ["Lộ điện", "回路"],
   "ci.panel_detail": ["Chi tiết tủ điện", "配电柜详情"],
