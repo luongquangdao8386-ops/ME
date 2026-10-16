@@ -46,7 +46,7 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 
 ### Bước 1 — Chuẩn bị
 1. iPhone, **MAU-KT**: bật **chế độ máy bay** → Sửa chữa → Báo sự cố một máy → Lưu (nằm ở **Chờ gửi**). Giữ máy bay.
-2. Ghi lại mã một hồ sơ có tem QR thử (ví dụ thiết bị hoặc đồng hồ `DH-0001`) để quét lại ở bước 5.
+2. Máy tính: mở một hồ sơ có QR (ví dụ đồng hồ `DH-0001`) → **Xem QR** → **chụp màn hình** mã QR (Windows: phím Windows + Shift + S) và giữ ảnh đó để quét lại ở Bước 5.
 
 ### Bước 2 — SYS-RESET-01 Dữ liệu hệ thống (máy tính, NV001)
 **Tài khoản → Quản trị → Dữ liệu hệ thống.**
@@ -61,7 +61,7 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 
 ### Bước 4 — SYS-RESET-03 Tiến độ
 1. Bấm **Xác nhận xóa sạch** → app rời khung, sang trang **Tiến độ xóa sạch**: Chuẩn bị → Sao lưu → Xóa → Kiểm tra → Hoàn tất (thường vài phút), số đã xóa/tổng theo nhóm.
-2. Trong lúc đang chạy: iPhone **MAU-C3** (có mạng) mở app / đăng nhập → báo **Hệ thống đang bảo trì**.
+2. Trong lúc đang chạy: iPhone **MAU-C3** (có mạng) đóng hẳn app rồi mở lại → dòng đỏ **Hệ thống đang bảo trì** (app chỉ mở được chế độ ngoại tuyến); đăng nhập lại cũng báo **Hệ thống đang bảo trì**.
 
 **Đúng khi:** **Hoàn tất**, có số đã xóa theo nhóm, dòng File (giữ … · thùng rác 0 · …), **Bản sao lưu trước khi xóa: yyyy-mm-dd_HHmm**, dòng vàng nhắc in tem QR mới, nút **Đăng nhập lại** và **Nhập dữ liệu mới**.
 
@@ -69,8 +69,8 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 1. Bấm **Đăng nhập lại** → đăng nhập NV001 → Thiết bị, Kho vật tư, Điện nước, Lộ điện… **trống**; Tài khoản → Quản trị → **Người dùng**, **Phân quyền** còn nguyên; Báo cáo còn 8 mẫu chuẩn.
 2. Drive của tài khoản M&E: `ME_HeThong_THU` → `ME_Backups_THU` có thư mục mới đúng tên ở biên nhận; ảnh cũ trong `ME_Data_THU` vẫn còn nhưng **Quyền truy cập chung: Bị hạn chế** (link cũ không xem được).
 3. Thêm 1 thiết bị mới → mã **tiếp số cũ** (không quay về số 1, để không trùng chữ in trên tem cũ).
-4. Quét tem QR cũ (bước 1.2) → **Tem đã hết hiệu lực** kèm ngày đặt lại.
-5. iPhone **MAU-KT** tắt máy bay → mở app → **Dữ liệu đã được đặt lại, cần tải lại** → đăng nhập → **Tài khoản → Nháp**: phiếu báo sự cố ở mục **Nháp thế hệ dữ liệu cũ**, không tự gửi (xuất dự phòng hoặc xóa được).
+4. iPhone → **Quét QR** → quét ảnh QR đã chụp ở Bước 1 (mở ảnh trên màn hình máy tính) → **Tem đã hết hiệu lực**.
+5. iPhone **MAU-KT** tắt máy bay → mở app → màn đăng nhập báo **Dữ liệu đã được đặt lại, cần tải lại** → đăng nhập → **Tài khoản → Đồng bộ → Nháp chờ đồng bộ** → tab **Nháp thế hệ dữ liệu cũ**: phiếu báo sự cố nằm ở đó, không tự gửi (xuất dự phòng hoặc xóa được).
 6. **Nhập dữ liệu mới** (nút ở biên nhận, hoặc mỗi module → Nhập/xuất Excel) theo thứ tự: khu vực, nhà cung cấp, danh mục → vật tư → thiết bị → linh kiện theo máy → tủ, lộ, đồng hồ → kế hoạch, hợp đồng, kiểm định.
 
 ### Bước 6 — (Tùy chọn) Ngắt giữa chừng
