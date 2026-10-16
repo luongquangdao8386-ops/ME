@@ -29,6 +29,7 @@ const FL0 = { ...FL };
 const open = new Set();
 /** Tab đang xem của từng lộ: đổi tab vẽ lại tại chỗ (không đổi địa chỉ → không nhảy lên đầu trang) */
 const tabOf = new Map();
+const tabQ = new Map();
 
 /* ======================= Đồ thị cấp điện (khớp 31_circuits của máy chủ) ======================= */
 
@@ -269,7 +270,10 @@ async function circuitPane(pane, id, ctx) {
   const up = c.upstream_circuit_id ? g.circuits.get(c.upstream_circuit_id) : null;
   const loads = loadsOf(g, c, eqs);
   const tabs = wide ? ['specs', 'loads', 'documents', 'history'] : ['specs', 'loads', 'documents'];
-  const want = tabOf.get(id) || ctx.query.get('tab');
+  // ?tab=documents (từ "Chờ bạn xử lý"): mở tab đó một lần cho mỗi địa chỉ, sau đó theo tab người dùng chọn
+  const qt = ctx.query.get('tab');
+  if (qt && tabQ.get(id) !== qt) { tabQ.set(id, qt); tabOf.set(id, qt); }
+  const want = tabOf.get(id);
   const tab = tabs.includes(want) ? want : 'specs';
   const uidMe = session.user && session.user.user_id;
   // Nguồn (gốc đường chính) và nguồn dự phòng: lấy từ truy đường cấp trên máy

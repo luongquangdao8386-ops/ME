@@ -1051,6 +1051,7 @@
   "wk.pending.wo": ["Phiếu bảo trì chờ nghiệm thu", "保养工单待验收"],
   "wk.pending.repair": ["Phiếu sửa chữa chờ nghiệm thu", "维修单待验收"],
   "wk.pending.matreq": ["Đề nghị vật tư chờ duyệt", "物料申请待审核"],
+  "wk.pending.drawing": ["Bản vẽ chờ duyệt", "图纸待审核"],
   "wk.pending_more": ["Còn {N} việc khác — xem ở Bảo trì, Sửa chữa, Kho vật tư", "另有 {N} 项 — 请在保养、维修、物料库中查看"],
   "wk.pending_banner": ["Có {N} phiếu chờ bạn nghiệm thu", "有 {N} 张单待您验收"],
   "wk.pending_count": ["{N} việc chờ bạn xử lý", "{N} 项待您处理"],

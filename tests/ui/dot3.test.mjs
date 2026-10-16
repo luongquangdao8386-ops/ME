@@ -278,6 +278,36 @@ test('web C4: KT vừa tải bản vẽ lộ lên (máy này chưa đồng bộ)
   } finally { await app.close(); }
 });
 
+test('web C4: bản vẽ KT tải lên hiện ở "Chờ bạn xử lý" (Công việc) → bấm tới đúng lộ, mở sẵn tab Tài liệu có nút Duyệt; người tải lên không thấy dòng này', async () => {
+  const s = setup();
+  const did = uuid();
+  const lo = s.env.rows('Circuits').find((c) => c.circuit_id === s.c5).circuit_code;
+  assert.equal(s.kt.write('circuit.drawing.upload', { document_id: did, entity_type: 'CIRCUIT', entity_id: s.c5, mime_type: 'application/pdf', content_b64: fakePdfB64(), title_vi: 'Sơ đồ lộ máy nén' }).ok, true);
+  const app = await openApp({ env: s.env, ...WEB });
+  const { page } = app;
+  try {
+    await login(page);
+    await go(page, '#/work');
+    await page.waitForSelector('.pending-me');
+    const pt = await page.textContent('.pending-me');
+    assert.ok(pt.includes('Bản vẽ chờ duyệt') && pt.includes(lo) && pt.includes('Sơ đồ lộ máy nén'), pt);
+    await page.click(`.pending-me a[href="#/circuits/c/${s.c5}?tab=documents"]`);
+    await page.waitForSelector(`[data-dr-ok="${did}"]`, { timeout: 15000 });
+    assert.equal(await page.getAttribute('#ci-pane [data-tab="documents"]', 'aria-selected'), 'true');
+    // Đổi sang tab khác vẫn đổi được (tab từ địa chỉ chỉ áp một lần)
+    await page.click('#ci-pane [data-tab="specs"]');
+    await page.waitForFunction(() => document.querySelector('#ci-pane [data-tab="specs"]').getAttribute('aria-selected') === 'true');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+  // KT (người tải lên) không có dòng duyệt bản vẽ của chính mình
+  const app2 = await openApp({ env: s.env, ...WEB });
+  try {
+    await login(app2.page, 'U-KT', '583017');
+    const items = await app2.page.evaluate(async () => (await (await import('./js/work.js')).pendingForMe()).filter((x) => x.kind === 'DRAWING').length);
+    assert.equal(items, 0);
+  } finally { await app2.close(); }
+});
+
 test('iPhone ĐN: quét tem đồng hồ mở thẳng màn nhập chỉ số; KT quét cùng tem thì sang hồ sơ đồng hồ (không ghi chỉ số)', async () => {
   const s = setup();
   const qr = s.env.rows('QrRegistry').find((q) => q.entity_id === s.water).qr_key;
