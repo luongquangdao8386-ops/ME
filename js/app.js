@@ -99,7 +99,7 @@ async function runSync() {
     if (app.onSessionError && await app.onSessionError(r)) return { ...r, handled: true, committed: f.committed };
     return { ...r, committed: f.committed };
   }
-  return { ok: true, committed: f.committed };
+  return { ok: true, committed: f.committed, applied: r.applied || 0 };
 }
 
 /**
@@ -315,3 +315,17 @@ window.addEventListener('online', async () => {
   refreshAfterSend(r);
 });
 window.addEventListener('offline', () => { updateSyncStatus(); refreshIfAccount(); });
+
+// Quay lại app/tab (máy tính để mở cả ngày, iPhone mở lại từ nền): lần đồng bộ cuối quá 1 phút thì lấy thay đổi của người khác,
+// có thay đổi thì vẽ lại màn xem đang mở (không vẽ lại màn nhập, hộp thoại, ô đang gõ)
+let lastReturnSync = 0;
+async function syncOnReturn() {
+  if (!app.shell || app.offline || !navigator.onLine || document.visibilityState !== 'visible') return;
+  const last = Date.parse((await getMeta('last_sync')) || '') || 0;
+  if (Date.now() - Math.max(last, lastReturnSync) < 60000) return;
+  lastReturnSync = Date.now();
+  const r = await syncNow({ quiet: true });
+  if (r && r.ok && (r.applied || r.committed)) refreshAfterSend({ ...r, committed: (r.committed || 0) + (r.applied || 0) });
+}
+document.addEventListener('visibilitychange', syncOnReturn);
+window.addEventListener('focus', syncOnReturn);

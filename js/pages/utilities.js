@@ -375,7 +375,9 @@ export async function renderMeterList(view, ctx) {
 /** Tải hồ sơ đầy đủ khi có mạng (lịch sử chỉ số dài hơn 45 ngày trên máy); lỗi mạng → dữ liệu trên máy */
 async function meterFull(id, fresh = false) {
   if (!navigator.onLine) return null;
-  if (!fresh && fullCache.id === id && Date.now() - fullCache.at < 30000) return fullCache.data;
+  // Đệm 30 giây; vừa đồng bộ (có thể có chỉ số/ảnh mới của người khác) thì hỏi lại máy chủ
+  const lastSync = Date.parse((await getMeta('last_sync')) || '') || 0;
+  if (!fresh && fullCache.id === id && Date.now() - fullCache.at < 30000 && fullCache.at >= lastSync) return fullCache.data;
   const r = await api('utility.view', { meter_id: id, page_size: 200 }, { retry: true });
   fullCache = { id, at: Date.now(), data: r.ok ? r.data : null };
   return fullCache.data;
@@ -410,6 +412,8 @@ export async function renderMeter(view, ctx) {
   const pending = events.find((e) => e.status === 'PENDING_APPROVAL');
   const uidMe = session.user && session.user.user_id;
   const docs = (await recs('DOCUMENT')).filter((d) => d.entity_type === 'METER_READING' && d.active !== false);
+  // Ảnh máy chủ trả kèm trang đồng hồ (máy chưa đồng bộ vẫn thấy ảnh mới)
+  for (const d of (full && full.documents) || []) if (!docs.some((x) => x.document_id === d.document_id)) docs.push(d);
   const photosOf = (rid) => docs.filter((d) => d.entity_id === rid);
   const want = meterTab.get(params.id) || query.get('tab');
   const tab = ['readings', 'segments', 'events'].includes(want) ? want : 'readings';

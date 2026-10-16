@@ -908,11 +908,19 @@ function utilityView_(ctx) {
       .sort(function (x, y) { return String(y.measured_at).localeCompare(String(x.measured_at)) || String(y.created_at).localeCompare(String(x.created_at)); });
     var size = Math.min(500, Number(p.page_size) || 200);
     var start = Number(p.page_token || 0);
+    var page = reads.slice(start, start + size);
+    // Ảnh đồng hồ của các chỉ số trong trang: máy chưa đồng bộ (vd máy tính để mở từ trước) vẫn thấy ảnh mới
+    var inPage = {};
+    page.forEach(function (r) { inPage[r.reading_id] = true; });
+    var photos = can_(ctx, 'doc.view', { module: 'utilities' }) ? readRows_('Documents').filter(function (d) {
+      return d.entity_type === 'METER_READING' && inPage[d.entity_id] && d.active !== false && !d.archived_at && d.access_scope !== 'COST_VIEW';
+    }).map(function (d) { return projectDoc_(ctx, d); }) : [];
     return {
       item: o,
       segments: meterSegments_(m.meter_id).map(function (s) { return projectRow_(ctx, s, 'MeterSegments'); }),
       events: findAll_('MeterEvents', 'meter_id', m.meter_id).filter(function (e) { return !e.archived_at; }).map(function (e) { return projectRow_(ctx, e, 'MeterEvents'); }),
-      readings: reads.slice(start, start + size).map(function (r) { return projectRow_(ctx, r, 'MeterReadings'); }),
+      documents: photos,
+      readings: page.map(function (r) { return projectRow_(ctx, r, 'MeterReadings'); }),
       total: reads.length, next_page_token: start + size < reads.length ? String(start + size) : null
     };
   }

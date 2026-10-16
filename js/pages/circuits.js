@@ -23,7 +23,7 @@ const STATUSES = ['IN_USE', 'STANDBY', 'OUT_OF_SERVICE'];
 const ROLES = ['PRIMARY', 'BACKUP'];
 const DEPTH_MAX = 50;
 const PAGE = 20;
-const FL = { q: '', loc: '', panel: '', mode: 'circuits', page: 0 };
+const FL = { q: '', loc: '', panel: '', mode: 'circuits', modeChosen: false, page: 0 };
 const open = new Set();
 /** Tab đang xem của từng lộ: đổi tab vẽ lại tại chỗ (không đổi địa chỉ → không nhảy lên đầu trang) */
 const tabOf = new Map();
@@ -148,6 +148,10 @@ export async function renderCircuitList(view, ctx) {
   const p = await perms();
   shell.setScreen({ title: 'module.circuits', back: '/', actions: [] });
   const g = await circuitGraph();
+  // Web: chưa có lộ nào mà đã có tủ → mở bảng Tủ điện (không để bảng lộ trống như chưa lưu gì); đang xem một tủ/lộ → bảng tương ứng
+  if (wide && params.pid) FL.mode = 'panels';
+  else if (wide && params.cid) FL.mode = 'circuits';
+  else if (wide && !FL.modeChosen && !g.circuits.size && g.panels.size) FL.mode = 'panels';
   const eqs = await mapOf('EQUIPMENT');
   const locs = await mapOf('LOCATION');
   const inLoc = await locChildren(FL.loc);
@@ -184,7 +188,7 @@ export async function renderCircuitList(view, ctx) {
     const shown = circuits.slice(FL.page * PAGE, FL.page * PAGE + PAGE);
     body = `<div class="table-wrap"><table class="tbl ci-table"><thead><tr><th>${bi('ci.circuit_code')}</th><th>${bi('ci.parent_panel')}</th><th>${bi('ci.loads')}</th>
       <th class="num">${bi('ci.voltage')}</th><th>${bi('ci.protection_col')}</th><th>${bi('ci.cable_col')}</th><th>${bi('col.status')}</th><th>QR</th></tr></thead>
-      <tbody>${shown.map((c) => { const pn = g.panels.get(c.panel_id) || {}; return `<tr class="click${sel === 'C:' + c.circuit_id ? ' sel' : ''}" data-href="/circuits/c/${esc(c.circuit_id)}">
+      <tbody>${shown.length ? '' : `<tr><td colspan="8" class="muted">${bi(g.circuits.size ? 'field.no_records' : 'ci.no_circuits_hint')}</td></tr>`}${shown.map((c) => { const pn = g.panels.get(c.panel_id) || {}; return `<tr class="click${sel === 'C:' + c.circuit_id ? ' sel' : ''}" data-href="/circuits/c/${esc(c.circuit_id)}">
         <td class="code">${esc(c.circuit_code)}<div class="small">${biName(c)}</div></td><td class="code">${esc(pn.panel_code || '')}</td>
         <td>${loadsOf(g, c, eqs).map((x) => `<div>${x.rec ? biName(x.rec) : '—'}${x.load.supply_role === 'BACKUP' ? ` ${badge('ci.backup_tag')}` : ''}</div>`).join('') || '<span class="muted">—</span>'}</td>
         <td class="num">${c.voltage ? fmtNumber(c.voltage) + '\u00A0V' : ''}</td><td>${breakerText(c)}</td><td>${cableText(c)}</td><td>${badge('circuit_status.' + (c.status || 'IN_USE'))}</td>
@@ -211,7 +215,11 @@ export async function renderCircuitList(view, ctx) {
   $('#ci-q', view).addEventListener('input', (e) => { FL.q = e.target.value; FL.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#ci-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
   $('#ci-loc', view).addEventListener('change', (e) => { FL.loc = e.target.value; FL.page = 0; again(); });
   $('#ci-panel', view).addEventListener('change', (e) => { FL.panel = e.target.value; FL.page = 0; again(); });
-  $$('[data-mode]', view).forEach((b) => b.addEventListener('click', () => { FL.mode = b.dataset.mode; again(); }));
+  $$('[data-mode]', view).forEach((b) => b.addEventListener('click', () => {
+    FL.mode = b.dataset.mode; FL.modeChosen = true;
+    // Đang mở hồ sơ tủ/lộ (vùng bên phải) mà đổi bảng: về danh sách để bảng mới không bị địa chỉ cũ đổi lại
+    if (params.pid || params.cid) navigate('/circuits'); else again();
+  }));
   $$('details.ci-group', view).forEach((d) => d.addEventListener('toggle', () => { if (d.open) open.add(d.dataset.pid); else open.delete(d.dataset.pid); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('a')) navigate(tr.dataset.href, { replace: !!sel }); }));
   const pp = $('#ci-pp', view), np = $('#ci-np', view);

@@ -3,11 +3,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { openApp, SHOTS } from './harness.mjs';
 import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
 
 const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const WEB = { viewport: { width: 1440, height: 900 }, mobile: false };
+function png(w = 32, h = 24, rgb = [200, 60, 40]) {
+  const crcT = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcT[n] = c >>> 0; }
+  const crc = (b) => { let c = 0xffffffff; for (const x of b) c = crcT[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) raw.set(rgb, y * (w * 3 + 1) + 1 + x * 3);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 const go = (page, h) => page.evaluate((x) => { location.hash = x; }, h);
 /** Không phần tử nào thò ra ngoài bề ngang màn hình (trừ nội dung trong khung cuộn ngang .table-wrap/.chips) */
 const noOverflow = (page) => page.evaluate(() => {
@@ -290,6 +300,97 @@ test('iPhone: Điện nước mở nhanh — vào lại hiện ngay số đã l�
     await page.click('#ut-prev');
     await page.waitForSelector('.ut-filters');
     assert.equal(await page.locator('.ut-loading').count(), 0, 'kỳ trước hiện ngay');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('iPhone ĐN: nhập chỉ số kèm ảnh khi mất mạng → có mạng: chỉ số và đúng 1 ảnh lên máy chủ (ảnh xem bằng link); trang đồng hồ hiện ảnh ở máy này và máy tính của quản trị', async () => {
+  const s = setup();
+  const app = await openApp({ env: s.env, ...IPHONE });
+  const { page, context, env } = app;
+  try {
+    await login(page, 'U-DN', '583016');
+    await go(page, `#/utilities/read/${s.elec}`);
+    await page.waitForSelector('#f-val');
+    await context.setOffline(true);
+    await page.fill('#f-val', '12610');
+    await page.setInputFiles('#ut-photo', [{ name: 'dong-ho.png', mimeType: 'image/png', buffer: png() }]);
+    await page.waitForSelector('#ut-photos figure');
+    await page.click('#ut-send');
+    await page.waitForSelector('[data-tab="readings"]', { timeout: 15000 });
+    const q = await queue(page);
+    assert.deepEqual(q.map((x) => x.a), ['reading.create', 'doc.upload']);
+    assert.equal(q[1].parent, q[0].id, 'ảnh gửi sau chỉ số');
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await waitQueueEmpty(page);
+    const rd = env.rows('MeterReadings').find((r) => r.cumulative_value === 12610);
+    assert.ok(rd, 'chỉ số đã lên máy chủ');
+    const docs = env.rows('Documents').filter((d) => d.entity_type === 'METER_READING' && d.entity_id === rd.reading_id);
+    assert.equal(docs.length, 1, 'đúng 1 ảnh');
+    assert.equal(docs[0].kind, 'PHOTO_METER');
+    assert.equal(docs[0].access_scope, 'LINK_VIEW');
+    // Máy này: trang đồng hồ hiện ảnh
+    await go(page, '#/');
+    await go(page, `#/utilities/meters/${s.elec}`);
+    await page.waitForSelector('.ut-reads .photos img', { timeout: 15000 });
+  } finally { await app.close(); }
+  // Máy tính quản trị đăng nhập sau: thấy ảnh ở dòng chỉ số
+  const web = await openApp({ env: s.env, ...WEB });
+  try {
+    await login(web.page);
+    await go(web.page, `#/utilities/meters/${s.elec}`);
+    await web.page.waitForSelector('.ut-reads .photos img', { timeout: 15000 });
+    assert.deepEqual(web.consoleErrors, []);
+  } finally { await web.close(); }
+});
+
+test('web C4: Tra cứu lộ điện chưa có lộ nào → hiện bảng Tủ điện với tủ đã lưu; bảng Lộ điện trống có lời chỉ dẫn', async () => {
+  const env = freshServer();
+  const c = ownerClient(env);
+  const id = uuid();
+  assert.equal(c.write('circuit.edit', { entity: 'PANEL', panel_id: id, name_vi: 'Điểm nhận lưới 22 kV', panel_type: 'SOURCE_GRID' }).ok, true);
+  const app = await openApp({ env, ...WEB });
+  const { page } = app;
+  try {
+    await login(page);
+    await go(page, '#/circuits');
+    await page.waitForSelector('.ci-mode');
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('TU-0001'));
+    assert.ok((await page.textContent('.ci-mode .seg.on')).includes('Tủ điện'), 'bảng Tủ điện');
+    await page.click('.ci-mode [data-mode="circuits"]');
+    await page.waitForFunction(() => document.querySelector('.view').textContent.includes('Chưa có lộ điện'));
+    // Mở tủ từ bảng Tủ điện → vùng hồ sơ có nút Thêm lộ
+    await page.click('.ci-mode [data-mode="panels"]');
+    await page.click('tr[data-href^="/circuits/p/"]');
+    await page.waitForSelector('#ci-pane a[href^="#/circuits/c/new?panel="]');
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('web C4: máy tính chưa đồng bộ vẫn thấy ảnh chỉ số mới ở trang đồng hồ; quay lại tab sau hơn 1 phút thì tự lấy thay đổi', async () => {
+  const s = setup();
+  const app = await openApp({ env: s.env, ...WEB });
+  const { page, calls } = app;
+  try {
+    await login(page);
+    // ĐN ghi chỉ số kèm ảnh trên máy khác
+    const rid = uuid();
+    assert.equal(s.dn.write('reading.create', { reading_id: rid, meter_id: s.elec, measured_at: new Date(Date.now() - 60000).toISOString(), cumulative_value: 12650 }).ok, true);
+    const up = s.dn.write('doc.upload', { document_id: uuid(), entity_type: 'METER_READING', entity_id: rid, kind: 'PHOTO_METER', mime_type: 'image/png', content_b64: png().toString('base64'), title_vi: 'Ảnh đồng hồ' });
+    assert.equal(up.ok, true, JSON.stringify(up).slice(0, 200));
+    // Chưa đồng bộ: trang đồng hồ hỏi máy chủ, có cả ảnh
+    await go(page, `#/utilities/meters/${s.elec}`);
+    await page.waitForSelector('.ut-reads .photos img', { timeout: 15000 });
+    // Quay lại tab: lần đồng bộ cuối cũ hơn 1 phút → tự gọi sync.changes, dữ liệu trên máy có ảnh
+    await page.evaluate(async () => { const m = await import('./js/sync.js'); await m.setMeta('last_sync', '2026-01-01T00:00:00+07:00'); });
+    const n0 = calls.length;
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForFunction(async (r) => {
+      const m = await import('./js/sync.js');
+      return (await m.getRecords('DOCUMENT')).some((d) => d.entity_id === r);
+    }, rid, { timeout: 15000 });
+    assert.ok(calls.slice(n0).includes('sync.changes'));
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

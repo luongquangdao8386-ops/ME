@@ -1702,4 +1702,5 @@ export const DICT = {"nav.home":["Trang chủ","首页"],
 "ut.type_fixed":["Loại đồng hồ không đổi sau khi thêm","新增后不可更改表计类型"],
 "chart.no_data":["Dấu tròn: kỳ chưa đủ số liệu để tính","圆点：该期数据不足，无法计算"],
 "ut.no_valid":["Chưa đủ số liệu để tính","数据不足，无法计算"],
-"ut.loading":["Đang lấy số liệu kỳ từ máy chủ…","正在从服务器获取本期数据…"]};
+"ut.loading":["Đang lấy số liệu kỳ từ máy chủ…","正在从服务器获取本期数据…"],
+"ci.no_circuits_hint":["Chưa có lộ điện. Tủ đã lưu xem ở nút Tủ điện (bên phải); mở tủ rồi bấm Thêm lộ","暂无回路。已保存的配电柜请点右侧“配电柜”查看；打开配电柜后点“新增回路”"]};
