@@ -1,6 +1,6 @@
 // Thiết bị: EQ-01 danh sách, EQ-02..04 hồ sơ 4 tab, WEB-EQ-01 bảng + vùng hồ sơ; biểu mẫu thêm/sửa (4.4.1, 5.5, 6.3)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -126,11 +126,11 @@ export async function renderEquipmentList(view, ctx) {
       <div class="muted small">${esc([e.model, e.serial].filter(Boolean).join(' · '))}</div>
       ${e.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>`;
   }
-  view.innerHTML = toolbar + body;
+  setViewHtml(view, toolbar + body);
   // Bộ lọc
   const again = () => renderEquipmentList(view, ctx);
   let t = null;
-  $('#eq-q', view).addEventListener('input', (e) => { filt.q = e.target.value; clearTimeout(t); t = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const q = $('#eq-q', view); q.focus(); try { q.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#eq-q', (v) => { filt.q = v; }, again);
   $('#eq-status', view).addEventListener('change', (e) => { filt.status = e.target.value; again(); });
   $('#eq-loc', view).addEventListener('change', (e) => { filt.location = e.target.value; again(); });
   if ($('#eq-cat', view)) $('#eq-cat', view).addEventListener('change', (e) => { filt.category = e.target.value; again(); });

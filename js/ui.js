@@ -15,6 +15,58 @@ document.addEventListener('click', (e) => {
   if (inp && !inp.disabled) inp.focus();
 });
 
+/**
+ * Ghi nội dung màn danh sách mà giữ nguyên ô đang gõ (cùng một phần tử, không mất focus).
+ * iPhone: ô nhập bị thay bằng phần tử mới (dù focus lại ngay) thì bàn phím bật về chữ sau mỗi số vừa gõ.
+ * Ô đang gõ và các khung chứa nó giữ nguyên; chỉ thay phần xung quanh. Khuôn khác (ô không còn, độ sâu khác) → ghi lại như thường.
+ */
+export function setViewHtml(root, html) {
+  const live = document.activeElement;
+  const keep = live && live.tagName === 'INPUT' && live.id && root.contains(live) ? live : null;
+  if (!keep) { root.innerHTML = html; return; }
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const fresh = t.content.getElementById(keep.id);
+  const chain = (n, top) => { const a = []; for (let x = n; x !== top; x = x.parentNode) { if (!x || x.nodeType !== 1) return null; a.push(x); } return a; };
+  const oldC = chain(keep, root);
+  const newC = fresh && chain(fresh, t.content);
+  if (!oldC || !newC || oldC.length !== newC.length || oldC.some((n, i) => n.tagName !== newC[i].tagName)) { root.innerHTML = html; return; }
+  oldC.forEach((o, i) => {
+    const n = newC[i], op = o.parentNode;
+    while (o.previousSibling) op.removeChild(o.previousSibling);
+    while (o.nextSibling) op.removeChild(o.nextSibling);
+    while (n.previousSibling) op.insertBefore(n.previousSibling, op.firstChild);
+    while (n.nextSibling) op.appendChild(n.nextSibling);
+    if (i === 0) return; // ô đang gõ: không đụng giá trị/thuộc tính
+    [...o.attributes].forEach((a) => { if (!n.hasAttribute(a.name)) o.removeAttribute(a.name); });
+    [...n.attributes].forEach((a) => { if (o.getAttribute(a.name) !== a.value) o.setAttribute(a.name, a.value); });
+  });
+}
+
+/**
+ * Ô tìm kiếm của danh sách: gõ xong 250 ms thì vẽ lại bằng `again` (màn dùng setViewHtml nên ô giữ nguyên → chỉ gắn sự kiện một lần;
+ * mỗi lần vẽ chỉ cập nhật `onText`/`again` mới nhất). Ô bị thay (khuôn khác) mà lúc gõ đang focus → focus lại ô mới, giữ chỗ con trỏ.
+ */
+export function wireSearch(root, sel, onText, again) {
+  const el = root.querySelector(sel);
+  if (!el) return;
+  el._search = { onText, again };
+  if (el._searchWired) return;
+  el._searchWired = true;
+  let tm = null;
+  el.addEventListener('input', () => {
+    el._search.onText(el.value);
+    clearTimeout(tm);
+    tm = setTimeout(async () => {
+      const pos = el.selectionStart;
+      const had = document.activeElement === el;
+      await el._search.again();
+      const cur = root.querySelector(sel);
+      if (had && cur && cur !== el) { cur.focus(); try { cur.setSelectionRange(pos, pos); } catch (e) { /* bỏ qua */ } }
+    }, 250);
+  });
+}
+
 export function h(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();

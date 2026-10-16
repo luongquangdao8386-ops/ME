@@ -2,7 +2,7 @@
 // ảnh đồng hồ); sự kiện thay/reset/đổi hệ số (chờ duyệt); sửa/hủy chỉ số; biểu giá (quyền giá). 1.4 §5.5, phụ lục 3.12, 4.4.6, 6.9.2.
 // Tổng hợp kỳ tính ở máy chủ (cần mạng); không mạng: xem bản đã tải gần nhất, vẫn nhập chỉ số được (gửi khi có mạng).
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, resMsg, session, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, $, $$ } from '../ui.js';
+import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -356,7 +356,7 @@ export async function renderMeterList(view, ctx) {
         <div class="mc-foot">${m.active === false ? badge('ut.inactive') : dueBadge(x.due)}${readBtn}</div></div>`;
     }).join('')}</div>`;
   }
-  view.innerHTML = toolbar + body;
+  setViewHtml(view, toolbar + body);
   const again = () => renderMeterList(view, ctx);
   $$('[data-type]', view).forEach((x) => x.addEventListener('click', () => {
     ML.type = x.dataset.type;
@@ -366,8 +366,7 @@ export async function renderMeterList(view, ctx) {
   }));
   $('#ml-loc', view).addEventListener('change', (e) => { ML.loc = e.target.value; again(); });
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('a')) navigate(tr.dataset.href); }));
-  let tm = null;
-  $('#ml-q', view).addEventListener('input', (e) => { ML.q = e.target.value; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#ml-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#ml-q', (v) => { ML.q = v; }, again);
 }
 
 /* ======================= Hồ sơ đồng hồ ======================= */

@@ -386,6 +386,7 @@ test('web C4: máy tính chưa đồng bộ vẫn thấy ảnh chỉ số mới 
     await page.evaluate(async () => { const m = await import('./js/sync.js'); await m.setMeta('last_sync', '2026-01-01T00:00:00+07:00'); });
     const n0 = calls.length;
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    for (let i = 0; i < 60 && !calls.slice(n0).includes('sync.changes'); i++) await page.waitForTimeout(250);
     await page.waitForFunction(async (r) => {
       const m = await import('./js/sync.js');
       return (await m.getRecords('DOCUMENT')).some((d) => d.entity_id === r);

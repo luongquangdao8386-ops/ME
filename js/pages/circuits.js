@@ -2,7 +2,7 @@
 // hồ sơ tủ (nối hồ sơ thiết bị — B2: thấy phiếu sửa, bảo trì của thiết bị), CI-03 đường cấp điện (truy trên máy, dùng được khi mất mạng),
 // bản vẽ có phiên bản và duyệt, xác minh dữ liệu (PIN). Tra cứu không xác nhận đã cô lập điện (1.4 §5.7, phụ lục 3.13, 4.4.7).
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session } from '../core.js';
-import { ICON, toast, toTop, dialog, $, $$ } from '../ui.js';
+import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -209,10 +209,9 @@ export async function renderCircuitList(view, ctx) {
       </details>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>
       ${p.edit ? `<a class="btn primary block ci-add" href="#/circuits/c/new${FL.panel ? '?panel=' + esc(FL.panel) : ''}">${ICON.plus}<span>${bi('ci.add_circuit')}</span></a>` : ''}`;
   }
-  view.innerHTML = toolbar + body + (wide && sel ? '<div id="ci-pane" class="pane"></div>' : '');
+  setViewHtml(view, toolbar + body + (wide && sel ? '<div id="ci-pane" class="pane"></div>' : ''));
   const again = () => renderCircuitList(view, ctx);
-  let tm = null;
-  $('#ci-q', view).addEventListener('input', (e) => { FL.q = e.target.value; FL.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#ci-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#ci-q', (v) => { FL.q = v; FL.page = 0; }, again);
   $('#ci-loc', view).addEventListener('change', (e) => { FL.loc = e.target.value; FL.page = 0; again(); });
   $('#ci-panel', view).addEventListener('change', (e) => { FL.panel = e.target.value; FL.page = 0; again(); });
   $$('[data-mode]', view).forEach((b) => b.addEventListener('click', () => {

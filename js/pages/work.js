@@ -1,6 +1,6 @@
 // Công việc · 工单 (iPhone nav 2, menu web) — 5.2: lọc Của tôi / Trong phạm vi, loại, nhóm theo hạn; thẻ iPhone, bảng web
 import { bi, biText, esc, fmtDate, fmtDateTime, badge } from '../core.js';
-import { ICON, toTop, $, $$ } from '../ui.js';
+import { ICON, toTop, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { navigate } from '../router.js';
 import { can, roleLevel } from '../data.js';
@@ -73,10 +73,9 @@ export async function renderWork(view, ctx) {
     }).join('');
   }
   // Việc chờ tôi nghiệm thu/duyệt (C3/C4) lên đầu — số trên nút Công việc chỉ tới đây
-  view.innerHTML = pendingPanelHtml(await pendingForMe()) + toolbar + `<div class="wk-counts muted small">${GROUPS.map((g) => `${bi('wk.group.' + g)}: <strong>${count(g)}</strong>`).join(' · ')}</div>` + body;
+  setViewHtml(view, pendingPanelHtml(await pendingForMe()) + toolbar + `<div class="wk-counts muted small">${GROUPS.map((g) => `${bi('wk.group.' + g)}: <strong>${count(g)}</strong>`).join(' · ')}</div>` + body);
   const again = () => renderWork(view, ctx);
-  let tm = null;
-  $('#wk-q', view).addEventListener('input', (e) => { filt.q = e.target.value; filt.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#wk-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#wk-q', (v) => { filt.q = v; filt.page = 0; }, again);
   $$('[data-scope]', view).forEach((b) => b.addEventListener('click', () => { filt.scope = b.dataset.scope; filt.page = 0; again(); }));
   $$('[data-kind]', view).forEach((b) => b.addEventListener('click', () => { filt.kind = b.dataset.kind; filt.page = 0; again(); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));

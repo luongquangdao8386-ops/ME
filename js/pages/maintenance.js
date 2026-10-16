@@ -1,7 +1,7 @@
 // Bảo trì (Đợt 2): MT-01 Kế hoạch / Phiếu thực hiện / Lịch; MT-02 chi tiết phiếu; MT-03 checklist, số đo, ảnh trước/sau, vật tư,
 // gửi nghiệm thu (C7, C8, 5.1.1); kế hoạch lặp lại (ngày/tháng/giờ chạy), mẫu checklist có phiên bản; WEB-MT-01 (1.4 §5.2, phụ lục 4.4.3)
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, weekStart, weekday, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -86,7 +86,7 @@ export async function renderMaintenance(view, ctx) {
   if (st.tab === 'wo') body = await woTab(wide);
   else if (st.tab === 'plans') body = await plansTab(wide, can_);
   else body = await calendarTab();
-  view.innerHTML = `<div class="chips tabs">${tabs.map((t) => `<button type="button" class="chip${st.tab === t ? ' on' : ''}" data-tab="${t}">${bi(tabLabel[t])}</button>`).join('')}</div>
+  setViewHtml(view, `<div class="chips tabs">${tabs.map((t) => `<button type="button" class="chip${st.tab === t ? ' on' : ''}" data-tab="${t}">${bi(tabLabel[t])}</button>`).join('')}</div>
     <div class="toolbar">
       ${st.tab !== 'calendar' ? `<div class="search"><span>${ICON.search}</span><input id="mt-q" type="search" value="${esc(st.q)}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>` : ''}
       <div class="row tools">
@@ -97,16 +97,14 @@ export async function renderMaintenance(view, ctx) {
         ${excelBtn}
         ${rptBtn}
       </div>
-    </div>${body}`;
+    </div>${body}`);
   const again = () => renderMaintenance(view, ctx);
   $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { st.tab = b.dataset.tab; again(); }));
   $$('[data-wof]', view).forEach((b) => b.addEventListener('click', () => { st.woFilter = b.dataset.wof; again(); }));
   $$('[data-plf]', view).forEach((b) => b.addEventListener('click', () => { st.planFilter = b.dataset.plf; again(); }));
   $$('[data-week]', view).forEach((b) => b.addEventListener('click', () => { st.week += Number(b.dataset.week); if (b.dataset.week === '0') st.week = 0; again(); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));
-  const q = $('#mt-q', view);
-  let tm = null;
-  if (q) q.addEventListener('input', (e) => { st.q = e.target.value; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#mt-q', view); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } } }, 250); });
+  wireSearch(view, '#mt-q', (v) => { st.q = v; }, again);
   const hb = $('#mt-hours', view);
   if (hb) hb.addEventListener('click', async () => { if (await hoursDialog(null)) again(); });
 }

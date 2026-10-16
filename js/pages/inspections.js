@@ -1,6 +1,6 @@
 // Kiểm định: IN-01 danh sách yêu cầu, IN-02 hồ sơ yêu cầu, IN-03 nộp chứng nhận, WEB-IN-01; loại kiểm định (4.4.9, 3.17, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, blobToB64, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide } from '../shell.js';
@@ -106,10 +106,9 @@ export async function renderInspectionList(view, ctx) {
       <div class="rec-badges">${statusBadges(x)}</div>
       ${x.r.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('')}</div>`;
   }
-  view.innerHTML = toolbar + (rows.length ? body : `<div class="card empty-state">${ICON.inspections}<p class="muted">${bi(all.length ? 'field.no_records' : 'in.no_requirements')}</p></div>`);
+  setViewHtml(view, toolbar + (rows.length ? body : `<div class="card empty-state">${ICON.inspections}<p class="muted">${bi(all.length ? 'field.no_records' : 'in.no_requirements')}</p></div>`));
   const again = () => renderInspectionList(view, ctx);
-  let tm = null;
-  $('#in-q', view).addEventListener('input', (e) => { filt.q = e.target.value; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#in-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#in-q', (v) => { filt.q = v; }, again);
   $$('[data-state]', view).forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; again(); }));
   $('#in-type', view).addEventListener('change', (e) => { filt.type = e.target.value; again(); });
   $('#in-loc', view).addEventListener('change', (e) => { filt.location = e.target.value; again(); });

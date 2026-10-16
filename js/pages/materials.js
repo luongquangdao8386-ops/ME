@@ -1,6 +1,6 @@
 // Kho vật tư: MAT-01 danh mục, MAT-02 hồ sơ, WEB-MAT-01; tab Linh kiện của thiết bị (EQ-03). Không chốt tồn (C3, 1.4 §5.4)
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -66,11 +66,10 @@ export async function renderMaterialList(view, ctx) {
   if (filt.tab === 'requests' || filt.tab === 'usage') {
     const search = `<div class="toolbar"><div class="search"><span>${ICON.search}</span><input id="mt-wq" type="search" value="${esc(filt.wq || '')}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>
       <p class="muted small">${bi('mat.no_stock_note')}</p></div>`;
-    view.innerHTML = notConnected() + tabBar + search + (filt.tab === 'requests' ? await requestsTabHtml(filt.wq || '') : await usageTabHtml(filt.wq || ''));
+    setViewHtml(view, notConnected() + tabBar + search + (filt.tab === 'requests' ? await requestsTabHtml(filt.wq || '') : await usageTabHtml(filt.wq || '')));
     wireTabs(view, ctx);
     wireRowLinks(view);
-    let tw = null;
-    $('#mt-wq', view).addEventListener('input', (e) => { filt.wq = e.target.value; clearTimeout(tw); tw = setTimeout(async () => { const pos = e.target.selectionStart; await renderMaterialList(view, ctx); const q = $('#mt-wq', view); q.focus(); try { q.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+    wireSearch(view, '#mt-wq', (v) => { filt.wq = v; }, () => renderMaterialList(view, ctx));
     return;
   }
   const rows = await listRows();
@@ -111,11 +110,11 @@ export async function renderMaterialList(view, ctx) {
       <div class="muted small">${bi('material_group.' + m.group_key)} · ${bi('field.base_unit')}: ${esc(m.base_unit || '')}${m.active === false ? ' · ' + bi('material_active.FALSE') : ''}</div>
       ${m.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>`;
   }
-  view.innerHTML = notConnected() + tabBar + toolbar + body;
+  setViewHtml(view, notConnected() + tabBar + toolbar + body);
   wireTabs(view, ctx);
   const again = () => renderMaterialList(view, ctx);
   let t = null;
-  $('#mt-q', view).addEventListener('input', (e) => { filt.q = e.target.value; clearTimeout(t); t = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const q = $('#mt-q', view); q.focus(); try { q.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#mt-q', (v) => { filt.q = v; }, again);
   $$('[data-f]', view).forEach((b) => b.addEventListener('click', () => { filt[b.dataset.f] = b.dataset.v; again(); }));
   $('#mt-kind', view).addEventListener('change', (e) => { filt.kind = e.target.value; again(); });
   $('#mt-comp', view).addEventListener('change', (e) => { filt.comp = e.target.checked; again(); });

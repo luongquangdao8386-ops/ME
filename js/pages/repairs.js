@@ -1,7 +1,7 @@
 // Sửa chữa (Đợt 2): RP-01 danh sách, RP-03 báo sự cố (cả offline, ảnh hiện trường), RP-02 chi tiết: 6 mốc (C9), phân công,
 // xử lý, việc con, chạy thử, gửi nghiệm thu, nghiệm thu không tự duyệt, hủy, mở lại; vật tư MAT-03; WEB-RP-01 (1.4 §5.3, phụ lục 4.4.4)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, toTop, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -100,7 +100,7 @@ export async function renderRepairList(view, ctx) {
       <div class="dates"><span>${bi('rp.reported_at')}: <strong>${esc(fmtDateTime(r.reported_at))}</strong></span>${r.assignee_name ? `<span>${bi('wk.col.assignee')}: <strong>${esc(r.assignee_name)}</strong></span>` : ''}</div>
       <div class="rec-badges">${prioBadges(r, 'REPAIR')} ${r.stopped_at && !r.restored_at && REPAIR_OPEN.has(r.status) ? badge('rp.machine_down') : ''} ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`; }).join('')}</div>`;
   }
-  view.innerHTML = toolbar + body;
+  setViewHtml(view, toolbar + body);
   const again = () => renderRepairList(view, ctx);
   $$('[data-f]', view).forEach((b) => b.addEventListener('click', () => { st.filter = b.dataset.f; st.page = 0; again(); }));
   $$('[data-sev]', view).forEach((b) => b.addEventListener('click', () => { st.sev = b.dataset.sev; st.page = 0; again(); }));
@@ -108,8 +108,7 @@ export async function renderRepairList(view, ctx) {
   const prev = $('#rp-prev', view), next = $('#rp-next', view);
   if (prev) prev.addEventListener('click', () => { st.page = Math.max(0, st.page - 1); again().then(toTop); });
   if (next) next.addEventListener('click', () => { st.page++; again().then(toTop); });
-  let tm = null;
-  $('#rp-q', view).addEventListener('input', (e) => { st.q = e.target.value; st.page = 0; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#rp-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#rp-q', (v) => { st.q = v; st.page = 0; }, again);
 }
 
 /* ======================= RP-03 Báo sự cố ======================= */

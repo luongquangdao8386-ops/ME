@@ -1,6 +1,6 @@
 // Hợp đồng thuê ngoài: CO-01 danh sách, CO-02 hồ sơ, CO-03 gia hạn, WEB-CO-01 (1.4 §5.8; phụ lục 2.7, 3.17, 4.4.8, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -91,10 +91,9 @@ export async function renderContractList(view, ctx) {
         <span${x.ref.kind === 'END_DATE' ? ' class="ref"' : ''}>${bi('field.end_date')}: <strong>${esc(fmtDate(x.c.end_date) || '—')}</strong></span></div>
       ${x.due ? `<div class="rec-badges">${badge(x.due.key, x.due.vars)}</div>` : ''}</a>`).join('')}</div>`;
   }
-  view.innerHTML = toolbar + (list.length ? body : `<div class="card empty-state">${ICON.contracts}<p class="muted">${bi(all.length ? 'field.no_records' : 'co.no_contracts')}</p></div>`);
+  setViewHtml(view, toolbar + (list.length ? body : `<div class="card empty-state">${ICON.contracts}<p class="muted">${bi(all.length ? 'field.no_records' : 'co.no_contracts')}</p></div>`));
   const again = () => renderContractList(view, ctx);
-  let tm = null;
-  $('#co-q', view).addEventListener('input', (e) => { filt.q = e.target.value; clearTimeout(tm); tm = setTimeout(async () => { const pos = e.target.selectionStart; await again(); const el = $('#co-q', view); el.focus(); try { el.setSelectionRange(pos, pos); } catch (er) { /* bỏ qua */ } }, 250); });
+  wireSearch(view, '#co-q', (v) => { filt.q = v; }, again);
   $$('[data-state]', view).forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; again(); }));
   $('#co-life', view).addEventListener('change', (e) => { filt.life = e.target.value; again(); });
   $$('tr[data-id]', view).forEach((tr) => tr.addEventListener('click', () => navigate('/contracts/' + tr.dataset.id)));
