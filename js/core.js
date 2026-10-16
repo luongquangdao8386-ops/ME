@@ -304,6 +304,8 @@ export function envelope(action, payload = {}, opts = {}) {
   if (opts.write) {
     req.operation_id = opts.operation_id || uuid();
     req.expected_version = opts.expected_version === undefined ? 0 : opts.expected_version;
+    // Máy chủ ghi xong kèm thay đổi từ cursor này (khỏi gọi sync.changes riêng sau khi lưu)
+    if (opts.changes_since !== undefined && opts.changes_since !== null && opts.changes_since !== '') req.changes_since = Number(opts.changes_since);
   }
   if (opts.reauth_token || session.reauth) req.reauth_token = opts.reauth_token || session.reauth;
   return req;

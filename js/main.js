@@ -119,7 +119,7 @@ function showLogin(reason) {
   renderLogin(root, {
     reason,
     onLoggedIn: async (_r, { status } = {}) => {
-      const b = await bootstrap({ onPage: (n) => status && status(n > 1 ? 'auth.loading_page' : 'auth.loading_data', { N: n }) });
+      const b = await bootstrap({ onPage: (n) => status && status(n > 1 ? 'auth.loading_page' : 'auth.loading_data', { N: n }), page1: _r && _r.data && _r.data.bootstrap });
       if (!b.ok) toast(esc(resMsg(b)), 'err');
       await goApp(false);
     },

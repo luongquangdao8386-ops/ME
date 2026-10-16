@@ -1,6 +1,6 @@
 // Điều khiển app sau đăng nhập: khung, định tuyến, đồng bộ nền, quét QR (phụ lục 1.5 mục 6.3)
 import { bi, esc, session, resMsg } from './core.js';
-import { getMeta, pullChanges, queueItems, flushQueue } from './sync.js';
+import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges } from './sync.js';
 import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
@@ -122,9 +122,12 @@ async function noteReleasedDot() {
   if (setReleasedDot(await bootData()) > before && app.shell) toast(bi('sync.new_features'), 'ok');
 }
 
-/** Sau một thao tác ghi COMMITTED: lấy thay đổi (1.4 §14.3: gọi sync.changes sau mỗi COMMITTED) */
+/**
+ * Sau một thao tác ghi COMMITTED: lấy thay đổi (1.4 §14.3). Phản hồi ghi đã kèm thay đổi từ đúng cursor đang lưu
+ * (changes_since) thì dùng luôn, không gọi thêm sync.changes; không khớp (cursor đã đổi, máy chủ cũ) thì gọi như cũ.
+ */
 export async function afterCommit() {
-  const r = await pullChanges();
+  const r = await pullChanges({ first: takeWriteChanges(await getMeta('cursor')) });
   invalidate();
   await noteReleasedDot();
   await updateSyncStatus();

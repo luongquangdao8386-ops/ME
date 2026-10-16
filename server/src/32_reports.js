@@ -418,7 +418,14 @@ function seedReportDefinitions_() {
       i18n_meta: { title: { src: 'vi', state: 'HUMAN', at: nowIso } }
     };
   });
-  if (add.length) insertRows_('ReportDefinitions', add);
+  if (add.length) {
+    // Tăng phiên bản bảng: app nhận mẫu mới qua sync.changes, đệm bảng (tableCache_) không trả bản cũ
+    var st = readState_();
+    var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
+    add.forEach(function (r) { r.sync_revision = rev; });
+    insertRows_('ReportDefinitions', add);
+    stateWrite_(st, { sync_revision: ['INT', rev], 'table_rev.ReportDefinitions': ['INT', rev] }, SYSTEM_USER);
+  }
   return add.length;
 }
 

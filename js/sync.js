@@ -10,13 +10,17 @@ export async function getMeta(k) { return idb.get('me_data', 'meta', k).catch(()
 export async function setMeta(k, v) { return idb.put('me_data', 'meta', k, v); }
 export async function getRecords(type) { return (await idb.get('me_data', 'records', type).catch(() => null)) || []; }
 
-/** Tải dữ liệu ban đầu theo quyền, chia trang. onPage(n) trước mỗi trang (màn chờ hiện tiến độ) */
-export async function bootstrap({ onPage } = {}) {
+/**
+ * Tải dữ liệu ban đầu theo quyền, chia trang. onPage(n) trước mỗi trang (màn chờ hiện tiến độ).
+ * page1: trang đầu máy chủ đã gửi kèm phản hồi đăng nhập (auth.login with_bootstrap) → không gọi lại trang đầu.
+ */
+export async function bootstrap({ onPage, page1 = null } = {}) {
   let pageToken = null, cursor = null, first = null;
   const acc = {};
   for (let guard = 0; guard < 50; guard++) {
     if (onPage) { try { onPage(guard + 1); } catch (e) { /* bỏ qua */ } }
-    const r = await api('sync.bootstrap', pageToken ? { page_token: pageToken, sync_cursor: cursor } : {}, { retry: true });
+    const r = guard === 0 && page1 && page1.records ? { ok: true, data: page1 }
+      : await api('sync.bootstrap', pageToken ? { page_token: pageToken, sync_cursor: cursor } : {}, { retry: true });
     if (!r.ok) return r;
     if (!first) first = r.data;
     cursor = r.data.sync_cursor;
@@ -74,6 +78,15 @@ export async function upsertLocal(type, rec) {
   const i = list.findIndex((x) => keyOf(type, x) === id);
   if (i >= 0) list[i] = rec; else list.push(rec);
   await idb.put('me_data', 'records', type, list);
+}
+
+/* Thay đổi máy chủ gửi kèm phản hồi ghi (changes_since): afterCommit dùng thay cho một lượt sync.changes nếu cùng cursor */
+let writeChanges = null;
+export function noteWriteChanges(since, data) { if (data && Array.isArray(data.changes)) writeChanges = { since: String(since), data }; }
+export function takeWriteChanges(cursor) {
+  const w = writeChanges;
+  writeChanges = null;
+  return w && cursor !== null && cursor !== undefined && w.since === String(cursor) ? { ok: true, data: w.data } : null;
 }
 
 /**

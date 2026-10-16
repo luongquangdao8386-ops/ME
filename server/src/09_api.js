@@ -258,6 +258,24 @@ function apiDispatch_(req) {
   }
 }
 
+/**
+ * auth.login {with_bootstrap: true}: kèm trang đầu của sync.bootstrap (cùng quy trình phiên/quyền như request riêng) để app
+ * vào được sau một lượt gọi thay vì hai; giới hạn 6 giây cho phần dữ liệu (còn thì app tải tiếp bằng page_token).
+ * Lỗi phần dữ liệu không làm hỏng đăng nhập (app tự gọi sync.bootstrap như cũ).
+ */
+function loginWithBootstrap_(req, data) {
+  var out = JSON.parse(JSON.stringify(data));
+  try {
+    var inner = {
+      api_contract_version: req.api_contract_version, action: 'sync.bootstrap', payload: { budget_ms: 6000 }, token: data.token,
+      dataset_epoch: sysProps_().dataset_epoch, device_id: req.device_id, app_version: req.app_version
+    };
+    var env = dispatchInner_(inner, false);
+    if (env && env.ok && env.data) out.bootstrap = env.data;
+  } catch (e) { /* app tự gọi sync.bootstrap */ }
+  return out;
+}
+
 function dispatchInner_(req, viaPush) {
   if (typeof req.action !== 'string' || typeof req.payload !== 'object' || req.payload === null || Array.isArray(req.payload)) {
     throw validationError_([fieldError_('action', 'REQUIRED')]);
@@ -275,7 +293,9 @@ function dispatchInner_(req, viaPush) {
   if (sysProps_().maintenance_mode && !MAINTENANCE_ALLOW_[req.action]) throw apiError_('SYSTEM_MAINTENANCE');
   if (PUBLIC_ACTIONS_[req.action]) {
     if (!prop_('BUSINESS_SPREADSHEET_ID') && req.action !== 'system.health' && req.action !== 'system.getPublicState') throw apiError_('SYSTEM_NOT_READY');
-    return envelope_(req, { ok: true, code: 'OK', data: HANDLERS_[req.action](req) });
+    var pub = HANDLERS_[req.action](req);
+    if (req.action === 'auth.login' && req.payload.with_bootstrap && pub && pub.session_kind === 'FULL') pub = loginWithBootstrap_(req, pub);
+    return envelope_(req, { ok: true, code: 'OK', data: pub });
   }
   // 2. Phiên
   var ctx = requireSession_(req, req.action);
@@ -296,8 +316,22 @@ function dispatchInner_(req, viaPush) {
   var out = HANDLERS_[req.action](ctx);
   if (DUE_ACTIONS_[req.action] && out && out.ok) afterDueChange_();
   if (out && out.__envelope) return out.__envelope; // sync.push: phản hồi giống action gốc
-  if (out && out.state === 'COMMITTED' && out.ok) {
-    return envelope_(req, out);
-  }
-  return envelope_(req, { ok: true, code: 'OK', data: out, sync_cursor: out && out.sync_cursor ? String(out.sync_cursor) : null });
+  var env = out && out.state === 'COMMITTED' && out.ok ? envelope_(req, out)
+    : envelope_(req, { ok: true, code: 'OK', data: out, sync_cursor: out && out.sync_cursor ? String(out.sync_cursor) : null });
+  if (def.write && !viaPush && env.ok && req.changes_since !== undefined && req.changes_since !== null) attachChanges_(ctx, req, env);
+  return env;
+}
+
+/**
+ * Ghi xong (COMMITTED): kèm luôn thay đổi từ cursor của app (như sync.changes) → app không phải gọi thêm một lượt sau mỗi lần lưu.
+ * Lỗi phần này không ảnh hưởng kết quả ghi (app tự gọi sync.changes).
+ */
+function attachChanges_(ctx, req, env) {
+  var since = Number(req.changes_since);
+  if (!(since >= 0)) return;
+  try {
+    var c2 = Object.create(ctx);
+    c2.req = { action: 'sync.changes', payload: { cursor: since, limit: 500 }, device_id: req.device_id };
+    env.changes = syncChanges_(c2);
+  } catch (e) { /* app tự gọi sync.changes */ }
 }

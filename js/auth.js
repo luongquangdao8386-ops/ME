@@ -153,7 +153,8 @@ export function bindServer() { if (execUrl()) ls.set('server', execUrl()); }
  * máy chủ trả lại kết quả lần đầu, không tính thêm lần sai) tối đa 2 lần. onStatus('resending') khi gửi lại.
  */
 export async function login(code, pin, shared, { onStatus } = {}) {
-  const payload = { employee_code: code, pin, device_label: deviceLabel(), login_id: uuid() };
+  // with_bootstrap: máy chủ kèm trang dữ liệu đầu trong phản hồi đăng nhập (một lượt gọi thay vì hai)
+  const payload = { employee_code: code, pin, device_label: deviceLabel(), login_id: uuid(), with_bootstrap: true };
   let r = await api('auth.login', payload, { token: null, epoch: null, timeoutMs: 20000 });
   for (const wait of [1000, 2500]) {
     if (r.code !== 'NETWORK_ERROR' || !navigator.onLine || r.transport === 'NO_URL') break;

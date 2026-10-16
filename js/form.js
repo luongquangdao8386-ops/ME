@@ -1,6 +1,6 @@
 // Thành phần biểu mẫu dùng chung: ô song ngữ, ngày (5.4.3), số (5.4.2), chọn, lỗi theo trường, ghi trực tuyến chịu mất phản hồi (3.15)
 import { bi, biText, esc, api, uuid, fmtDate, fmtNumber, L, session, resMsg } from './core.js';
-import { getMeta, setMeta } from './sync.js';
+import { getMeta, setMeta, noteWriteChanges } from './sync.js';
 import { isWide } from './shell.js';
 import { $, $$, toast, askPin } from './ui.js';
 import { reauth } from './auth.js';
@@ -213,9 +213,12 @@ const UNSURE = new Set(['UNKNOWN_RESULT', 'INTERNAL_ERROR', 'RECOVERY_REQUIRED']
  */
 export async function writeOnline(action, payload, { expected_version = 0, reauth = null } = {}) {
   const operation_id = uuid();
-  const opts = { write: true, operation_id, expected_version };
+  // changes_since: máy chủ ghi xong kèm thay đổi từ cursor đang lưu → afterCommit không phải gọi sync.changes thêm một lượt
+  const since = await getMeta('cursor').catch(() => null);
+  const opts = { write: true, operation_id, expected_version, changes_since: since };
   if (reauth) opts.reauth_token = reauth;
-  let r = await api(action, payload, opts);
+  const done = (res) => { if (res && res.ok && res.changes) noteWriteChanges(since, res.changes); return res; };
+  let r = done(await api(action, payload, opts));
   for (const wait of [1500, 4000, 8000]) {
     if (r.ok || !(UNSURE.has(r.code) || r.code === 'SERVER_BUSY' || r.code === 'NETWORK_ERROR')) break;
     await new Promise((res) => setTimeout(res, wait));
@@ -226,7 +229,7 @@ export async function writeOnline(action, payload, { expected_version = 0, reaut
       }
       if (!st.ok && st.code === 'NETWORK_ERROR') { r = { ok: false, code: 'UNKNOWN_RESULT', operation_id }; continue; }
     }
-    r = await api(action, payload, opts);
+    r = done(await api(action, payload, opts));
   }
   return r;
 }

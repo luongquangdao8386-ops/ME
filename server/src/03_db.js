@@ -32,12 +32,18 @@ function hdr_(name) {
   if (!DB_.headers[name]) {
     var sheet = sh_(name);
     var n = sheet.getLastColumn();
-    var row = n > 0 ? sheet.getRange(1, 1, 1, n).getValues()[0] : [];
-    var cols = row.map(function (v) { return String(v); });
-    var idx = {};
-    cols.forEach(function (c, i) { idx[c] = i; });
-    DB_.headers[name] = { cols: cols, idx: idx };
+    setHeader_(name, n > 0 ? sheet.getRange(1, 1, 1, n).getValues()[0] : []);
   }
+  return DB_.headers[name];
+}
+
+/** Ghi nhớ tiêu đề trong lượt chạy; bỏ các cột trống ở cuối (không tên thì không đọc/ghi) */
+function setHeader_(name, row) {
+  var cols = row.map(function (v) { return v === null || v === undefined ? '' : String(v); });
+  while (cols.length && cols[cols.length - 1] === '') cols.pop();
+  var idx = {};
+  cols.forEach(function (c, i) { if (c) idx[c] = i; });
+  DB_.headers[name] = { cols: cols, idx: idx };
   return DB_.headers[name];
 }
 
@@ -57,19 +63,78 @@ function objToRow_(name, h, o) {
   return h.cols.map(function (c) { return toCell_(types[c] || 'STRING', o[c]); });
 }
 
-/** Đọc toàn bộ dòng dữ liệu */
+/**
+ * Đọc toàn bộ dòng dữ liệu. Bảng trống: 1 lần gọi Sheets (getLastRow); có dữ liệu: đọc tiêu đề cùng dữ liệu trong một
+ * getValues (getLastRow + getLastColumn + getValues = 3 lần; trước là 4 vì đọc tiêu đề riêng).
+ */
 function readRows_(name) {
   var sheet = sh_(name);
   var last = sheet.getLastRow();
   if (last < 2) return [];
-  var h = hdr_(name);
-  var vals = sheet.getRange(2, 1, last - 1, h.cols.length).getValues();
+  var n = DB_.headers[name] ? DB_.headers[name].cols.length : sheet.getLastColumn();
+  if (!n) return [];
+  var vals = sheet.getRange(1, 1, last, n).getValues();
+  var h = setHeader_(name, vals[0]);
   var out = [];
-  for (var i = 0; i < vals.length; i++) {
+  for (var i = 1; i < vals.length; i++) {
     if (vals[i][0] === '' || vals[i][0] === null) continue;
-    out.push(rowToObj_(name, h, vals[i], i + 2));
+    out.push(rowToObj_(name, h, vals[i], i + 1));
   }
   return out;
+}
+
+/* ---------------- Đệm bảng theo phiên bản bảng (đăng nhập/đồng bộ đọc hàng chục bảng) ---------------- */
+
+var TBL_CHUNK_ = 30000;      // ký tự mỗi ô đệm (≤ 100 KB kể cả chữ Việt/Trung 3 byte)
+var TBL_CACHE_V_ = 1;        // tăng khi đổi cách chuyển ô → bản ghi (rowToObj_/fromCell_); dán Code.gs mới không làm mất đệm
+var TBL_MAX_CHUNKS_ = 40;    // bảng lớn hơn ~1,2 triệu ký tự thì không đệm
+
+function tblKey_(name, st) {
+  var props = sysProps_();
+  return 'tb' + TBL_CACHE_V_ + ':' + name + ':' + Number(stateGet_(st, 'table_rev.' + name, 0)) + ':' + (props.dataset_epoch || '') + ':' +
+    (st.map.schema_version || '') + ':' + (st.map.last_restore_at || '') + ':' + (st.map.last_reset_at || '');
+}
+
+/**
+ * Bộ đọc bảng có đệm CacheService theo table_rev: bảng không đổi phiên bản từ lần đọc trước thì không gọi Sheets.
+ * Mọi ghi qua executeWrite_ tăng table_rev của bảng đã ghi — cùng điều kiện mà sync.changes dựa vào để biết bảng đổi.
+ * st = readState_(). Trả {rows(name)}: bản sao mới mỗi lần (người gọi được sửa thoải mái).
+ */
+function tableCache_(names, st) {
+  var c = cache_();
+  var keys = {};
+  names.forEach(function (n) { keys[n] = tblKey_(n, st); });
+  var metas = {}, chunks = {};
+  try {
+    metas = c.getAll(names.map(function (n) { return keys[n]; })) || {};
+    var need = [];
+    names.forEach(function (n) { var m = Number(metas[keys[n]] || 0); for (var i = 0; i < m; i++) need.push(keys[n] + ':' + i); });
+    if (need.length) chunks = c.getAll(need) || {};
+  } catch (e) { metas = {}; chunks = {}; }
+  return {
+    rows: function (n) {
+      var k = keys[n] || tblKey_(n, st);
+      var m = Number(metas[k] || 0);
+      if (m) {
+        var parts = [];
+        for (var i = 0; i < m; i++) { var v = chunks[k + ':' + i]; if (v === null || v === undefined) { parts = null; break; } parts.push(v); }
+        if (parts) { try { return JSON.parse(parts.join('')); } catch (e) { /* đọc lại từ Sheets */ } }
+      }
+      var rows = readRows_(n);
+      try {
+        var js = JSON.stringify(rows);
+        if (js.length <= TBL_CHUNK_ * TBL_MAX_CHUNKS_) {
+          var put = {}, cnt = 0;
+          for (var j = 0; j < js.length; j += TBL_CHUNK_) put[k + ':' + (cnt++)] = js.slice(j, j + TBL_CHUNK_);
+          put[k] = String(cnt);
+          c.putAll(put, 21600);
+          metas[k] = String(cnt);
+          Object.keys(put).forEach(function (pk) { if (pk !== k) chunks[pk] = put[pk]; });
+        }
+      } catch (e2) { /* đầy đệm: bỏ qua */ }
+      return rows;
+    }
+  };
 }
 
 /** Đọc các dòng từ dòng `fromRow` tới cuối (đọc phần đuôi, vd AuthAttempts) */

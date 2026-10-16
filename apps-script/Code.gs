@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d3.4
+ * M&E · 机电管理 — Code.gs 1.0.0-d3.5
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d3.4';
+var SERVER_VERSION = '1.0.0-d3.5';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.3';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3 (migrateSchema)
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -777,12 +777,18 @@ function hdr_(name) {
   if (!DB_.headers[name]) {
     var sheet = sh_(name);
     var n = sheet.getLastColumn();
-    var row = n > 0 ? sheet.getRange(1, 1, 1, n).getValues()[0] : [];
-    var cols = row.map(function (v) { return String(v); });
-    var idx = {};
-    cols.forEach(function (c, i) { idx[c] = i; });
-    DB_.headers[name] = { cols: cols, idx: idx };
+    setHeader_(name, n > 0 ? sheet.getRange(1, 1, 1, n).getValues()[0] : []);
   }
+  return DB_.headers[name];
+}
+
+/** Ghi nhớ tiêu đề trong lượt chạy; bỏ các cột trống ở cuối (không tên thì không đọc/ghi) */
+function setHeader_(name, row) {
+  var cols = row.map(function (v) { return v === null || v === undefined ? '' : String(v); });
+  while (cols.length && cols[cols.length - 1] === '') cols.pop();
+  var idx = {};
+  cols.forEach(function (c, i) { if (c) idx[c] = i; });
+  DB_.headers[name] = { cols: cols, idx: idx };
   return DB_.headers[name];
 }
 
@@ -802,19 +808,78 @@ function objToRow_(name, h, o) {
   return h.cols.map(function (c) { return toCell_(types[c] || 'STRING', o[c]); });
 }
 
-/** Đọc toàn bộ dòng dữ liệu */
+/**
+ * Đọc toàn bộ dòng dữ liệu. Bảng trống: 1 lần gọi Sheets (getLastRow); có dữ liệu: đọc tiêu đề cùng dữ liệu trong một
+ * getValues (getLastRow + getLastColumn + getValues = 3 lần; trước là 4 vì đọc tiêu đề riêng).
+ */
 function readRows_(name) {
   var sheet = sh_(name);
   var last = sheet.getLastRow();
   if (last < 2) return [];
-  var h = hdr_(name);
-  var vals = sheet.getRange(2, 1, last - 1, h.cols.length).getValues();
+  var n = DB_.headers[name] ? DB_.headers[name].cols.length : sheet.getLastColumn();
+  if (!n) return [];
+  var vals = sheet.getRange(1, 1, last, n).getValues();
+  var h = setHeader_(name, vals[0]);
   var out = [];
-  for (var i = 0; i < vals.length; i++) {
+  for (var i = 1; i < vals.length; i++) {
     if (vals[i][0] === '' || vals[i][0] === null) continue;
-    out.push(rowToObj_(name, h, vals[i], i + 2));
+    out.push(rowToObj_(name, h, vals[i], i + 1));
   }
   return out;
+}
+
+/* ---------------- Đệm bảng theo phiên bản bảng (đăng nhập/đồng bộ đọc hàng chục bảng) ---------------- */
+
+var TBL_CHUNK_ = 30000;      // ký tự mỗi ô đệm (≤ 100 KB kể cả chữ Việt/Trung 3 byte)
+var TBL_CACHE_V_ = 1;        // tăng khi đổi cách chuyển ô → bản ghi (rowToObj_/fromCell_); dán Code.gs mới không làm mất đệm
+var TBL_MAX_CHUNKS_ = 40;    // bảng lớn hơn ~1,2 triệu ký tự thì không đệm
+
+function tblKey_(name, st) {
+  var props = sysProps_();
+  return 'tb' + TBL_CACHE_V_ + ':' + name + ':' + Number(stateGet_(st, 'table_rev.' + name, 0)) + ':' + (props.dataset_epoch || '') + ':' +
+    (st.map.schema_version || '') + ':' + (st.map.last_restore_at || '') + ':' + (st.map.last_reset_at || '');
+}
+
+/**
+ * Bộ đọc bảng có đệm CacheService theo table_rev: bảng không đổi phiên bản từ lần đọc trước thì không gọi Sheets.
+ * Mọi ghi qua executeWrite_ tăng table_rev của bảng đã ghi — cùng điều kiện mà sync.changes dựa vào để biết bảng đổi.
+ * st = readState_(). Trả {rows(name)}: bản sao mới mỗi lần (người gọi được sửa thoải mái).
+ */
+function tableCache_(names, st) {
+  var c = cache_();
+  var keys = {};
+  names.forEach(function (n) { keys[n] = tblKey_(n, st); });
+  var metas = {}, chunks = {};
+  try {
+    metas = c.getAll(names.map(function (n) { return keys[n]; })) || {};
+    var need = [];
+    names.forEach(function (n) { var m = Number(metas[keys[n]] || 0); for (var i = 0; i < m; i++) need.push(keys[n] + ':' + i); });
+    if (need.length) chunks = c.getAll(need) || {};
+  } catch (e) { metas = {}; chunks = {}; }
+  return {
+    rows: function (n) {
+      var k = keys[n] || tblKey_(n, st);
+      var m = Number(metas[k] || 0);
+      if (m) {
+        var parts = [];
+        for (var i = 0; i < m; i++) { var v = chunks[k + ':' + i]; if (v === null || v === undefined) { parts = null; break; } parts.push(v); }
+        if (parts) { try { return JSON.parse(parts.join('')); } catch (e) { /* đọc lại từ Sheets */ } }
+      }
+      var rows = readRows_(n);
+      try {
+        var js = JSON.stringify(rows);
+        if (js.length <= TBL_CHUNK_ * TBL_MAX_CHUNKS_) {
+          var put = {}, cnt = 0;
+          for (var j = 0; j < js.length; j += TBL_CHUNK_) put[k + ':' + (cnt++)] = js.slice(j, j + TBL_CHUNK_);
+          put[k] = String(cnt);
+          c.putAll(put, 21600);
+          metas[k] = String(cnt);
+          Object.keys(put).forEach(function (pk) { if (pk !== k) chunks[pk] = put[pk]; });
+        }
+      } catch (e2) { /* đầy đệm: bỏ qua */ }
+      return rows;
+    }
+  };
 }
 
 /** Đọc các dòng từ dòng `fromRow` tới cuối (đọc phần đuôi, vd AuthAttempts) */
@@ -2899,6 +2964,24 @@ function apiDispatch_(req) {
   }
 }
 
+/**
+ * auth.login {with_bootstrap: true}: kèm trang đầu của sync.bootstrap (cùng quy trình phiên/quyền như request riêng) để app
+ * vào được sau một lượt gọi thay vì hai; giới hạn 6 giây cho phần dữ liệu (còn thì app tải tiếp bằng page_token).
+ * Lỗi phần dữ liệu không làm hỏng đăng nhập (app tự gọi sync.bootstrap như cũ).
+ */
+function loginWithBootstrap_(req, data) {
+  var out = JSON.parse(JSON.stringify(data));
+  try {
+    var inner = {
+      api_contract_version: req.api_contract_version, action: 'sync.bootstrap', payload: { budget_ms: 6000 }, token: data.token,
+      dataset_epoch: sysProps_().dataset_epoch, device_id: req.device_id, app_version: req.app_version
+    };
+    var env = dispatchInner_(inner, false);
+    if (env && env.ok && env.data) out.bootstrap = env.data;
+  } catch (e) { /* app tự gọi sync.bootstrap */ }
+  return out;
+}
+
 function dispatchInner_(req, viaPush) {
   if (typeof req.action !== 'string' || typeof req.payload !== 'object' || req.payload === null || Array.isArray(req.payload)) {
     throw validationError_([fieldError_('action', 'REQUIRED')]);
@@ -2916,7 +2999,9 @@ function dispatchInner_(req, viaPush) {
   if (sysProps_().maintenance_mode && !MAINTENANCE_ALLOW_[req.action]) throw apiError_('SYSTEM_MAINTENANCE');
   if (PUBLIC_ACTIONS_[req.action]) {
     if (!prop_('BUSINESS_SPREADSHEET_ID') && req.action !== 'system.health' && req.action !== 'system.getPublicState') throw apiError_('SYSTEM_NOT_READY');
-    return envelope_(req, { ok: true, code: 'OK', data: HANDLERS_[req.action](req) });
+    var pub = HANDLERS_[req.action](req);
+    if (req.action === 'auth.login' && req.payload.with_bootstrap && pub && pub.session_kind === 'FULL') pub = loginWithBootstrap_(req, pub);
+    return envelope_(req, { ok: true, code: 'OK', data: pub });
   }
   // 2. Phiên
   var ctx = requireSession_(req, req.action);
@@ -2937,10 +3022,24 @@ function dispatchInner_(req, viaPush) {
   var out = HANDLERS_[req.action](ctx);
   if (DUE_ACTIONS_[req.action] && out && out.ok) afterDueChange_();
   if (out && out.__envelope) return out.__envelope; // sync.push: phản hồi giống action gốc
-  if (out && out.state === 'COMMITTED' && out.ok) {
-    return envelope_(req, out);
-  }
-  return envelope_(req, { ok: true, code: 'OK', data: out, sync_cursor: out && out.sync_cursor ? String(out.sync_cursor) : null });
+  var env = out && out.state === 'COMMITTED' && out.ok ? envelope_(req, out)
+    : envelope_(req, { ok: true, code: 'OK', data: out, sync_cursor: out && out.sync_cursor ? String(out.sync_cursor) : null });
+  if (def.write && !viaPush && env.ok && req.changes_since !== undefined && req.changes_since !== null) attachChanges_(ctx, req, env);
+  return env;
+}
+
+/**
+ * Ghi xong (COMMITTED): kèm luôn thay đổi từ cursor của app (như sync.changes) → app không phải gọi thêm một lượt sau mỗi lần lưu.
+ * Lỗi phần này không ảnh hưởng kết quả ghi (app tự gọi sync.changes).
+ */
+function attachChanges_(ctx, req, env) {
+  var since = Number(req.changes_since);
+  if (!(since >= 0)) return;
+  try {
+    var c2 = Object.create(ctx);
+    c2.req = { action: 'sync.changes', payload: { cursor: since, limit: 500 }, device_id: req.device_id };
+    env.changes = syncChanges_(c2);
+  } catch (e) { /* app tự gọi sync.changes */ }
 }
 
 // ===== 10_equipment.js =====
@@ -4117,9 +4216,9 @@ var SYNC_ENTITIES_ = [
 ];
 
 /** Lần đọc hợp lệ mới nhất của mỗi đồng hồ (reading_id) — giữ trên máy kể cả khi cũ hơn cửa sổ đồng bộ */
-function latestReadingIds_() {
+function latestReadingIds_(rows) {
   var best = {};
-  readRows_('MeterReadings').forEach(function (r) {
+  (rows || readRows_('MeterReadings')).forEach(function (r) {
     if (r.archived_at || r.status !== 'VALID') return;
     var b = best[r.meter_id];
     if (!b || String(r.measured_at) > String(b.measured_at)) best[r.meter_id] = r;
@@ -4164,7 +4263,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
   if (ent.recentDays) {
     if (!('__recentFrom' in costCache)) costCache.__recentFrom = isoVN_(new Date(now_().getTime() - ent.recentDays * 86400000));
     if (String(row.measured_at) < costCache.__recentFrom) {
-      if (!costCache.__latestReadings) costCache.__latestReadings = latestReadingIds_();
+      if (!costCache.__latestReadings) costCache.__latestReadings = latestReadingIds_(costCache.__readingRows);
       if (!costCache.__latestReadings[row.reading_id]) return null;
     }
   }
@@ -4190,20 +4289,28 @@ function syncBootstrap_(ctx) {
   var pageSize = Math.min(2000, setting_('sync_page_size') || 500);
   var tok = String(p.page_token || '0:0').split(':');
   var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0;
-  var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(readState_(), 'sync_revision', 0));
+  var st = readState_();
+  var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = visibleEntities_(ctx);
-  var qm = qrMap_();
+  // Bảng không đổi từ lần đọc trước (cùng table_rev) lấy từ đệm, không gọi Sheets
+  var tc = tableCache_(ents.slice(ei).map(function (e) { return e.sheet; }).concat(['QrRegistry']), st);
+  var qm = {};
+  tc.rows('QrRegistry').forEach(function (q) { qm[q.entity_id] = q.qr_key; });
   var costCache = {};
   var records = {};
   var count = 0;
   var next = null;
   var t0 = Date.now();
+  var budget = Math.max(2000, Math.min(15000, Number(p.budget_ms) || 15000));
   for (; ei < ents.length; ei++) {
     var ent = ents[ei];
-    var rows = readRows_(ent.sheet);
+    // Hết giờ trước khi đọc bảng kế tiếp: trang sau đọc tiếp từ bảng này
+    if (count && Date.now() - t0 > budget) { next = ei + ':0'; break; }
+    var rows = tc.rows(ent.sheet);
+    if (ent.recentDays) costCache.__readingRows = rows;
     var list = records[ent.type] = records[ent.type] || [];
     for (var i = off; i < rows.length; i++) {
-      if (count >= pageSize || Date.now() - t0 > 15000) { next = ei + ':' + i; break; }
+      if (count >= pageSize || Date.now() - t0 > budget) { next = ei + ':' + i; break; }
       if (rows[i].archived_at) continue;
       var o = syncProject_(ctx, ent, rows[i], qm, costCache);
       if (o) { list.push(o); count++; }
@@ -4241,11 +4348,14 @@ function syncChanges_(ctx) {
   var head = Number(stateGet_(st, 'sync_revision', 0));
   var qm = null, costCache = {};
   var changes = [];
-  visibleEntities_(ctx).forEach(function (ent) {
-    if (Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) <= cursor) return;
-    if (ent.qr && !qm) qm = qrMap_();
+  var ents = visibleEntities_(ctx).filter(function (ent) { return Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) > cursor; });
+  var tc = ents.length ? tableCache_(ents.map(function (e) { return e.sheet; }).concat(['QrRegistry']), st) : null;
+  ents.forEach(function (ent) {
+    if (ent.qr && !qm) { qm = {}; tc.rows('QrRegistry').forEach(function (q) { qm[q.entity_id] = q.qr_key; }); }
     var key = sheetSchema_(ent.sheet).key;
-    readRows_(ent.sheet).forEach(function (r) {
+    var rows = tc.rows(ent.sheet);
+    if (ent.recentDays) costCache.__readingRows = rows;
+    rows.forEach(function (r) {
       if (!(Number(r.sync_revision || 0) > cursor)) return;
       var o = r.archived_at ? null : syncProject_(ctx, ent, r, qm || {}, costCache);
       changes.push({
@@ -13635,7 +13745,14 @@ function seedReportDefinitions_() {
       i18n_meta: { title: { src: 'vi', state: 'HUMAN', at: nowIso } }
     };
   });
-  if (add.length) insertRows_('ReportDefinitions', add);
+  if (add.length) {
+    // Tăng phiên bản bảng: app nhận mẫu mới qua sync.changes, đệm bảng (tableCache_) không trả bản cũ
+    var st = readState_();
+    var rev = Number(stateGet_(st, 'sync_revision', 0)) + 1;
+    add.forEach(function (r) { r.sync_revision = rev; });
+    insertRows_('ReportDefinitions', add);
+    stateWrite_(st, { sync_revision: ['INT', rev], 'table_rev.ReportDefinitions': ['INT', rev] }, SYSTEM_USER);
+  }
   return add.length;
 }
 

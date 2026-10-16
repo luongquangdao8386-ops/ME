@@ -44,9 +44,9 @@ var SYNC_ENTITIES_ = [
 ];
 
 /** Lần đọc hợp lệ mới nhất của mỗi đồng hồ (reading_id) — giữ trên máy kể cả khi cũ hơn cửa sổ đồng bộ */
-function latestReadingIds_() {
+function latestReadingIds_(rows) {
   var best = {};
-  readRows_('MeterReadings').forEach(function (r) {
+  (rows || readRows_('MeterReadings')).forEach(function (r) {
     if (r.archived_at || r.status !== 'VALID') return;
     var b = best[r.meter_id];
     if (!b || String(r.measured_at) > String(b.measured_at)) best[r.meter_id] = r;
@@ -91,7 +91,7 @@ function syncProject_(ctx, ent, row, qm, costCache) {
   if (ent.recentDays) {
     if (!('__recentFrom' in costCache)) costCache.__recentFrom = isoVN_(new Date(now_().getTime() - ent.recentDays * 86400000));
     if (String(row.measured_at) < costCache.__recentFrom) {
-      if (!costCache.__latestReadings) costCache.__latestReadings = latestReadingIds_();
+      if (!costCache.__latestReadings) costCache.__latestReadings = latestReadingIds_(costCache.__readingRows);
       if (!costCache.__latestReadings[row.reading_id]) return null;
     }
   }
@@ -117,20 +117,28 @@ function syncBootstrap_(ctx) {
   var pageSize = Math.min(2000, setting_('sync_page_size') || 500);
   var tok = String(p.page_token || '0:0').split(':');
   var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0;
-  var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(readState_(), 'sync_revision', 0));
+  var st = readState_();
+  var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = visibleEntities_(ctx);
-  var qm = qrMap_();
+  // Bảng không đổi từ lần đọc trước (cùng table_rev) lấy từ đệm, không gọi Sheets
+  var tc = tableCache_(ents.slice(ei).map(function (e) { return e.sheet; }).concat(['QrRegistry']), st);
+  var qm = {};
+  tc.rows('QrRegistry').forEach(function (q) { qm[q.entity_id] = q.qr_key; });
   var costCache = {};
   var records = {};
   var count = 0;
   var next = null;
   var t0 = Date.now();
+  var budget = Math.max(2000, Math.min(15000, Number(p.budget_ms) || 15000));
   for (; ei < ents.length; ei++) {
     var ent = ents[ei];
-    var rows = readRows_(ent.sheet);
+    // Hết giờ trước khi đọc bảng kế tiếp: trang sau đọc tiếp từ bảng này
+    if (count && Date.now() - t0 > budget) { next = ei + ':0'; break; }
+    var rows = tc.rows(ent.sheet);
+    if (ent.recentDays) costCache.__readingRows = rows;
     var list = records[ent.type] = records[ent.type] || [];
     for (var i = off; i < rows.length; i++) {
-      if (count >= pageSize || Date.now() - t0 > 15000) { next = ei + ':' + i; break; }
+      if (count >= pageSize || Date.now() - t0 > budget) { next = ei + ':' + i; break; }
       if (rows[i].archived_at) continue;
       var o = syncProject_(ctx, ent, rows[i], qm, costCache);
       if (o) { list.push(o); count++; }
@@ -168,11 +176,14 @@ function syncChanges_(ctx) {
   var head = Number(stateGet_(st, 'sync_revision', 0));
   var qm = null, costCache = {};
   var changes = [];
-  visibleEntities_(ctx).forEach(function (ent) {
-    if (Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) <= cursor) return;
-    if (ent.qr && !qm) qm = qrMap_();
+  var ents = visibleEntities_(ctx).filter(function (ent) { return Number(stateGet_(st, 'table_rev.' + ent.sheet, 0)) > cursor; });
+  var tc = ents.length ? tableCache_(ents.map(function (e) { return e.sheet; }).concat(['QrRegistry']), st) : null;
+  ents.forEach(function (ent) {
+    if (ent.qr && !qm) { qm = {}; tc.rows('QrRegistry').forEach(function (q) { qm[q.entity_id] = q.qr_key; }); }
     var key = sheetSchema_(ent.sheet).key;
-    readRows_(ent.sheet).forEach(function (r) {
+    var rows = tc.rows(ent.sheet);
+    if (ent.recentDays) costCache.__readingRows = rows;
+    rows.forEach(function (r) {
       if (!(Number(r.sync_revision || 0) > cursor)) return;
       var o = r.archived_at ? null : syncProject_(ctx, ent, r, qm || {}, costCache);
       changes.push({
