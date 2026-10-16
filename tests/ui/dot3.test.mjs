@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { openApp, SHOTS } from './harness.mjs';
-import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid, fakePdfB64 } from '../helpers.mjs';
 
 const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const WEB = { viewport: { width: 1440, height: 900 }, mobile: false };
@@ -249,6 +249,31 @@ test('iPhone C4: Tra cứu lộ điện — vào lại từ trang chủ thì ô 
     await page.click(`.ci-panels a.ci-row[href="#/circuits/p/${s.DB}"]`);
     await page.waitForSelector('.ci-detail');
     assert.ok((await viewText(page)).includes('Lộ máy nén khí'));
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});
+
+test('web C4: KT vừa tải bản vẽ lộ lên (máy này chưa đồng bộ) → tab Tài liệu vẫn hiện bản Chờ duyệt và nút Duyệt → PIN → Phiên bản đã duyệt', async () => {
+  const s = setup();
+  const app = await openApp({ env: s.env, ...WEB });
+  const { page } = app;
+  try {
+    await login(page);
+    const did = uuid();
+    const up = s.kt.write('circuit.drawing.upload', { document_id: did, entity_type: 'CIRCUIT', entity_id: s.c5, mime_type: 'application/pdf', content_b64: fakePdfB64(), title_vi: 'Sơ đồ lộ máy nén' });
+    assert.equal(up.ok, true, JSON.stringify(up).slice(0, 200));
+    await go(page, `#/circuits/c/${s.c5}`);
+    await page.waitForSelector('#ci-pane [data-tab="documents"]');
+    await page.click('#ci-pane [data-tab="documents"]');
+    await page.waitForSelector(`[data-dr-ok="${did}"]`, { timeout: 15000 });
+    assert.ok((await page.textContent('#ci-tab')).includes('Sơ đồ lộ máy nén'));
+    await page.click(`[data-dr-ok="${did}"]`);
+    await page.waitForSelector('.modal .pin-input', { timeout: 15000 });
+    await page.fill('.modal .pin-input', OWNER_PIN);
+    await page.click('.modal-actions .btn.primary');
+    await page.waitForFunction(() => document.querySelector('#ci-tab').textContent.includes('Phiên bản đã duyệt'), null, { timeout: 15000 });
+    assert.equal(s.env.rows('Documents').find((d) => d.document_id === did).approval_status, 'APPROVED');
+    assert.equal(await page.locator(`[data-dr-ok="${did}"]`).count(), 0);
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

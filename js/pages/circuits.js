@@ -4,7 +4,8 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session } from '../core.js';
 import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can } from '../data.js';
+import { recs, byId, mapOf, can, invalidate } from '../data.js';
+import { upsertLocal } from '../sync.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import {
@@ -330,8 +331,7 @@ async function circuitPane(pane, id, ctx) {
       if (r.ok) { await afterCommit(); repaint(); } else await handleWriteError(r);
     }));
   } else if (tab === 'documents') {
-    tb.innerHTML = await drawingsHtml('CIRCUIT', c.circuit_id, p);
-    wireDrawings(tb, 'CIRCUIT', c.circuit_id, repaint);
+    await showDrawings(tb, 'CIRCUIT', c.circuit_id, p, repaint);
   } else {
     tb.innerHTML = `<div class="kv-grid">${kv('field.created_at', `${esc(fmtDateTime(c.created_at))}${c.created_by_name ? ' · ' + esc(c.created_by_name) : ''}`)}
       ${kv('field.updated_at', `${esc(fmtDateTime(c.updated_at))}${c.updated_by_name ? ' · ' + esc(c.updated_by_name) : ''}`)}
@@ -461,11 +461,34 @@ async function panelPane(pane, id, ctx) {
   const vb = $('#pn-verify', pane);
   if (vb) vb.addEventListener('click', async () => { if (await verifyFlow('PANEL', pn, vb)) repaint(); });
   const dr = $('#pn-dr', pane);
-  dr.innerHTML = await drawingsHtml('PANEL', pn.panel_id, p);
-  wireDrawings(dr, 'PANEL', pn.panel_id, repaint);
+  await showDrawings(dr, 'PANEL', pn.panel_id, p, repaint);
 }
 
 /* ======================= Bản vẽ (phiên bản, duyệt) ======================= */
+
+/**
+ * Bản vẽ của tủ/lộ: vẽ ngay từ dữ liệu trên máy, rồi (có mạng) hỏi máy chủ `doc.view` — bản người khác vừa tải lên/duyệt mà máy này
+ * chưa đồng bộ vẫn hiện để duyệt. Có bản mới hơn thì lưu vào máy và vẽ lại khung bản vẽ.
+ */
+async function showDrawings(root, type, id, p, repaint) {
+  const paint = async () => { root.innerHTML = await drawingsHtml(type, id, p); wireDrawings(root, type, id, repaint); };
+  await paint();
+  if (!navigator.onLine) return;
+  const r = await api('doc.view', { entity_type: type, entity_id: id }).catch(() => null);
+  if (!r || !r.ok || !root.isConnected) return;
+  const local = await recs('DOCUMENT');
+  let changed = false;
+  for (const d of (r.data && r.data.items) || []) {
+    if (d.kind !== 'DRAWING') continue;
+    const cur = local.find((x) => x.document_id === d.document_id);
+    if (cur && Number(cur.record_version || 0) >= Number(d.record_version || 0)) continue;
+    await upsertLocal('DOCUMENT', d);
+    changed = true;
+  }
+  if (!changed) return;
+  invalidate();
+  if (root.isConnected) await paint();
+}
 
 async function drawingsHtml(type, id, p) {
   const list = (await recs('DOCUMENT')).filter((d) => d.entity_type === type && d.entity_id === id && d.kind === 'DRAWING' && d.active !== false)
