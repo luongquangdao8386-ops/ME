@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d3.10 (Đợt 1, Đợt 2 đang chạy THẬT · Đợt 3 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d3.10 (Đợt 1, 2, 3 đang chạy THẬT từ 16/10/2026)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -175,7 +175,7 @@ Thiết bị, Bảo trì, Sửa chữa, Kho vật tư, Kiểm định, Hợp đ�
 
 Báo kết quả theo dạng "Bước 1 đạt, 2 đạt, … 7 lỗi" kèm ảnh chụp chỗ lỗi (có mã đồng hồ/tủ/lộ, giờ). Đổi cửa sổ chốt kỳ (1–24 giờ) hoặc thời gian tự sửa chỉ số: **Tài khoản → Quản trị → Trạng thái hệ thống → Cấu hình** → dòng tương ứng → **Sửa cấu hình**.
 
-## Phần O — Phát hành Đợt 3 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+## Phần O — Phát hành Đợt 3 lên THẬT — đã xong bước 1–7 ngày 16/10/2026 (bản 1.0.0-d3.10)
 
 THẬT đang dùng Bảo trì, Sửa chữa hằng ngày: giữ đúng thứ tự **cấp quyền → triển khai → `migrateSchema`** (như Phần M) để không lúc nào bị lùi đợt. Nên làm ngoài giờ có người đang ghi phiếu.
 
