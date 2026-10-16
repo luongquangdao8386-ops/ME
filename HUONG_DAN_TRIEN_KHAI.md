@@ -186,11 +186,48 @@ THẬT đang dùng Bảo trì, Sửa chữa hằng ngày: giữ đúng thứ t�
 5. **Triển khai → Quản lý bản triển khai → bút chì → Phiên bản: Phiên bản mới** → Mô tả `THẬT d3` → **Triển khai** (giữ nguyên link) → cửa sổ ẩn danh mở link `/exec` THẬT thêm `?action=system.health` → thấy `"ok":true`. App THẬT vẫn chạy như Đợt 2.
 6. Ô chọn hàm → **`migrateSchema`** → **Chạy** → Nhật ký giống Phần M bước 7, kết thúc bằng `schema_version=1.5.3`. Chạy **`healthCheck`** → các dòng ĐẠT (trừ cảnh báo đã biết).
 7. Mở `/ME/` → Ctrl+Shift+R → **Tài khoản**: phiên bản app đúng bản đã thử; **Trạng thái hệ thống**: schema **1.5.3**. Lưới 9 ô sáng hết.
-8. Dữ liệu thật (từ đây mới in và dán tem thật):
-   - **Người dùng:** cấp vai trò **Đọc điện nước** cho người đọc số (Tài khoản → Quản trị → Người dùng).
-   - **Đồng hồ:** thêm từng cái hoặc Excel **Đồng hồ và chỉ số**; chỉ số ban đầu = số đọc thật lúc bắt đầu dùng app. In tem QR dán đồng hồ.
-   - **Biểu giá:** nhập tay hoặc Excel **Biểu giá điện nước** → người khác cấp 3–4 duyệt + PIN. Chưa có biểu giá thì báo cáo không có chi phí (không tự lấy 0).
-   - **Tủ, lộ, phụ tải:** Excel **Tủ, lộ, phụ tải, bản vẽ** (Xuất Excel lấy mẫu → điền → Nhập). Nguồn là **loại tủ** (Điểm nhận lưới, Máy biến áp, Máy phát). Đối chiếu thực tế xong thì C3/C4 **Xác minh** từng tủ/lộ.
+8. Dữ liệu thật — chi tiết ở **Bước 8 chi tiết** ngay dưới. Từ đây mới in và dán tem thật.
+
+### Bước 8 chi tiết — nhập dữ liệu thật Đợt 3 (máy tính, tài khoản quản trị)
+
+**Chuẩn bị trước (giấy hoặc Excel riêng):**
+- **Khu vực** và **thiết bị** đã có trên THẬT từ Đợt 1 (mã `KV-…`, `TB-…`). Thiếu thì thêm ở Danh mục / Thiết bị trước.
+- Danh sách **đồng hồ**: tên, điện hay nước, khu vực, vị trí, số serial, **hệ số nhân** (công tơ qua biến dòng TI: ghi hệ số, ví dụ 40; không có thì 1), đồng hồ tổng (nếu là đồng hồ nhánh), chu kỳ đọc, người đọc.
+- **Chỉ số ban đầu**: đi đọc thật từng đồng hồ, ghi **số trên mặt đồng hồ + ngày giờ đọc**. Kỳ đầu tiên tính tiêu thụ từ số này.
+- **Giá điện, giá nước** hiện hành (đơn giá trước thuế, % thuế, ngày bắt đầu áp dụng).
+- **Sơ đồ một sợi**: nguồn (điểm nhận lưới, MBA, máy phát), tủ tổng, tủ phân phối, tủ điều khiển; mỗi tủ có những lộ ra nào; mỗi lộ cấp cho thiết bị nào hoặc tủ nào.
+
+**8.1 Người đọc điện nước**
+1. **Tài khoản → Quản trị → Người dùng và PIN tạm**.
+2. Người **chưa có** tài khoản: **Thêm người dùng** → mã nhân viên, tên, cấp **2 Nhân viên**, tick vai trò **Đọc điện nước** → **Lưu** → PIN của bạn → app hiện **PIN tạm (chỉ một lần)** → đưa người đó; lần đầu đăng nhập họ tự đổi PIN.
+3. Người **đã có** tài khoản: bấm tên → **Đổi cấp/vai trò** → tick thêm **Đọc điện nước** → **Lưu** → PIN. Phiên của họ hết hiệu lực → họ đăng nhập lại.
+
+**8.2 Đồng hồ** — ít thì nhập tay, nhiều thì Excel.
+- **Tay:** **Điện nước → Đồng hồ → Thêm đồng hồ**: Tên (một thứ tiếng), **Loại** Điện/Nước (không đổi được sau khi lưu), Mã (trống = tự cấp `DH-0001`…), Khu vực, Vị trí đặt, Số serial, **Hệ số nhân**, Đồng hồ tổng (nếu có), **Chu kỳ đọc chỉ số** (1 ngày / 5 ngày / 10 ngày / 1 tháng / Tùy chọn), **Người đọc**, **Chỉ số ban đầu**: *Chỉ số trên đồng hồ* + *Đọc lúc* = số và giờ đã đọc thật → **Lưu**.
+- **Excel:** **Điện nước → Nhập/xuất Excel** → chip **Đồng hồ và chỉ số** → **Tải mẫu** → sheet `meters`, từ dòng 3 mỗi đồng hồ một dòng: `utility_type` = `ELECTRICITY` (điện) / `WATER` (nước); `name_vi`; `location_code` (ví dụ `KV-001`); `position_vi`; `serial`; `multiplier`; `parent_meter_code` (nếu là nhánh); `reading_cycle_type` = `DAY_1` / `DAY_5` / `DAY_10` / `MONTH`; `assignee_code` = mã NV người đọc; `opening_value` = chỉ số ban đầu; `opening_at` = `dd/mm/yyyy hh:mm`. Để trống `meter_id`, `meter_code`, `record_version`; sheet `meter_readings` để trống → lưu → **Chọn tệp .xlsx để nhập** → xem **Kết quả kiểm tra** (dòng lỗi sửa trong tệp rồi chọn lại) → **Nhập dữ liệu** (hỏi PIN thì nhập).
+- **Kiểm:** **Điện nước → Đồng hồ**: đủ đồng hồ, mỗi cái có mã `DH-…`, đúng hệ số, đúng người đọc.
+
+**8.3 Tem QR đồng hồ**
+1. **Điện nước → Đồng hồ → In QR** (in các đồng hồ đang hiện; lọc Điện/Nước/Khu vực trước nếu muốn in từng đợt) → chọn cỡ tem → **In QR**.
+2. Dán tem cạnh mặt đồng hồ, chỗ khô, dễ đưa điện thoại vào quét.
+3. Thử: iPhone của người đọc → **Quét QR** → mở thẳng **Nhập chỉ số** của đúng đồng hồ.
+
+**8.4 Biểu giá**
+1. **Điện nước → Biểu giá → Thêm biểu giá**: Loại (Điện/Nước), Khu vực (trống = toàn nhà máy), **Hiệu lực từ ngày**, **Đơn giá** (mỗi kWh hoặc m³), **Thuế %** → **Lưu** → trạng thái **Nháp chờ duyệt**. (Hoặc Excel mẫu **Biểu giá điện nước** như Phần N bước 16 — lô nhạy cảm, người khác ghi.)
+2. **Một người cấp 3–4 khác** người nhập: mở biểu giá → **Duyệt** → PIN → **Đã duyệt**. Từ đây báo cáo điện nước có chi phí.
+3. Giá thay đổi: thêm biểu giá mới, **Hiệu lực từ** = ngày giá mới áp dụng, rồi duyệt như trên.
+
+**8.5 Tủ, lộ, phụ tải** — ít thì nhập tay như Phần N bước 8 (**Thêm tủ**, mở tủ → **Thêm lộ**, tab Phụ tải → **Thêm phụ tải**); nhiều thì Excel:
+1. **Tra cứu lộ điện → Nhập/xuất Excel** → **Tủ, lộ, phụ tải, bản vẽ** → **Tải mẫu**. Tệp có 4 sheet dữ liệu và sheet **Hướng dẫn** (liệt kê cột bắt buộc và giá trị được chọn).
+2. Sheet `panels` (mỗi tủ một dòng): `row_key` = khóa tự đặt (ví dụ `P1`, `P2`…) để sheet khác tham chiếu; `name_vi`; `panel_type` = `SOURCE_GRID` (điểm nhận lưới) / `SOURCE_TRANSFORMER` (MBA) / `SOURCE_GENERATOR` (máy phát) / `MAIN_SWITCHBOARD` (tủ tổng) / `DISTRIBUTION_BOARD` (tủ phân phối) / `CONTROL_PANEL` (tủ điều khiển/MCC); `equipment_code` = mã TB nếu tủ có hồ sơ thiết bị; `location_code`; `supply_voltage`; `rated_current`. Để trống `panel_id`, `panel_code` (tự cấp `TU-…`).
+3. Sheet `circuits` (mỗi lộ một dòng): `row_key` (ví dụ `C1`…); `panel_key` = tủ cha (`P1` hoặc mã `TU-…` đã có); `name_vi` (ví dụ `Lộ MSB → DB1`); `phases`; `voltage`; `breaker_model`; `breaker_rating_a`; `cable_type`; `cable_section_mm2`; `cable_length_m`. Để trống `circuit_id`, `circuit_code` (tự cấp `LO-…`).
+4. Sheet `circuit_loads` (mỗi phụ tải một dòng): `circuit_key` = lộ (`C1` hoặc `LO-…`); **một trong hai**: `equipment_code` (máy nhận điện, `TB-…`) **hoặc** `downstream_panel_key` (tủ nhận nguồn, `P2` hoặc `TU-…`); `supply_role` = `PRIMARY` (chính) / `BACKUP` (dự phòng); `rated_load_kw`.
+5. Sheet `circuit_drawings` để trống (bản vẽ tải ở tab **Tài liệu** trong app).
+6. Lưu → **Chọn tệp .xlsx để nhập** → **Kết quả kiểm tra** → **Nhập dữ liệu**. Lỗi hay gặp: tủ nguồn lưới/máy phát làm phụ tải (không nhận nguồn được); nối thành vòng; khóa `P…`/`C…` gõ sai.
+7. **Kiểm:** mở một máy ở cuối đường → **Xem đường cấp** → nhãn **Tới nguồn**. Nhãn **Đường cấp chưa tới nguồn** = còn thiếu lộ nối phía trên.
+8. **Xác minh:** đối chiếu thực tế xong, một người cấp 3–4 (không phải người sửa cuối) mở từng tủ/lộ → **Xác minh** → PIN → **Đã xác minh**.
+9. **Bản vẽ** (nếu có): KT/C3 mở tủ/lộ → tab **Tài liệu** → **Tải bản vẽ mới** → người khác duyệt ở **Công việc → Chờ bạn xử lý**.
+10. **Tem QR tủ/lộ:** mở tủ/lộ → **Xem QR** → **In QR** → dán lên cửa tủ.
 
 ## Phần J — Đưa Đợt 2 lên THỬ (`ME_MayChu_THU`) — đã xong 15/10/2026
 
