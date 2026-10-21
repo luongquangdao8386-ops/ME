@@ -81,17 +81,18 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 
 **Đúng khi (toàn Phần Q):** chỉ owner thấy/dùng; sao lưu trước khi xóa; không nhắc hạn/Gmail cũ; tem cũ hết hiệu lực; nháp cũ không gửi lại; tài khoản/quyền/cấu hình còn nguyên.
 
-## Phần R — Phát hành Đợt 4 lên THẬT (chỉ sau khi nói "phát hành THẬT")
+## Phần R — Phát hành Đợt 4 lên THẬT — app đã lên `main` ngày 21/10/2026 (bản 1.0.0-d4.5, commit 39be0e7)
 
-Phát hành **chỉ thêm chức năng**, không xóa gì. Không bấm Xóa sạch trên THẬT trừ khi thật sự muốn xóa toàn bộ dữ liệu vận hành và nhập lại từ đầu.
+Phát hành **chỉ thêm chức năng**, không xóa gì: dữ liệu thật giữ nguyên. Thứ tự như Phần O: **sao lưu → dán mã → Phiên bản mới → sau cùng mới `migrateSchema`**. Nên làm lúc ít người đang ghi phiếu. **Không bấm Xóa sạch trên THẬT** trừ khi thật sự muốn xóa toàn bộ dữ liệu vận hành và nhập lại từ đầu.
 
-1. Claude đưa đúng bản đã thử (nhánh `claude/dot-4`) lên `main` của repo `ME` → trang `/ME/` tự cập nhật app.
-2. App THẬT: **Sao lưu ngay** → chờ **Đã kiểm chứng**.
-3. Link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → dán vào **`ME_MayChu_THAT`** → Lưu.
-4. **`healthCheck`** (cho phép quyền nếu hỏi) → `schema_version: 1.5.3 (1.5.4)` CẢNH BÁO — đúng.
-5. **Phiên bản mới** → `THẬT d4` → Triển khai (giữ link) → `?action=system.health` → `"ok":true`.
-6. **`migrateSchema`** → `Thêm: ResetRuns; ResetFiles. schema_version=1.5.4` → **`healthCheck`** ĐẠT.
-7. App THẬT: Ctrl+Shift+R → owner thấy **Tài khoản → Quản trị → Dữ liệu hệ thống**; mọi chức năng khác như cũ.
+1. (Claude đã làm) Đưa đúng bản đã thử trên THỬ lên `main` của repo `ME` → trang `/ME/` tự cập nhật app. App mới vẫn chạy như Đợt 3 tới khi máy chủ THẬT nâng (chưa có mục Dữ liệu hệ thống — đúng).
+2. App THẬT (máy tính, NV001): **Tài khoản → Quản trị → Sao lưu → Sao lưu ngay** → PIN → chờ dòng mới **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C → <https://script.google.com> → dự án **`ME_MayChu_THAT`** (đúng THẬT, không phải THU) → `Code.gs` → Ctrl+A → Delete → Ctrl+V → **Lưu** (Ctrl+S).
+4. Ô chọn hàm → **`healthCheck`** → **Chạy** (Google hỏi quyền thì cho phép như Phần O bước 4). Nhật ký: `CẢNH BÁO schema_version: 1.5.3 (1.5.4)` — đúng, chưa nâng.
+5. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản: Phiên bản mới** → Mô tả `THẬT d4.5` → **Triển khai** (giữ nguyên link). Cửa sổ ẩn danh → link `/exec` THẬT thêm `?action=system.health` → thấy `"ok":true`.
+6. Ô chọn hàm → **`migrateSchema`** → **Chạy** → Nhật ký: `migrateSchema xong. Thêm: ResetRuns; ResetFiles. schema_version=1.5.4`. Chạy lại **`healthCheck`** → `schema_version: 1.5.4`, `server_version: 1.0.0-d4.5`, dòng `reset_run` OK, các dòng khác ĐẠT.
+7. Mở `/ME/` → **Ctrl+Shift+R** → **Tài khoản**: Phiên bản app **1.0.0-d4.5**, Phiên bản máy chủ **1.0.0-d4.5**; **Quản trị → Trạng thái hệ thống**: schema **1.5.4**; owner thấy thêm **Quản trị → Dữ liệu hệ thống** (chỉ xem, không bấm nút đỏ). Các chức năng khác như cũ; chữ web to hơn, trang chủ ảnh mới.
+8. iPhone mọi người: đóng hẳn app rồi mở lại (1–2 lần) → **Tài khoản**: Phiên bản app **1.0.0-d4.5**.
 
 ## Phần M — Đưa Đợt 3 lên THỬ (`ME_MayChu_THU`) — đã xong 16/10/2026
 
