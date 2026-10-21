@@ -61,7 +61,8 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 
 ### Bước 4 — SYS-RESET-03 Tiến độ
 1. Bấm **Xác nhận xóa sạch** → app rời khung, sang trang **Tiến độ xóa sạch**: Chuẩn bị → Sao lưu → Xóa → Kiểm tra → Hoàn tất (thường vài phút), số đã xóa/tổng theo nhóm.
-2. Trong lúc đang chạy: iPhone **MAU-C3** (có mạng) đóng hẳn app rồi mở lại → dòng đỏ **Hệ thống đang bảo trì** (app chỉ mở được chế độ ngoại tuyến); đăng nhập lại cũng báo **Hệ thống đang bảo trì**.
+2. Trong lúc đang chạy: iPhone **MAU-C3** (có mạng, app ≥ 1.0.0-d4.5) đóng hẳn app rồi mở lại → màn **Mở bằng PIN** có dòng đỏ **Hệ thống đang bảo trì…** → nhập PIN → app mở dữ liệu trên máy, dải đỏ trên cùng **Hệ thống đang bảo trì — chỉ xem dữ liệu trên máy** (không phải chỉ "Ngoại tuyến"). Bấm **Đăng nhập** ở màn PIN rồi đăng nhập cũng báo **Hệ thống đang bảo trì**.
+   Khi xóa xong: trong vòng 1 phút (hoặc khi mở lại app) iPhone này tự về màn Đăng nhập báo **Dữ liệu đã được đặt lại, cần tải lại**.
 
 **Đúng khi:** **Hoàn tất**, có số đã xóa theo nhóm, dòng File (giữ … · thùng rác 0 · …), **Bản sao lưu trước khi xóa: yyyy-mm-dd_HHmm**, dòng vàng nhắc in tem QR mới, nút **Đăng nhập lại** và **Nhập dữ liệu mới**.
 

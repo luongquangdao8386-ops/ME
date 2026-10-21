@@ -126,3 +126,46 @@ test('iPhone: đang Xóa sạch dở (lỗi sao lưu) — mở lại app: owner 
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });
+
+test('iPhone: người khác đang dùng app khi Xóa sạch bắt đầu — mở lại app: dòng đỏ "Hệ thống đang bảo trì" cố định (không chỉ Ngoại tuyến); xóa xong app tự về Đăng nhập', async () => {
+  const env = seeded();
+  userClient(env, 'U-C3', 3, '738261');
+  const app = await openApp({ env, ...IPHONE });
+  const { page } = app;
+  try {
+    await login(page, 'U-C3', '738261');
+    await page.waitForSelector('.grid9', { timeout: 15000 });
+    const c = makeClient(env);
+    c.login(OWNER_CODE, OWNER_PIN);
+    const pv = c.call('system.reset.preview').data;
+    const rq = c.write('system.reset.request', { reset_run_id: pv.reset_run_id, nonce: pv.nonce, plan_hash: pv.plan_hash, pin: OWNER_PIN, confirm_text: 'XÓA TOÀN BỘ', file_mode: 'KEEP' });
+    assert.equal(rq.ok, true);
+    // đóng hẳn rồi mở lại app (có mạng)
+    await page.reload();
+    await page.waitForSelector('#u-notice', { timeout: 15000 });
+    assert.ok((await page.textContent('#u-notice')).includes('Hệ thống đang bảo trì'));
+    await page.fill('#upin', '738261');
+    await page.waitForSelector('.grid9', { timeout: 15000 });
+    assert.equal(await page.isVisible('#st-offline'), true);
+    const strip = await page.textContent('#st-offline');
+    assert.ok(strip.includes('Hệ thống đang bảo trì') && strip.includes('chỉ xem dữ liệu trên máy'), strip);
+    await page.waitForTimeout(4000); // dòng báo không tự tắt như toast
+    assert.ok((await page.textContent('#st-offline')).includes('Hệ thống đang bảo trì'));
+    await page.screenshot({ path: path.join(SHOTS, 'd4-maintenance-other-iphone.png') });
+    // quay lại app khi vẫn đang bảo trì: vẫn dòng bảo trì
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(800);
+    assert.ok((await page.textContent('#st-offline')).includes('Hệ thống đang bảo trì'));
+    // owner chạy xong đợt xóa
+    const rec = makeClient(env);
+    rec.token = rq.data.recovery.token;
+    let st;
+    for (let i = 0; i < 60; i++) { st = rec.call('system.reset.status', { reset_run_id: pv.reset_run_id }); if (st.data.run.status === 'COMPLETED') break; }
+    assert.equal(st.data.run.status, 'COMPLETED');
+    // lần kiểm tra lại sau (mỗi phút hoặc khi quay lại app) → dữ liệu đã đặt lại → Đăng nhập
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForSelector('#login-btn', { timeout: 15000 });
+    assert.ok((await page.textContent('body')).includes('Dữ liệu đã được đặt lại'));
+    assert.deepEqual(app.consoleErrors, []);
+  } finally { await app.close(); }
+});

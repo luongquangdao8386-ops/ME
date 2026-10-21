@@ -417,11 +417,12 @@ export function renderChangePin(root, { tempPin, onDone, onCancel, onSessionErro
 }
 
 /* ---------------- Màn mở khóa ngoại tuyến (2.5) ---------------- */
-export async function renderUnlock(root, { onUnlocked, onLogin } = {}) {
+export async function renderUnlock(root, { onUnlocked, onLogin, notice = '' } = {}) {
   const v = await getVerifier();
   const el = h(`<div class="page narrow">
     <header class="bar"><h1>${bi('offline_unlock')}</h1><span class="tag offline">${ICON.wifiOff}<span>${bi('offline')}</span></span></header>
     <form class="card form" novalidate>
+      ${notice ? `<p class="banner err" id="u-notice" role="alert">${notice}</p>` : ''}
       ${v ? `<p class="who"><strong>${esc(v.display_name)}</strong> · ${esc(v.employee_code)}</p>` : `<p class="banner warn">${bi('need_network')}</p>`}
       ${v ? pinField('upin', bi('pin6')) : ''}
       ${v ? `<button type="submit" class="btn primary block" id="u-btn">${bi('open_with_pin')}</button>` : ''}

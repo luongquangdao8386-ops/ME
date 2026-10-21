@@ -10,6 +10,8 @@ import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
 export const app = {
   shell: null,
   offline: false,
+  /** máy chủ đang bảo trì (SYSTEM_MAINTENANCE): chỉ xem dữ liệu trên máy */
+  maintenance: false,
   /** do main.js gán: đăng xuất, đăng nhập lại, xử lý lỗi phiên */
   onLogout: null,
   onRelogin: null,
@@ -78,7 +80,7 @@ export async function updateSyncStatus() {
   const q = await queueItems().catch(() => []);
   const mine = q.filter((o) => o.user_id === (session.user && session.user.user_id) && o.dataset_epoch === session.epoch);
   const problems = mine.filter((o) => o.state === 'CONFLICT' || o.state === 'REJECTED').length;
-  app.shell.setSync({ offline: app.offline || !navigator.onLine, lastSync: await getMeta('last_sync'), queued: mine.length - problems, problems });
+  app.shell.setSync({ offline: app.offline || !navigator.onLine, maintenance: !!app.maintenance, lastSync: await getMeta('last_sync'), queued: mine.length - problems, problems });
   // Số việc chờ tôi nghiệm thu/duyệt trên nút Công việc (C3/C4, Đợt 2)
   // (phần phụ: lỗi ở đây — vd tệp cũ chưa có hàm — không được làm hỏng khởi động app)
   if (RELEASED_DOT >= 2) {
@@ -93,11 +95,14 @@ let syncing = null;
 
 async function runSync() {
   const f = await flushQueue();
+  if (f.stopped_code === 'SYSTEM_MAINTENANCE') { await setMaintenance(true); return { ok: false, code: f.stopped_code, committed: f.committed }; }
   if (f.stopped_code && app.onSessionError && await app.onSessionError({ code: f.stopped_code, data: f.response && f.response.data })) return { ok: false, code: f.stopped_code, handled: true, committed: f.committed };
   const r = await pullChanges();
+  if (r.code === 'SYSTEM_MAINTENANCE') { await setMaintenance(true); return { ...r, committed: f.committed }; }
   invalidate();
   await noteReleasedDot();
   app.offline = false;
+  if (r.ok && app.maintenance) { app.maintenance = false; toast(bi('sys.maintenance_over'), 'ok'); }
   await updateSyncStatus();
   if (!r.ok) {
     if (app.onSessionError && await app.onSessionError(r)) return { ...r, handled: true, committed: f.committed };
@@ -105,6 +110,27 @@ async function runSync() {
   }
   return { ok: true, committed: f.committed, applied: r.applied || 0 };
 }
+
+/**
+ * Máy chủ đang bảo trì (vd Xóa sạch): app chỉ xem dữ liệu trên máy (như ngoại tuyến), dải đỏ cố định;
+ * mỗi phút và khi quay lại app hỏi lại — hết bảo trì thì đồng bộ tiếp, dữ liệu đã đặt lại thì về Đăng nhập
+ */
+export async function setMaintenance(on) {
+  app.maintenance = on;
+  if (on) app.offline = true;
+  await updateSyncStatus();
+}
+
+let rechecking = false;
+async function recheckMaintenance() {
+  if (!app.shell || !app.maintenance || rechecking || !navigator.onLine || document.visibilityState !== 'visible') return;
+  rechecking = true;
+  try {
+    const r = await syncNow({ quiet: true });
+    if (r && r.ok) refresh();
+  } finally { rechecking = false; }
+}
+setInterval(recheckMaintenance, 60000);
 
 /**
  * Đồng bộ ngay: gửi hàng chờ rồi lấy thay đổi. Trả {ok, code, committed}.
@@ -266,8 +292,9 @@ function registerRoutes() {
 let routesReady = false;
 
 /** Vào app (sau đăng nhập hoặc mở khóa ngoại tuyến) */
-export async function enterApp(root, { offline = false } = {}) {
-  app.offline = offline;
+export async function enterApp(root, { offline = false, maintenance = false } = {}) {
+  app.offline = offline || maintenance;
+  app.maintenance = maintenance;
   invalidate();
   const b = await bootData();
   setReleasedDot(b);
@@ -327,6 +354,7 @@ window.addEventListener('offline', () => { updateSyncStatus(); refreshIfAccount(
 // có thay đổi thì vẽ lại màn xem đang mở (không vẽ lại màn nhập, hộp thoại, ô đang gõ)
 let lastReturnSync = 0;
 async function syncOnReturn() {
+  if (app.maintenance) return recheckMaintenance();
   if (!app.shell || app.offline || !navigator.onLine || document.visibilityState !== 'visible') return;
   const last = Date.parse((await getMeta('last_sync')) || '') || 0;
   if (Date.now() - Math.max(last, lastReturnSync) < 60000) return;

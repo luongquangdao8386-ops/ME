@@ -81,10 +81,10 @@ async function showRecovery(runId) {
   });
 }
 
-async function goApp(offline = false) {
+async function goApp(offline = false, maintenance = false) {
   const target = takeTarget();
   if (target) history.replaceState(null, '', target);
-  await enterApp(root, { offline });
+  await enterApp(root, { offline, maintenance });
 }
 
 /**
@@ -219,16 +219,19 @@ async function start() {
 
   // Mở app: có mạng thì hỏi máy chủ (tối đa offline_probe_seconds); không thì mở khóa ngoại tuyến (2.5)
   const probeSec = Number(session.settings.offline_probe_seconds || 12);
-  const tryOffline = async () => {
-    if (!serverBound()) return showLogin(bi('sync.need_network'));
+  // maintenance: máy chủ trả SYSTEM_MAINTENANCE — mở dữ liệu trên máy như ngoại tuyến, dòng báo bảo trì không tự tắt
+  const tryOffline = async (maintenance = false) => {
+    const why = bi(maintenance ? 'sys.maintenance' : 'sync.need_network');
+    if (!serverBound()) return showLogin(why);
     const v = await getVerifier();
-    if (!v) return showLogin(bi('sync.need_network'));
+    if (!v) return showLogin(why);
     renderUnlock(root, {
+      notice: maintenance ? bi('sys.maintenance_unlock') : '',
       onUnlocked: async ({ expired, ms }) => {
         ls.set('p04_offline_open', isoNowVN());
         ls.set('offline_unlock_ms', String(ms));
         if (expired) return renderDraftsOnly();
-        goApp(true);
+        goApp(true, maintenance);
       },
       onLogin: () => showLogin()
     });
@@ -265,8 +268,7 @@ async function start() {
   if (r.code === 'SYSTEM_MAINTENANCE') {
     // Owner: có thể đang Xóa sạch → đăng nhập lại để nhận phiên phục hồi và xem tiến độ (1.4 §21.5.1)
     if (session.user && session.user.is_system_owner) return showLogin(bi('reset.login_owner'));
-    toast(bi('sys.maintenance'), 'err');
-    return tryOffline();
+    return tryOffline(true);
   }
   bootUi.step(2);
   flushPendingLogout();

@@ -146,15 +146,18 @@ export function mountShell(root, { env, onScan }) {
       $$('[data-nav]', el).forEach((x) => x.classList.toggle('active', x.dataset.nav === key));
     },
     /** Trạng thái đồng bộ ở góc phải header (web) */
-    setSync({ offline, lastSync, queued = 0, problems = 0 }) {
+    setSync({ offline, maintenance = false, lastSync, queued = 0, problems = 0 }) {
       const u = session.user || {};
       const lvl = Number(u.role_level) || 0;
-      $('#hdr-status', el).innerHTML = `<span class="pill ${offline ? 't-red' : 't-green'}">${offline ? ICON.wifiOff : ICON.sync}<span>${bi(offline ? 'sync.offline' : 'sync.online')}</span></span>
+      const off = offline || maintenance;
+      const pill = maintenance ? 'sync.maintenance' : offline ? 'sync.offline' : 'sync.online';
+      $('#hdr-status', el).innerHTML = `<span class="pill ${off ? 't-red' : 't-green'}">${maintenance ? ICON.repairs : offline ? ICON.wifiOff : ICON.sync}<span>${bi(pill)}</span></span>
         <span class="hdr-sync muted">${bi('sync.last')}: ${esc(fmtDateTime(lastSync) || '—')}${queued ? ` · ${bi('sync.queued_count', { N: queued })}` : ''}${problems ? ` · <span class="t-red-text">${bi('sync.failed')} ${problems}</span>` : ''}</span>
         <span class="hdr-user"><strong>${esc(u.display_name || '')}</strong> ${lvl ? badge('level.' + lvl) : ''}</span>`;
       const strip = $('#st-offline', el);
-      strip.hidden = !offline;
-      $('#st-offline-text', el).innerHTML = `${bi('sync.offline')} — ${bi('sync.last')}: ${esc(fmtDateTime(lastSync) || '—')}`;
+      strip.hidden = !off;
+      strip.querySelector('svg').outerHTML = maintenance ? ICON.repairs : ICON.wifiOff;
+      $('#st-offline-text', el).innerHTML = `${bi(maintenance ? 'sys.maintenance_strip' : 'sync.offline')} — ${bi('sync.last')}: ${esc(fmtDateTime(lastSync) || '—')}`;
     },
     /** Dải "Phiên sắp hết hạn" (2.5) từ session_warn_days ngày trước hạn */
     setSessionWarn(expiresAt, onRelogin) {
