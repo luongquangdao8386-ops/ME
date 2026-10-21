@@ -163,6 +163,9 @@ async function userAction(u, kind) {
   return false;
 }
 
+// Tài khoản đã khóa (nghỉ việc, không dùng nữa) ẩn mặc định — app không xóa tài khoản; bấm nút để hiện lại khi cần mở khóa
+let showLocked = false;
+
 export async function renderUsers(view, { shell }) {
   shell.setScreen({ title: 'admin.users', back: '/account' });
   if (offline(view)) return;
@@ -171,7 +174,9 @@ export async function renderUsers(view, { shell }) {
   if (!r.ok) { view.innerHTML = errBox(r); return; }
   const c4 = roleLevel() >= 4;
   const me = r.data.me;
-  const items = r.data.items;
+  const all = r.data.items;
+  const lockedN = all.filter((u) => !u.active).length;
+  const items = showLocked ? all : all.filter((u) => u.active);
   const repaint = () => renderUsers(view, { shell });
   const canAct = (u) => c4 && u.user_id !== me && (!u.is_system_owner || isOwner());
   const note = (u) => (u.user_id === me ? `<span class="muted small">${bi('adm.user.self_note')}</span>` : (u.is_system_owner && !isOwner() ? `<span class="muted small">${bi('adm.user.owner_note')}</span>` : ''));
@@ -190,10 +195,12 @@ export async function renderUsers(view, { shell }) {
         ${c4 ? `<div class="muted small">${bi('adm.user.last_login')}: ${esc(fmtDateTime(u.last_login_at) || '—')} · ${bi('adm.user.sessions')}: ${u.active_sessions || 0}</div>` : ''}
         <div class="rec-actions">${actions(u)}</div></div>`).join('')}</div>`;
   view.innerHTML = `<div class="toolbar"><div class="row"><span class="muted">${bi('adm.user.total', { N: items.length })}</span>
-    ${c4 ? `<button type="button" class="btn small primary" id="u-add">${ICON.plus}${bi('adm.user.add')}</button>` : ''}</div></div>${body}`;
+    ${c4 ? `<button type="button" class="btn small primary" id="u-add">${ICON.plus}${bi('adm.user.add')}</button>` : ''}
+    ${lockedN ? `<button type="button" class="btn small" id="u-locked">${bi(showLocked ? 'adm.user.hide_locked' : 'adm.user.show_locked', { N: lockedN })}</button>` : ''}</div></div>${body}`;
   if (c4) $('#u-add', view).addEventListener('click', async () => { if (await addUserDialog()) repaint(); });
+  if (lockedN) $('#u-locked', view).addEventListener('click', () => { showLocked = !showLocked; repaint(); });
   $$('[data-act]', view).forEach((b) => b.addEventListener('click', async () => {
-    const u = items.find((x) => x.user_id === b.dataset.id);
+    const u = all.find((x) => x.user_id === b.dataset.id);
     if (!u) return;
     const done = b.dataset.act === 'role' ? await setRoleDialog(u) : await userAction(u, b.dataset.act);
     if (done) repaint();

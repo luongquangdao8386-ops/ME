@@ -60,7 +60,14 @@ test('web C4: thêm người dùng cấp 2 + vai trò → PIN tạm hiện một
     await page.click(`[data-act="lock"][data-id="${u.user_id}"]`);
     await page.fill('#ask-text', 'Nghỉ phép dài');
     await page.locator('.modal-actions .btn.primary').last().click();
+    // Đã khóa → ẩn khỏi danh sách; nút "Hiện tài khoản đã khóa (1)" hiện lại để mở khóa
+    await page.waitForSelector('#u-locked', { timeout: 15000 });
+    assert.equal(await page.locator(`[data-id="${u.user_id}"]`).count(), 0);
+    assert.ok(!(await viewText(page)).includes('NV-501'));
+    assert.ok((await page.textContent('#u-locked')).includes('Hiện tài khoản đã khóa (1)'));
+    await page.click('#u-locked');
     await page.waitForSelector(`[data-act="unlock"][data-id="${u.user_id}"]`, { timeout: 15000 });
+    assert.ok((await page.textContent('#u-locked')).includes('Ẩn tài khoản đã khóa'));
     assert.equal(env.rows('Users').find((x) => x.employee_code === 'NV-501').active, false);
     await page.screenshot({ path: path.join(SHOTS, 'admin-users-web.png'), fullPage: true });
     assert.deepEqual(app.consoleErrors, []);
