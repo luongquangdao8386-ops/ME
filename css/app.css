@@ -333,7 +333,7 @@ main { padding: 10px 12px 24px; max-width: 1100px; margin: 0 auto; }
 /* Ảnh nền cao theo bề ngang (gần trọn ảnh 16:9 trên iPhone), thẻ bên dưới chỉ chồng lên mép ảnh, lớp mờ chỉ ở 12% cuối */
 .home-hero {
   position: relative; min-height: max(220px, calc(var(--safe-top) + 58vw)); padding: calc(var(--safe-top) + 14px) 16px 32px;
-  background: url("../assets/bg/factory.jpg") center 45% / cover no-repeat;
+  background: url("../assets/bg/home.jpg") center 45% / cover no-repeat;
 }
 .home-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, rgba(246,248,250,0) 88%, rgba(246,248,250,0.6) 96%, var(--bg) 100%); }
@@ -472,7 +472,7 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
   .app.is-home .hdr { display: flex; }
   .view { padding: 16px 22px 32px; }
   .app.is-home .view { padding: 0 0 32px; }
-  .home-hero { min-height: 0; height: clamp(300px, 42vh, 480px); padding: 26px 28px 32px; background-position: center 32%; }
+  .home-hero { min-height: 0; height: clamp(300px, 42vh, 480px); padding: 26px 28px 32px; background-position: center 60%; }
   .home-body.wide { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; padding: 0 22px; margin-top: -22px; }
   .home-body.wide .home-bottom { grid-column: 1 / -1; }
   .dl-cols { grid-template-columns: 1fr 1fr; }

@@ -1,7 +1,7 @@
 // Service Worker của M&E — phạm vi thư mục của trang (/ME/ THẬT, /ME-thu/ THỬ); chỉ quản lý cache của chính trang này
 // (me-shell-* ở /ME/, me_thu-shell-* ở /ME-thu/ — cùng quy tắc storageNs trong js/core.js), không xóa cache của trang kia.
-const VERSION = '1.0.0-d4.3';
-const BUILD_HASH = '4e1cabd9ef6c'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const VERSION = '1.0.0-d4.4';
+const BUILD_HASH = '8d82e93be670'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
@@ -17,7 +17,7 @@ const FILES = [
   'js/work.js', 'js/pages/work.js', 'js/pages/maintenance.js', 'js/pages/repairs.js', 'js/pages/workmat.js', 'js/pages/partreplace.js',
   'js/meters.js', 'js/chart.js', 'js/report-link.js', 'js/pages/utilities.js', 'js/pages/circuits.js', 'js/pages/reports.js',
   'vendor/jsQR-1.4.0.js', 'vendor/qrcode-generator-2.0.4.mjs',
-  'assets/brand/logo57-tile.svg', 'assets/bg/factory.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
+  'assets/brand/logo57-tile.svg', 'assets/bg/factory.jpg', 'assets/bg/home.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
 ];
 
 // Tải vỏ app từ máy chủ gốc theo mã bản (?v=BUILD_HASH, lưu dưới tên tệp thường): ngay sau khi phát hành, CDN của
