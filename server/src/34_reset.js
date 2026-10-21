@@ -538,10 +538,12 @@ function systemResetPreview_(ctx) {
   };
 }
 
+/** Như app: nhận cả kiểu bỏ dấu cũ "XOÁ" và chữ thường; không dấu thì không nhận */
 function resetConfirmOk_(s) {
   var t = String(s === undefined || s === null ? '' : s);
   try { t = t.normalize('NFC'); } catch (e) { /* V8 có normalize */ }
-  return t.trim() === RESET_CONFIRM_TEXT_.normalize('NFC');
+  t = t.trim().replace(/\s+/g, ' ').toUpperCase().replace(/OÁ/g, 'ÓA');
+  return t === RESET_CONFIRM_TEXT_.normalize('NFC');
 }
 
 function systemResetRequest_(ctx) {

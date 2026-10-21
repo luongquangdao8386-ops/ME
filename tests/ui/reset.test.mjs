@@ -53,6 +53,11 @@ for (const [name, dev] of [['iPhone', IPHONE], ['web', WEB]]) {
       await page.fill('#rs-pin', OWNER_PIN);
       await page.fill('#rs-text', 'XOA TOAN BO');
       assert.equal(await page.isDisabled('#rs-go'), true, 'gõ thiếu dấu không được');
+      assert.equal(await page.isVisible('#rs-text-hint'), true, 'báo chưa đúng ngay dưới ô');
+      // iPhone hay gõ kiểu bỏ dấu cũ "XOÁ": vẫn nhận
+      await page.fill('#rs-text', 'XOÁ TOÀN BỘ');
+      assert.equal(await page.isDisabled('#rs-go'), false, 'XOÁ (dấu trên A) được nhận');
+      assert.equal(await page.isVisible('#rs-text-hint'), false);
       await page.fill('#rs-text', 'XÓA TOÀN BỘ');
       assert.equal(await page.isDisabled('#rs-go'), false);
       assert.ok(await noOverflow(page));

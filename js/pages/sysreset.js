@@ -21,7 +21,9 @@ const need = (view) => {
   if (!isOwner()) { view.innerHTML = `<div class="card">${bi('err.forbidden')}</div>`; return true; }
   return false;
 };
-const confirmOk = (s) => String(s || '').normalize('NFC').trim() === CONFIRM.normalize('NFC');
+// Chữ xác nhận: nhận cả kiểu bỏ dấu cũ "XOÁ" (bàn phím iPhone hay gõ ra) và chữ thường; máy chủ luôn nhận đúng một dạng CONFIRM
+const confirmNorm = (s) => String(s || '').normalize('NFC').trim().replace(/\s+/g, ' ').toLocaleUpperCase('vi').replace(/OÁ/g, 'ÓA');
+const confirmOk = (s) => confirmNorm(s) === CONFIRM.normalize('NFC');
 const groupRows = (counts) => `<ul class="list rs-groups">${GROUPS.map((g) => `<li class="kv"><span>${bi('reset.group.' + g)}</span><strong>${bi('reset.records', { N: fmtNumber(Number(counts[g] || 0)) })}</strong></li>`).join('')}</ul>`;
 const filesLine = (f) => `<p class="muted small">${bi('reset.files_line', { N: fmtNumber(Number(f.app || 0)), S: fmtNumber(Number(f.shared || 0)), E: fmtNumber(Number(f.external || 0)) })}</p>`;
 const guideLink = () => `<p class="muted small">${bi('reset.restore_note')} · <a href="${GUIDE_URL}" target="_blank" rel="noopener noreferrer">${bi('reset.restore_link')}</a></p>`;
@@ -91,6 +93,7 @@ export async function renderResetConfirm(view, { shell }) {
       <input id="rs-pin" class="inp" type="password" inputmode="numeric" autocomplete="current-password" maxlength="6" pattern="[0-9]*">
       <label for="rs-text">${bi('reset.type_label')}</label>
       <input id="rs-text" class="inp" type="text" autocapitalize="characters" spellcheck="false" placeholder="${esc(CONFIRM)}">
+      <p class="hint t-red-text" id="rs-text-hint" hidden>${bi('reset.type_wrong')}</p>
       <p class="err" id="rs-err" role="alert"></p>
       <div class="row form-actions"><a class="btn" href="#/admin/system-data">${bi('btn.cancel')}</a>
         <button type="submit" class="btn danger-solid" id="rs-go" disabled>${bi('reset.btn_confirm')}</button></div>
@@ -99,7 +102,9 @@ export async function renderResetConfirm(view, { shell }) {
   const pin = $('#rs-pin', form), txt = $('#rs-text', form), go = $('#rs-go', form), err = $('#rs-err', form), cnt = $('#rs-count', form);
   let expired = false;
   const valid = () => !expired && /^\d{6}$/.test(pin.value) && confirmOk(txt.value);
-  const upd = () => { go.disabled = !valid(); };
+  const hint = $('#rs-text-hint', form);
+  // Gõ đủ độ dài mà chưa khớp (thường là thiếu dấu): báo ngay dưới ô, không để nút mờ mà không rõ vì sao
+  const upd = () => { go.disabled = !valid(); hint.hidden = confirmOk(txt.value) || confirmNorm(txt.value).length < CONFIRM.length; };
   pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 6); upd(); });
   txt.addEventListener('input', upd);
   const again = () => { cnt.innerHTML = `${bi('reset.expired')} <button type="button" class="btn small" id="rs-again">${bi('reset.preview_again')}</button>`; $('#rs-again', cnt).addEventListener('click', () => renderResetConfirm(view, { shell })); };
@@ -117,7 +122,7 @@ export async function renderResetConfirm(view, { shell }) {
     err.textContent = '';
     const mode = ($('input[name="file_mode"]:checked', form) || {}).value || 'KEEP';
     busy(go, true);
-    const res = await api('system.reset.request', { reset_run_id: d.reset_run_id, nonce: d.nonce, plan_hash: d.plan_hash, pin: pin.value, confirm_text: txt.value, file_mode: mode }, { write: true, timeoutMs: 45000 });
+    const res = await api('system.reset.request', { reset_run_id: d.reset_run_id, nonce: d.nonce, plan_hash: d.plan_hash, pin: pin.value, confirm_text: CONFIRM, file_mode: mode }, { write: true, timeoutMs: 45000 });
     busy(go, false);
     if (res.ok) { clearInterval(timer); if (app.onResetStarted) await app.onResetStarted(res.data); return; }
     pin.value = '';

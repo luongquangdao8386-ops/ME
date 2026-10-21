@@ -69,6 +69,10 @@ test('Xác nhận: gõ sai chữ, PIN sai, chế độ xóa vĩnh viễn chưa b
   let r = request(c, pv, { confirm_text: 'XOA TOAN BO' });
   assert.equal(r.code, 'VALIDATION_ERROR');
   assert.ok(r.errors.some((e) => e.code === 'CONFIRM_TEXT'));
+  // kiểu bỏ dấu cũ "XOÁ" (bàn phím iPhone) và chữ thường được nhận; không dấu thì không
+  assert.equal(env.g.resetConfirmOk_('XOÁ TOÀN BỘ'), true);
+  assert.equal(env.g.resetConfirmOk_(' xóa  toàn bộ '), true);
+  assert.equal(env.g.resetConfirmOk_('XOA TOAN BO'), false);
   assert.equal(request(c, pv, { pin: '111111' }).code, 'AUTH_FAILED');
   r = request(c, pv, { file_mode: 'DELETE' });
   assert.ok(r.errors.some((e) => e.code === 'FILE_MODE_UNAVAILABLE'));
