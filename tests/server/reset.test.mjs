@@ -72,6 +72,7 @@ test('Xác nhận: gõ sai chữ, PIN sai, chế độ xóa vĩnh viễn chưa b
   // kiểu bỏ dấu cũ "XOÁ" (bàn phím iPhone) và chữ thường được nhận; không dấu thì không
   assert.equal(env.g.resetConfirmOk_('XOÁ TOÀN BỘ'), true);
   assert.equal(env.g.resetConfirmOk_(' xóa  toàn bộ '), true);
+  assert.equal(env.g.resetConfirmOk_('XOA\u0301 TOA\u0300N BO\u0323\u0302'), true, 'dấu rời (NFD)');
   assert.equal(env.g.resetConfirmOk_('XOA TOAN BO'), false);
   assert.equal(request(c, pv, { pin: '111111' }).code, 'AUTH_FAILED');
   r = request(c, pv, { file_mode: 'DELETE' });

@@ -68,6 +68,13 @@ const swPath = path.join(root, 'sw.js');
 let sw = fs.readFileSync(swPath, 'utf8');
 const listSrc = /const FILES = \[([\s\S]*?)\];/.exec(sw)[1];
 const shellFiles = [...listSrc.matchAll(/'([^']+)'/g)].map((m) => m[1]).filter((f) => f !== './');
+// Mọi tệp js của app phải nằm trong vỏ: tệp sót thì máy tải riêng qua mạng (cache HTTP/CDN) và có thể chạy bản cũ
+// của riêng màn đó dù app đã lên bản mới (d4.6: màn Xóa sạch js/pages/sysreset.js)
+for (const dir of ['js', 'js/pages']) {
+  for (const f of fs.readdirSync(path.join(root, dir)).filter((x) => x.endsWith('.js'))) {
+    if (!shellFiles.includes(dir + '/' + f)) { console.error(`sw.js thiếu tệp vỏ app: ${dir}/${f} (thêm vào FILES)`); process.exit(1); }
+  }
+}
 const h = crypto.createHash('sha256');
 for (const f of shellFiles) {
   const fp = path.join(root, f);

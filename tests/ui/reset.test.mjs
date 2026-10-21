@@ -57,6 +57,8 @@ for (const [name, dev] of [['iPhone', IPHONE], ['web', WEB]]) {
       // iPhone hay gõ kiểu bỏ dấu cũ "XOÁ": vẫn nhận
       await page.fill('#rs-text', 'XOÁ TOÀN BỘ');
       assert.equal(await page.isDisabled('#rs-go'), false, 'XOÁ (dấu trên A) được nhận');
+      await page.fill('#rs-text', 'XOA\u0301 TOA\u0300N BO\u0323\u0302');
+      assert.equal(await page.isDisabled('#rs-go'), false, 'dấu rời (NFD) được nhận');
       assert.equal(await page.isVisible('#rs-text-hint'), false);
       await page.fill('#rs-text', 'XÓA TOÀN BỘ');
       assert.equal(await page.isDisabled('#rs-go'), false);
