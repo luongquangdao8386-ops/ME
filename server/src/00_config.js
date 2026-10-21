@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.2';
+var SERVER_VERSION = '1.0.0-d4.3';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.4';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4)
 var TZ = 'Asia/Ho_Chi_Minh';
