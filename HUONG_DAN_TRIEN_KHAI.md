@@ -81,7 +81,7 @@ Thứ tự như Phần M: **dán mã → Phiên bản mới → sau cùng mới 
 
 **Đúng khi (toàn Phần Q):** chỉ owner thấy/dùng; sao lưu trước khi xóa; không nhắc hạn/Gmail cũ; tem cũ hết hiệu lực; nháp cũ không gửi lại; tài khoản/quyền/cấu hình còn nguyên.
 
-## Phần R — Phát hành Đợt 4 lên THẬT — app đã lên `main` ngày 21/10/2026 (bản 1.0.0-d4.5, commit 39be0e7)
+## Phần R — Phát hành Đợt 4 lên THẬT — đã xong bước 1–7 ngày 21/10/2026 (bản 1.0.0-d4.5, commit 39be0e7; THẬT schema 1.5.4, mọi dòng Đạt)
 
 Phát hành **chỉ thêm chức năng**, không xóa gì: dữ liệu thật giữ nguyên. Thứ tự như Phần O: **sao lưu → dán mã → Phiên bản mới → sau cùng mới `migrateSchema`**. Nên làm lúc ít người đang ghi phiếu. **Không bấm Xóa sạch trên THẬT** trừ khi thật sự muốn xóa toàn bộ dữ liệu vận hành và nhập lại từ đầu.
 
