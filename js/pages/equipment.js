@@ -1,6 +1,6 @@
 // Thiết bị: EQ-01 danh sách, EQ-02..04 hồ sơ 4 tab, WEB-EQ-01 bảng + vùng hồ sơ; biểu mẫu thêm/sửa (4.4.1, 5.5, 6.3)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -108,29 +108,31 @@ export async function renderEquipmentList(view, ctx) {
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}${!navigator.onLine && filt.retired ? ' · ' + bi('sync.need_network') : ''}</p>
   </div>`;
+  const { shown, more } = listChunk('equipment', rows, JSON.stringify(filt));
   let body;
   if (wide) {
     body = `<div class="table-wrap eq-table"><table class="tbl"><thead><tr>
       ${canPrint ? `<th class="chk"><input type="checkbox" id="eq-all" aria-label="${esc(biText('btn.print_qr'))}"></th>` : ''}
       <th>${bi('col.code')}</th><th>${bi('col.name')}</th><th>${bi('field.location')}</th><th>${bi('field.model')}</th><th>${bi('field.serial')}</th><th>${bi('field.owner')}</th><th>${bi('field.status')}</th></tr></thead>
-      <tbody>${rows.map((e) => `<tr class="click${e.equipment_id === selId ? ' sel' : ''}" data-id="${esc(e.equipment_id)}">
+      <tbody>${shown.map((e) => `<tr class="click${e.equipment_id === selId ? ' sel' : ''}" data-id="${esc(e.equipment_id)}">
         ${canPrint ? `<td class="chk"><input type="checkbox" data-chk="${esc(e.equipment_id)}" ${selected.has(e.equipment_id) ? 'checked' : ''} ${e.qr_key ? '' : 'disabled'}></td>` : ''}
         <td class="code">${esc(e.equipment_code)}</td><td>${biName(e)}</td>
         <td>${esc((locs.get(e.location_id) || {}).location_code || '')}</td><td>${esc(e.model || '')}</td><td>${esc(e.serial || '')}</td>
         <td>${esc(e.owner_name || '')}</td><td>${badge('equipment_status.' + e.status)}${e.archived_at ? ' ' + badge('tag.archived') : ''}</td></tr>`).join('')}</tbody></table></div>
-      ${rows.length ? '' : `<p class="muted">${bi('field.no_records')}</p>`}
+      ${more}${rows.length ? '' : `<p class="muted">${bi('field.no_records')}</p>`}
       <div id="eq-pane" class="pane">${selId ? '' : ''}</div>`;
   } else {
-    body = `<div class="cards">${rows.map((e) => `<a class="card rec-card eq-card" href="#/equipment/${esc(e.equipment_id)}">
+    body = `<div class="cards">${shown.map((e) => `<a class="card rec-card eq-card" href="#/equipment/${esc(e.equipment_id)}">
       <div class="rec-top"><span class="code">${esc(e.equipment_code)}</span>${badge('equipment_status.' + e.status)}</div>
       <div class="rec-name">${biName(e)}</div>
       <div class="muted small">${esc([(locs.get(e.location_id) || {}).location_code, nameText(locs.get(e.location_id))].filter(Boolean).join(' · '))}</div>
       <div class="muted small">${esc([e.model, e.serial].filter(Boolean).join(' · '))}</div>
-      ${e.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>`;
+      ${e.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>${more}`;
   }
   setViewHtml(view, toolbar + body);
   // Bộ lọc
   const again = () => renderEquipmentList(view, ctx);
+  wireMore(view, again);
   let t = null;
   wireSearch(view, '#eq-q', (v) => { filt.q = v; }, again);
   $('#eq-status', view).addEventListener('change', (e) => { filt.status = e.target.value; again(); });

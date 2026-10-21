@@ -2,7 +2,7 @@
 // ảnh đồng hồ); sự kiện thay/reset/đổi hệ số (chờ duyệt); sửa/hủy chỉ số; biểu giá (quyền giá). 1.4 §5.5, phụ lục 3.12, 4.4.6, 6.9.2.
 // Tổng hợp kỳ tính ở máy chủ (cần mạng); không mạng: xem bản đã tải gần nhất, vẫn nhập chỉ số được (gửi khi có mạng).
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, resMsg, session, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -332,19 +332,20 @@ export async function renderMeterList(view, ctx) {
       ${await excelLink('meters')}
     </div>
     <p class="muted small">${bi('field.total', { N: list.length })}</p></div>`;
+  const { shown, more } = listChunk('meters', list, JSON.stringify([ML, pickRead]));
   let body;
   if (!list.length) body = `<div class="card empty-state">${ICON.utilities}<p class="muted">${bi('ut.no_meters')}</p></div>`;
   else if (wide && !pickRead) {
     body = `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('ut.col.code')}</th><th>${bi('ut.col.meter')}</th><th>${bi('col.type')}</th><th>${bi('field.location')}</th>
       <th class="num">${bi('ut.multiplier')}</th><th>${bi('ut.cycle_read')}</th><th class="num">${bi('ut.last_reading')}</th><th>${bi('col.status')}</th><th>QR</th></tr></thead>
-      <tbody>${list.map((m) => { const x = info(m); return `<tr class="click" data-href="/utilities/meters/${esc(m.meter_id)}">
+      <tbody>${shown.map((m) => { const x = info(m); return `<tr class="click" data-href="/utilities/meters/${esc(m.meter_id)}">
         <td class="code">${esc(m.meter_code)}</td><td>${biName(m)}</td><td>${bi('meter_kind.' + m.utility_type)}</td><td>${esc(x.loc ? x.loc.location_code : '')}</td>
         <td class="num">${fmtNumber(curMultiplier(m, ld.segsBy.get(m.meter_id)))}</td><td>${bi('period.' + (m.reading_cycle_type || 'MONTH'))}</td>
         <td class="num">${x.last ? `${fmtNumber(x.last.cumulative_value)}<div class="muted small">${esc(fmtDateTime(x.last.measured_at))}</div>` : '—'}</td>
         <td>${m.active === false ? badge('ut.inactive') : dueBadge(x.due)}</td>
-        <td>${m.qr_key ? `<a class="icon-btn" href="#/qr/METER/${esc(m.meter_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
+        <td>${m.qr_key ? `<a class="icon-btn" href="#/qr/METER/${esc(m.meter_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`; }).join('')}</tbody></table></div>${more}`;
   } else {
-    body = `<div class="cards">${list.map((m) => {
+    body = `<div class="cards">${shown.map((m) => {
       const x = info(m);
       const href = pickRead && canRead && m.active !== false ? `#/utilities/read/${esc(m.meter_id)}` : `#/utilities/meters/${esc(m.meter_id)}`;
       const readBtn = canRead && m.active !== false && !pickRead ? `<a class="btn tiny primary" href="#/utilities/read/${esc(m.meter_id)}">${ICON.plus}<span>${bi('ut.read')}</span></a>` : '';
@@ -356,10 +357,11 @@ export async function renderMeterList(view, ctx) {
             <span class="muted small">${bi('ut.last_reading')}: ${x.last ? `<strong>${fmtNumber(x.last.cumulative_value)}</strong> · ${esc(fmtDateTime(x.last.measured_at))}` : bi('utility_status.NO_READING')}</span></span></a>
         ${m.qr_key ? `<a class="icon-btn" href="#/qr/METER/${esc(m.meter_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</div>
         <div class="mc-foot">${m.active === false ? badge('ut.inactive') : dueBadge(x.due)}${readBtn}</div></div>`;
-    }).join('')}</div>`;
+    }).join('')}</div>${more}`;
   }
   setViewHtml(view, toolbar + body);
   const again = () => renderMeterList(view, ctx);
+  wireMore(view, again);
   $$('[data-type]', view).forEach((x) => x.addEventListener('click', () => {
     ML.type = x.dataset.type;
     if (!query.get('type')) { again(); return; }

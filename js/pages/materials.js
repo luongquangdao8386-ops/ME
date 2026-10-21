@@ -1,6 +1,6 @@
 // Kho vật tư: MAT-01 danh mục, MAT-02 hồ sơ, WEB-MAT-01; tab Linh kiện của thiết bị (EQ-03). Không chốt tồn (C3, 1.4 §5.4)
 import { bi, biText, esc, api, fmtDate, fmtNumber, badge, biName, nameText, resMsg, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
@@ -92,29 +92,31 @@ export async function renderMaterialList(view, ctx) {
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}</p></div>`;
   const comp = (m) => badge('equipment_component.' + (m.is_equipment_component ? 'TRUE' : 'FALSE'));
+  const { shown, more } = listChunk('materials', rows, JSON.stringify(filt));
   let body;
   if (wide) {
     body = `<div class="table-wrap"><table class="tbl"><thead><tr>
       ${canPrint ? `<th class="chk"><input type="checkbox" id="mt-all" aria-label="${esc(biText('btn.print_qr'))}"></th>` : ''}
       <th>${bi('col.code')}</th><th>${bi('col.name')}</th><th>${bi('field.group')}</th><th>${bi('field.part_number')}</th><th>${bi('field.specification')}</th><th>${bi('field.base_unit')}</th><th>${bi('field.is_component')}</th><th>QR</th></tr></thead>
-      <tbody>${rows.map((m) => `<tr class="click${m.material_id === selId ? ' sel' : ''}" data-id="${esc(m.material_id)}">
+      <tbody>${shown.map((m) => `<tr class="click${m.material_id === selId ? ' sel' : ''}" data-id="${esc(m.material_id)}">
         ${canPrint ? `<td class="chk"><input type="checkbox" data-chk="${esc(m.material_id)}" ${selected.has(m.material_id) ? 'checked' : ''} ${m.qr_key ? '' : 'disabled'}></td>` : ''}
         <td class="code">${esc(m.material_code)}</td><td>${biName(m)}${m.active === false ? ' ' + badge('material_active.FALSE') : ''}</td><td>${bi('material_group.' + m.group_key)}</td>
         <td>${esc(m.part_number || '')}${m.model ? '<br><span class="muted small">' + esc(m.model) + '</span>' : ''}</td><td>${biName(m, 'specification')}</td><td>${esc(m.base_unit || '')}</td><td>${comp(m)}</td>
         <td>${m.qr_key ? `<a class="icon-btn" href="#/qr/MATERIAL/${esc(m.material_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`).join('')}</tbody></table></div>
-      ${rows.length ? '' : `<p class="muted">${bi('field.no_records')}</p>`}
+      ${more}${rows.length ? '' : `<p class="muted">${bi('field.no_records')}</p>`}
       <div id="mt-pane" class="pane"></div>`;
   } else {
-    body = `<div class="cards">${rows.map((m) => `<a class="card rec-card" href="#/materials/${esc(m.material_id)}">
+    body = `<div class="cards">${shown.map((m) => `<a class="card rec-card" href="#/materials/${esc(m.material_id)}">
       <div class="rec-top"><span class="code">${esc(m.material_code)}</span>${comp(m)}</div>
       <div class="rec-name">${biName(m)}</div>
       <div class="muted small">${esc([m.part_number, m.model].filter(Boolean).join(' · '))}</div>
       <div class="muted small">${bi('material_group.' + m.group_key)} · ${bi('field.base_unit')}: ${esc(m.base_unit || '')}${m.active === false ? ' · ' + bi('material_active.FALSE') : ''}</div>
-      ${m.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>`;
+      ${m.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('') || `<p class="muted">${bi('field.no_records')}</p>`}</div>${more}`;
   }
   setViewHtml(view, notConnected() + tabBar + toolbar + body);
   wireTabs(view, ctx);
   const again = () => renderMaterialList(view, ctx);
+  wireMore(view, again);
   let t = null;
   wireSearch(view, '#mt-q', (v) => { filt.q = v; }, again);
   $$('[data-f]', view).forEach((b) => b.addEventListener('click', () => { filt[b.dataset.f] = b.dataset.v; again(); }));

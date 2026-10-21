@@ -1,7 +1,7 @@
 // Sửa chữa (Đợt 2): RP-01 danh sách, RP-03 báo sự cố (cả offline, ảnh hiện trường), RP-02 chi tiết: 6 mốc (C9), phân công,
 // xử lý, việc con, chạy thử, gửi nghiệm thu, nghiệm thu không tự duyệt, hủy, mở lại; vật tư MAT-03; WEB-RP-01 (1.4 §5.3, phụ lục 4.4.4)
 import { bi, biText, esc, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, blobToB64, b64ToBytes, L } from '../core.js';
-import { ICON, toast, toTop, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, toTop, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -95,15 +95,17 @@ export async function renderRepairList(view, ctx) {
         <td>${statusBadge('REPAIR', r.status)} ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
       ${list.length > PAGE ? `<div class="row pager"><button type="button" class="btn small" id="rp-prev" ${st.page ? '' : 'disabled'}>‹</button><span class="muted small">${st.page + 1} / ${Math.ceil(list.length / PAGE)}</span><button type="button" class="btn small" id="rp-next" ${(st.page + 1) * PAGE < list.length ? '' : 'disabled'}>›</button></div>` : ''}`;
   } else {
-    body = `<div class="cards">${list.map((r) => { const e = eqs.get(r.equipment_id); return `<a class="card rec-card" href="#/repairs/${esc(r.repair_id)}">
+    const { shown, more } = listChunk('repairs', list, JSON.stringify([st.filter, st.sev, st.q]));
+    body = `<div class="cards">${shown.map((r) => { const e = eqs.get(r.equipment_id); return `<a class="card rec-card" href="#/repairs/${esc(r.repair_id)}">
       <div class="rec-top"><span class="code">${r.repair_code ? esc(r.repair_code) : bi('tag.pending_code')}</span>${statusBadge('REPAIR', r.status)}</div>
       <div class="rec-name">${biName(r, 'symptom')}</div>
       <div class="muted small">${esc(eqText(e))}</div>
       <div class="dates"><span>${bi('rp.reported_at')}: <strong>${esc(fmtDateTime(r.reported_at))}</strong></span>${r.assignee_name ? `<span>${bi('wk.col.assignee')}: <strong>${esc(r.assignee_name)}</strong></span>` : ''}</div>
-      <div class="rec-badges">${prioBadges(r, 'REPAIR')} ${r.stopped_at && !r.restored_at && REPAIR_OPEN.has(r.status) ? badge('rp.machine_down') : ''} ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`; }).join('')}</div>`;
+      <div class="rec-badges">${prioBadges(r, 'REPAIR')} ${r.stopped_at && !r.restored_at && REPAIR_OPEN.has(r.status) ? badge('rp.machine_down') : ''} ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`; }).join('')}</div>${more}`;
   }
   setViewHtml(view, toolbar + body);
   const again = () => renderRepairList(view, ctx);
+  wireMore(view, again);
   $$('[data-f]', view).forEach((b) => b.addEventListener('click', () => { st.filter = b.dataset.f; st.page = 0; again(); }));
   $$('[data-sev]', view).forEach((b) => b.addEventListener('click', () => { st.sev = b.dataset.sev; st.page = 0; again(); }));
   $$('tr[data-href]', view).forEach((tr) => tr.addEventListener('click', () => navigate(tr.dataset.href)));

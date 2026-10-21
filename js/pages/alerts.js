@@ -1,6 +1,6 @@
 // Nhắc hạn (nav 4, 5.2) và lịch kiểm định tháng (HOME-02)
 import { bi, biText, esc, fmtDate, badge, nameText } from '../core.js';
-import { ICON, toast } from '../ui.js';
+import { ICON, toast, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { mapOf, deadlineItems, dueSort, today, addDays, weekday, recs, dueInfo, can } from '../data.js';
 import { writeOnline } from '../form.js';
@@ -34,7 +34,8 @@ export async function renderAlerts(view, { shell }) {
   // Cảnh báo máy chủ (Alerts): trạng thái tiếp nhận; hạn tính ở máy để xem được khi offline
   const alertBy = new Map((await recs('ALERT')).filter((a) => a.alert_state !== 'RESOLVED').map((a) => [a.entity_id, a]));
   const canAck = await can('alert.acknowledge');
-  const rows = await Promise.all(list.map(async (x) => {
+  const { shown, more } = listChunk('alerts', list, JSON.stringify(filt));
+  const rows = await Promise.all(shown.map(async (x) => {
     const e = eqs.get(x.equipment_id), l = locs.get(locOf(x));
     const rs = ['FAILED', 'REVOKED', 'SUSPENDED'].includes(x.record_status) ? badge('record_status.' + x.record_status) : '';
     const al = alertBy.get(x.id);
@@ -47,14 +48,14 @@ export async function renderAlerts(view, { shell }) {
   const body = isWide()
     ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.type')}</th><th>${bi('col.code')}</th><th>${bi('col.content')}</th><th>${bi('col.equipment_location')}</th><th>${bi('col.due')}</th><th>${bi('col.status')}</th><th>${bi('col.owner')}</th><th></th></tr></thead>
       <tbody>${rows.map(({ x, e, l, rs, ack, ackBtn, text }) => `<tr class="click" data-href="${esc(x.href)}"><td>${bi(x.kind === 'INSPECTION' ? 'module.inspections' : 'module.contracts')}</td><td class="code">${esc(x.code)}</td><td>${esc(text)}</td>
-        <td>${esc([e && e.equipment_code, l && l.location_code].filter(Boolean).join(' · '))}</td><td>${dateLines(x)}</td><td>${badge(x.due.key, x.due.vars)} ${rs} ${ack}</td><td>${esc(x.rec.owner_name || '')}</td><td>${ackBtn}</td></tr>`).join('')}</tbody></table></div>`
+        <td>${esc([e && e.equipment_code, l && l.location_code].filter(Boolean).join(' · '))}</td><td>${dateLines(x)}</td><td>${badge(x.due.key, x.due.vars)} ${rs} ${ack}</td><td>${esc(x.rec.owner_name || '')}</td><td>${ackBtn}</td></tr>`).join('')}</tbody></table></div>${more}`
     : `<div class="cards">${rows.map(({ x, e, l, rs, ack, ackBtn, text }) => `<div class="card rec-card click" data-href="${esc(x.href)}" role="link" tabindex="0">
         <div class="rec-top"><span class="kind">${bi(x.kind === 'INSPECTION' ? 'module.inspections' : 'module.contracts')}</span><span class="code">${esc(x.code)}</span></div>
         <div class="rec-name">${esc(text)}</div>
         ${e || l ? `<div class="muted small">${esc([e && e.equipment_code, l && nameText(l)].filter(Boolean).join(' · '))}</div>` : ''}
         ${dateLines(x)}<div class="rec-badges">${badge(x.due.key, x.due.vars)} ${rs} ${ack}</div>
         ${x.rec.owner_name ? `<div class="muted small">${bi('col.owner')}: ${esc(x.rec.owner_name)}</div>` : ''}
-        ${ackBtn ? `<div class="rec-actions">${ackBtn}</div>` : ''}</div>`).join('')}</div>`;
+        ${ackBtn ? `<div class="rec-actions">${ackBtn}</div>` : ''}</div>`).join('')}</div>${more}`;
   view.innerHTML = `<div class="filters"><div class="chips">${chips}</div>
     <div class="row">${sel('f-kind', [['', bi('due_filter.ALL')], ['INSPECTION', bi('module.inspections')], ['CONTRACT', bi('module.contracts')]], filt.kind)}
       ${sel('f-loc', [['', bi('field.location')]].concat(locIds.map((id) => [id, esc((locs.get(id) || {}).location_code || '') + ' ' + esc(nameText(locs.get(id)))])), filt.location)}
@@ -62,6 +63,7 @@ export async function renderAlerts(view, { shell }) {
     <div class="row"><p class="muted small">${bi('field.total', { N: list.length })}</p>${await excelLink('alerts', { exportOnly: true })}</div>
     ${list.length ? body : `<div class="card empty-state">${ICON.bell}<p class="muted">${bi('draft.empty')}</p></div>`}`;
   const rerender = () => renderAlerts(view, { shell });
+  wireMore(view, rerender);
   view.querySelectorAll('[data-state]').forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; rerender(); }));
   view.querySelector('#f-kind').addEventListener('change', (e) => { filt.kind = e.target.value; rerender(); });
   view.querySelector('#f-loc').addEventListener('change', (e) => { filt.location = e.target.value; rerender(); });

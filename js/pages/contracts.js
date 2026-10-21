@@ -1,6 +1,6 @@
 // Hợp đồng thuê ngoài: CO-01 danh sách, CO-02 hồ sơ, CO-03 gia hạn, WEB-CO-01 (1.4 §5.8; phụ lục 2.7, 3.17, 4.4.8, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -76,25 +76,27 @@ export async function renderContractList(view, ctx) {
       ${await excelLink('contracts')}
     </div>
     <p class="muted small">${bi('field.total', { N: list.length })}</p></div>`;
+  const { shown, more } = listChunk('contracts', list, JSON.stringify(filt));
   let body;
   if (wide) {
     body = `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.code')}</th><th>${bi('co.title')}</th><th>${bi('field.vendor')}</th><th>${bi('module.equipment')}</th>
       <th>${bi('field.end_date')}</th><th>${bi('field.renewal_notice_date')}</th><th>${bi('col.status')}</th></tr></thead>
-      <tbody>${list.map((x) => `<tr class="click" data-id="${esc(x.c.contract_id)}"><td class="code">${esc(x.c.contract_code)}${Number(x.c.revision) > 1 ? ` <span class="muted small">#${esc(x.c.revision)}</span>` : ''}</td>
+      <tbody>${shown.map((x) => `<tr class="click" data-id="${esc(x.c.contract_id)}"><td class="code">${esc(x.c.contract_code)}${Number(x.c.revision) > 1 ? ` <span class="muted small">#${esc(x.c.revision)}</span>` : ''}</td>
         <td>${biName(x.c, 'title')}</td><td>${esc(x.v ? x.v.name : '')}</td><td>${esc(x.eqList.map((e) => e.equipment_code).join(', '))}</td>
         <td class="num${x.ref.kind === 'END_DATE' ? ' ref' : ''}">${esc(fmtDate(x.c.end_date))}</td><td class="num${x.ref.kind === 'RENEWAL_NOTICE' ? ' ref' : ''}">${esc(fmtDate(x.c.renewal_notice_date))}</td>
-        <td>${x.due ? badge(x.due.key, x.due.vars) : ''} ${lifeBadge(x.c)}</td></tr>`).join('')}</tbody></table></div>`;
+        <td>${x.due ? badge(x.due.key, x.due.vars) : ''} ${lifeBadge(x.c)}</td></tr>`).join('')}</tbody></table></div>${more}`;
   } else {
-    body = `<div class="cards">${list.map((x) => `<a class="card rec-card" href="#/contracts/${esc(x.c.contract_id)}">
+    body = `<div class="cards">${shown.map((x) => `<a class="card rec-card" href="#/contracts/${esc(x.c.contract_id)}">
       <div class="rec-top"><span class="code">${esc(x.c.contract_code)}</span>${lifeBadge(x.c)}</div>
       <div class="rec-name">${biName(x.c, 'title')}</div>
       <div class="muted small">${esc([x.v && x.v.name, x.eqList.map((e) => e.equipment_code).join(', ')].filter(Boolean).join(' · '))}</div>
       <div class="dates"><span${x.ref.kind === 'RENEWAL_NOTICE' ? ' class="ref"' : ''}>${bi('field.renewal_notice_date')}: <strong>${esc(fmtDate(x.c.renewal_notice_date) || '—')}</strong></span>
         <span${x.ref.kind === 'END_DATE' ? ' class="ref"' : ''}>${bi('field.end_date')}: <strong>${esc(fmtDate(x.c.end_date) || '—')}</strong></span></div>
-      ${x.due ? `<div class="rec-badges">${badge(x.due.key, x.due.vars)}</div>` : ''}</a>`).join('')}</div>`;
+      ${x.due ? `<div class="rec-badges">${badge(x.due.key, x.due.vars)}</div>` : ''}</a>`).join('')}</div>${more}`;
   }
   setViewHtml(view, toolbar + (list.length ? body : `<div class="card empty-state">${ICON.contracts}<p class="muted">${bi(all.length ? 'field.no_records' : 'co.no_contracts')}</p></div>`));
   const again = () => renderContractList(view, ctx);
+  wireMore(view, again);
   wireSearch(view, '#co-q', (v) => { filt.q = v; }, again);
   $$('[data-state]', view).forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; again(); }));
   $('#co-life', view).addEventListener('change', (e) => { filt.life = e.target.value; again(); });

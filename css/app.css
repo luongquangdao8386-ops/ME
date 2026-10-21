@@ -391,6 +391,9 @@ main { padding: 10px 12px 24px; max-width: 1100px; margin: 0 auto; }
 .cards > .card { margin: 0; }
 .sent-title { font-size: 1rem; color: var(--navy); margin: 18px 0 4px; }
 .rec-card { display: block; text-decoration: none; color: var(--text); }
+/* Thẻ ngoài màn hình không dàn trang/vẽ cho tới khi cuộn tới (Android tầm trung dựng danh sách dài nhanh gấp đôi) */
+.cards > .rec-card { content-visibility: auto; contain-intrinsic-size: auto 120px; }
+.list-more { display: flex; justify-content: center; margin: 12px 0; }
 a.rec-card:active, .tile:active { background: #EEF2F6; }
 .rec-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: space-between; }
 .rec-name { font-weight: 600; margin: 4px 0 2px; }

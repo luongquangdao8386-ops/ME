@@ -77,6 +77,32 @@ export function freshFilters(ctx, state, init, keep = []) {
   Object.keys(init).forEach((k) => { if (!keep.includes(k)) state[k] = init[k]; });
 }
 
+/*
+ * Danh sách dài: mỗi lần chỉ dựng một đợt dòng (iPhone 50, web 100), nút "Hiện thêm" dựng tiếp. Máy Android tầm trung dựng
+ * hàng nghìn phần tử (300 thẻ ≈ 9 000) mất cả giây mỗi lần mở hoặc gõ tìm. key: tên danh sách; sig: chuỗi bộ lọc — đổi bộ lọc
+ * hoặc ô tìm thì về đợt đầu. Mở lại danh sách từ trang chủ/menu cũng về đợt đầu (resetListChunks trong renderRoute).
+ */
+const chunks = new Map();
+const chunkStep = () => (window.matchMedia('(min-width: 900px)').matches ? 100 : 50);
+export function resetListChunks() { chunks.clear(); }
+export function listChunk(key, list, sig = '') {
+  const step = chunkStep();
+  const cur = chunks.get(key);
+  const limit = cur && cur.sig === sig ? cur.limit : step;
+  chunks.set(key, { sig, limit });
+  if (list.length <= limit) return { shown: list, more: '' };
+  const rest = list.length - limit;
+  return { shown: list.slice(0, limit), more: `<div class="list-more"><button type="button" class="btn small" data-more="${esc(key)}">${bi('list.more', { N: Math.min(step, rest), R: rest })}</button></div>` };
+}
+/** Nút "Hiện thêm" của listChunk: tăng một đợt rồi vẽ lại (giữ chỗ đang xem) */
+export function wireMore(root, again) {
+  root.querySelectorAll('[data-more]').forEach((b) => b.addEventListener('click', () => {
+    const x = chunks.get(b.dataset.more);
+    if (x) x.limit += chunkStep();
+    again();
+  }));
+}
+
 export function h(html) {
   const t = document.createElement('template');
   t.innerHTML = html.trim();

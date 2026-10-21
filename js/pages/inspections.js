@@ -1,6 +1,6 @@
 // Kiểm định: IN-01 danh sách yêu cầu, IN-02 hồ sơ yêu cầu, IN-03 nộp chứng nhận, WEB-IN-01; loại kiểm định (4.4.9, 3.17, C10)
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, blobToB64, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide } from '../shell.js';
@@ -90,7 +90,8 @@ export async function renderInspectionList(view, ctx) {
       ${excelBtn}
     </div>
     <p class="muted small">${bi('field.total', { N: rows.length })}</p></div>`;
-  const rowsHtml = await Promise.all(rows.map(async (x) => ({ x, t: types.get(x.r.inspection_type_id), tg: await targetText(x.r) })));
+  const { shown, more } = listChunk('inspections', rows, JSON.stringify(filt));
+  const rowsHtml = await Promise.all(shown.map(async (x) => ({ x, t: types.get(x.r.inspection_type_id), tg: await targetText(x.r) })));
   let body;
   if (wide) {
     body = `<div class="table-wrap"><table class="tbl"><thead><tr>
@@ -100,16 +101,17 @@ export async function renderInspectionList(view, ctx) {
         ${canPrint ? `<td class="chk"><input type="checkbox" data-chk="${esc(x.r.requirement_id)}" ${selected.has(x.r.requirement_id) ? 'checked' : ''} ${x.r.qr_key ? '' : 'disabled'}></td>` : ''}
         <td class="code">${esc(x.r.requirement_code)}</td><td>${esc(tg.text)}</td><td>${t ? biName(t) : ''}</td>
         <td class="num">${esc(fmtDate(x.r.current_due_date))}</td><td>${statusBadges(x)}</td><td>${esc(x.r.owner_name || '')}</td>
-        <td>${x.r.qr_key ? `<a class="icon-btn" href="#/qr/INSPECTION_REQUIREMENT/${esc(x.r.requirement_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+        <td>${x.r.qr_key ? `<a class="icon-btn" href="#/qr/INSPECTION_REQUIREMENT/${esc(x.r.requirement_id)}" aria-label="${esc(biText('btn.view_qr'))}">${ICON.qr}</a>` : ''}</td></tr>`).join('')}</tbody></table></div>${more}`;
   } else {
     body = `<div class="cards">${rowsHtml.map(({ x, t, tg }) => `<a class="card rec-card" href="#/inspections/${esc(x.r.requirement_id)}">
       <div class="rec-top"><span class="code">${esc(x.r.requirement_code)}</span><span class="muted small">${bi('field.valid_to')}: <strong>${esc(fmtDate(x.r.current_due_date) || '—')}</strong></span></div>
       <div class="rec-name">${t ? biName(t) : ''}</div><div class="muted small">${esc(tg.text)}</div>
       <div class="rec-badges">${statusBadges(x)}</div>
-      ${x.r.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('')}</div>`;
+      ${x.r.qr_key ? `<span class="qr-mini" aria-hidden="true">${ICON.qr}</span>` : ''}</a>`).join('')}</div>${more}`;
   }
   setViewHtml(view, toolbar + (rows.length ? body : `<div class="card empty-state">${ICON.inspections}<p class="muted">${bi(all.length ? 'field.no_records' : 'in.no_requirements')}</p></div>`));
   const again = () => renderInspectionList(view, ctx);
+  wireMore(view, again);
   wireSearch(view, '#in-q', (v) => { filt.q = v; }, again);
   $$('[data-state]', view).forEach((b) => b.addEventListener('click', () => { filt.state = b.dataset.state; again(); }));
   $('#in-type', view).addEventListener('change', (e) => { filt.type = e.target.value; again(); });

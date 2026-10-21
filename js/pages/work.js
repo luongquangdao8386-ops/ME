@@ -1,6 +1,6 @@
 // Công việc · 工单 (iPhone nav 2, menu web) — 5.2: lọc Của tôi / Trong phạm vi, loại, nhóm theo hạn; thẻ iPhone, bảng web
 import { bi, biText, esc, fmtDate, fmtDateTime, badge } from '../core.js';
-import { ICON, toTop, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toTop, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { navigate } from '../router.js';
 import { can, roleLevel } from '../data.js';
@@ -63,20 +63,22 @@ export async function renderWork(view, ctx) {
       ${items.length > PAGE ? `<div class="row pager"><button type="button" class="btn small" id="wk-prev" ${filt.page ? '' : 'disabled'}>‹</button><span class="muted small">${filt.page + 1} / ${Math.ceil(items.length / PAGE)}</span><button type="button" class="btn small" id="wk-next" ${(filt.page + 1) * PAGE < items.length ? '' : 'disabled'}>›</button></div>` : ''}`;
   } else {
     body = GROUPS.map((g) => {
-      const list = items.filter((x) => x.group === g);
-      if (!list.length) return '';
-      return `<h2 class="group-title">${bi('wk.group.' + g)} <span class="count">${list.length}</span></h2><div class="cards">${list.map((x) => `<a class="card rec-card" href="#${esc(x.href)}">
+      const all = items.filter((x) => x.group === g);
+      if (!all.length) return '';
+      const { shown: list, more } = listChunk('wk-' + g, all, JSON.stringify(filt));
+      return `<h2 class="group-title">${bi('wk.group.' + g)} <span class="count">${all.length}</span></h2><div class="cards">${list.map((x) => `<a class="card rec-card" href="#${esc(x.href)}">
         <div class="rec-top"><span class="code">${x.code ? esc(x.code) : bi('tag.pending_code')}</span>${statusBadge(x.kind, x.rec.status)}</div>
         <div class="rec-name">${bi('wk.kind.' + x.kind)} · ${workTitle(x)}</div>
         <div class="muted small">${esc([eqText(x.eq), x.loc && x.loc.location_code].filter(Boolean).join(' · '))}</div>
         <div class="dates"><span>${x.kind === 'WO' ? `${bi('mt.due_date')}: <strong>${esc(fmtDate(x.date))}</strong>` : `${bi('rp.reported_at')}: <strong>${esc(fmtDateTime(x.rec.reported_at))}</strong>`}</span>
           ${x.rec.assignee_name ? `<span>${bi('wk.col.assignee')}: <strong>${esc(x.rec.assignee_name)}</strong></span>` : ''}</div>
-        <div class="rec-badges">${prioBadges(x.rec, x.kind)} ${x.local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`).join('')}</div>`;
+        <div class="rec-badges">${prioBadges(x.rec, x.kind)} ${x.local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`).join('')}</div>${more}`;
     }).join('');
   }
   // Việc chờ tôi nghiệm thu/duyệt (C3/C4) lên đầu — số trên nút Công việc chỉ tới đây
   setViewHtml(view, pendingPanelHtml(await pendingForMe()) + toolbar + `<div class="wk-counts muted small">${GROUPS.map((g) => `${bi('wk.group.' + g)}: <strong>${count(g)}</strong>`).join(' · ')}</div>` + body);
   const again = () => renderWork(view, ctx);
+  wireMore(view, again);
   wireSearch(view, '#wk-q', (v) => { filt.q = v; filt.page = 0; }, again);
   $$('[data-scope]', view).forEach((b) => b.addEventListener('click', () => { filt.scope = b.dataset.scope; filt.page = 0; again(); }));
   $$('[data-kind]', view).forEach((b) => b.addEventListener('click', () => { filt.kind = b.dataset.kind; filt.page = 0; again(); }));

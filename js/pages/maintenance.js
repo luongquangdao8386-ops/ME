@@ -1,7 +1,7 @@
 // Bảo trì (Đợt 2): MT-01 Kế hoạch / Phiếu thực hiện / Lịch; MT-02 chi tiết phiếu; MT-03 checklist, số đo, ảnh trước/sau, vật tư,
 // gửi nghiệm thu (C7, C8, 5.1.1); kế hoạch lặp lại (ngày/tháng/giờ chạy), mẫu checklist có phiên bản; WEB-MT-01 (1.4 §5.2, phụ lục 4.4.3)
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, L } from '../core.js';
-import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
+import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, weekStart, weekday, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
@@ -101,6 +101,7 @@ export async function renderMaintenance(view, ctx) {
       </div>
     </div>${body}`);
   const again = () => renderMaintenance(view, ctx);
+  wireMore(view, again);
   $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { st.tab = b.dataset.tab; again(); }));
   $$('[data-wof]', view).forEach((b) => b.addEventListener('click', () => { st.woFilter = b.dataset.wof; again(); }));
   $$('[data-plf]', view).forEach((b) => b.addEventListener('click', () => { st.planFilter = b.dataset.plf; again(); }));
@@ -139,22 +140,23 @@ async function woTab(wide) {
     <p class="muted small">${bi('field.total', { N: list.length })}</p>`;
   if (!list.length) return chips + `<div class="card empty-state">${ICON.maintenance}<p class="muted">${bi('field.no_records')}</p></div>`;
   const overdue = (w) => WO_OPEN.has(w.status) && w.status !== 'PENDING_ACCEPTANCE' && daysBetween(t, w.due_date) < 0;
+  const { shown, more } = listChunk('mt-wo', list, JSON.stringify([st.woFilter, st.q]));
   if (wide) {
     return chips + `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.code')}</th><th>${bi('module.equipment')}</th><th>${bi('mt.title')}</th>
       <th>${bi('mt.source')}</th><th>${bi('mt.due_date')}</th><th>${bi('wk.col.assignee')}</th><th>${bi('wk.col.priority')}</th><th>${bi('col.status')}</th><th>QR</th></tr></thead>
-      <tbody>${list.map((w) => { const e = eqs.get(w.equipment_id); const l = e ? locs.get(e.location_id) : null; return `<tr class="click" data-href="/maintenance/wo/${esc(w.work_order_id)}">
+      <tbody>${shown.map((w) => { const e = eqs.get(w.equipment_id); const l = e ? locs.get(e.location_id) : null; return `<tr class="click" data-href="/maintenance/wo/${esc(w.work_order_id)}">
         <td class="code">${w.work_order_code ? esc(w.work_order_code) : bi('tag.pending_code')}</td><td>${esc(eqText(e))}${l ? `<div class="muted small">${esc(l.location_code)}</div>` : ''}</td>
         <td>${biName(w, 'title')}</td><td>${bi('mt.source_' + (w.source || 'MANUAL'))}</td>
         <td class="num">${esc(fmtDate(w.due_date))} ${overdue(w) ? badge('wk.group.OVERDUE') : ''}</td><td>${esc(w.assignee_name || '')}</td>
         <td>${badge('priority.' + (w.priority || 'NORMAL'))}</td><td>${statusBadge('WO', w.status)} ${w._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</td>
-        <td>${w.qr_key ? ICON.qr : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
+        <td>${w.qr_key ? ICON.qr : ''}</td></tr>`; }).join('')}</tbody></table></div>${more}`;
   }
-  return chips + `<div class="cards">${list.map((w) => { const e = eqs.get(w.equipment_id); return `<a class="card rec-card" href="#/maintenance/wo/${esc(w.work_order_id)}">
+  return chips + `<div class="cards">${shown.map((w) => { const e = eqs.get(w.equipment_id); return `<a class="card rec-card" href="#/maintenance/wo/${esc(w.work_order_id)}">
     <div class="rec-top"><span class="code">${w.work_order_code ? esc(w.work_order_code) : bi('tag.pending_code')}</span>${statusBadge('WO', w.status)}</div>
     <div class="rec-name">${biName(w, 'title')}</div>
     <div class="muted small">${esc(eqText(e))}</div>
     <div class="dates"><span>${bi('mt.due_date')}: <strong>${esc(fmtDate(w.due_date))}</strong></span>${w.assignee_name ? `<span>${bi('wk.col.assignee')}: <strong>${esc(w.assignee_name)}</strong></span>` : ''}</div>
-    <div class="rec-badges">${overdue(w) ? badge('wk.group.OVERDUE') : ''} ${prioBadges(w, 'WO')} ${w._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`; }).join('')}</div>`;
+    <div class="rec-badges">${overdue(w) ? badge('wk.group.OVERDUE') : ''} ${prioBadges(w, 'WO')} ${w._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}</div></a>`; }).join('')}</div>${more}`;
 }
 
 async function plansTab(wide, can_) {
@@ -179,18 +181,19 @@ async function plansTab(wide, can_) {
     }
     return `${bi('mt.next_due')}: <strong>${esc(fmtDate(p.next_due_date) || biText('field.not_set'))}</strong>`;
   };
+  const { shown, more } = listChunk('mt-plans', list, JSON.stringify([st.planFilter, st.q]));
   if (wide) {
     return chips + `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('col.code')}</th><th>${bi('module.equipment')}</th><th>${bi('mt.title')}</th><th>${bi('mt.interval')}</th>
       <th>${bi('mt.next_due')}</th><th>${bi('mt.checklist')}</th><th>${bi('mt.default_assignee')}</th><th>${bi('wk.col.priority')}</th><th>${bi('col.status')}</th></tr></thead>
-      <tbody>${list.map((p) => `<tr class="click" data-href="/maintenance/plans/${esc(p.plan_id)}"><td class="code">${esc(p.plan_code)}</td><td>${esc(eqText(eqs.get(p.equipment_id)))}</td>
+      <tbody>${shown.map((p) => `<tr class="click" data-href="/maintenance/plans/${esc(p.plan_id)}"><td class="code">${esc(p.plan_code)}</td><td>${esc(eqText(eqs.get(p.equipment_id)))}</td>
         <td>${biName(p, 'title')}</td><td>${intervalText(p)}</td><td>${nextText(p)}</td><td>${p.checklist_template_id ? tplName(cls.get(p.checklist_template_id)) : ''}</td>
-        <td>${esc(p.assignee_name || '')}</td><td>${badge('priority.' + (p.priority || 'NORMAL'))}</td><td>${badge('plan_active.' + (p.active === false ? 'FALSE' : 'TRUE'))}</td></tr>`).join('')}</tbody></table></div>`;
+        <td>${esc(p.assignee_name || '')}</td><td>${badge('priority.' + (p.priority || 'NORMAL'))}</td><td>${badge('plan_active.' + (p.active === false ? 'FALSE' : 'TRUE'))}</td></tr>`).join('')}</tbody></table></div>${more}`;
   }
-  return chips + `<div class="cards">${list.map((p) => `<a class="card rec-card" href="#/maintenance/plans/${esc(p.plan_id)}">
+  return chips + `<div class="cards">${shown.map((p) => `<a class="card rec-card" href="#/maintenance/plans/${esc(p.plan_id)}">
     <div class="rec-top"><span class="code">${esc(p.plan_code)}</span>${badge('plan_active.' + (p.active === false ? 'FALSE' : 'TRUE'))}</div>
     <div class="rec-name">${biName(p, 'title')}</div>
     <div class="muted small">${esc(eqText(eqs.get(p.equipment_id)))} · ${intervalText(p)}</div>
-    <div class="dates"><span>${nextText(p)}</span>${p.assignee_name ? `<span>${bi('mt.default_assignee')}: <strong>${esc(p.assignee_name)}</strong></span>` : ''}</div></a>`).join('')}</div>`;
+    <div class="dates"><span>${nextText(p)}</span>${p.assignee_name ? `<span>${bi('mt.default_assignee')}: <strong>${esc(p.assignee_name)}</strong></span>` : ''}</div></a>`).join('')}</div>${more}`;
 }
 
 async function calendarTab() {

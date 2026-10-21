@@ -4,7 +4,7 @@ import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges } from '
 import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh, lastNavKind } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
-import { toast, dialog, reloadFreshHtml, wireReloadFresh } from './ui.js';
+import { toast, dialog, reloadFreshHtml, wireReloadFresh, resetListChunks } from './ui.js';
 import { openScanner, parseScan, resolveScan, qrStateText } from './scan.js';
 
 export const app = {
@@ -61,6 +61,7 @@ async function renderRoute() {
   const mod = path.split('/').slice(0, 2).join('/');
   const kind = lastNavKind();
   const entered = mod !== main.dataset.path && kind !== 'pop' && kind !== 'refresh';
+  if (entered) resetListChunks();
   main.dataset.path = mod;
   // Màn đã bị thay không được đổi tiêu đề/nút trên header nữa
   const pageShell = Object.assign(Object.create(shell), { setScreen: (o) => { if (seq === renderSeq) shell.setScreen(o); } });

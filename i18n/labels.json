@@ -921,6 +921,7 @@
   "adm.user.pin_locked": ["Đang khóa do nhập sai PIN", "因输错PIN被锁定", "amber"],
   "adm.user.role_note": ["Đổi cấp hoặc vai trò làm mọi phiên của người này hết hiệu lực", "修改级别或岗位后，该用户所有会话失效"],
   "adm.user.total": ["{N} tài khoản", "共{N}个账号"],
+  "list.more": ["Hiện thêm {N} (còn {R})", "再显示{N}条（剩余{R}条）"],
   "adm.user.show_locked": ["Hiện tài khoản đã khóa ({N})", "显示已锁定的账号（{N}）"],
   "adm.user.hide_locked": ["Ẩn tài khoản đã khóa", "隐藏已锁定的账号"],
   "btn.reset_pin": ["Cấp PIN tạm", "发放临时PIN"],
