@@ -5,7 +5,7 @@ Giao diện luôn song ngữ Việt · 中文. Đăng nhập bằng mã nhân vi
 
 **Trạng thái:** phiên bản `1.0.0-d4.10` — cả 4 đợt đang chạy THẬT (Đợt 1–3 từ 16/10/2026, Đợt 4 Xóa sạch từ 21/10/2026; THẬT máy chủ 1.0.0-d4.10, schema 1.5.4).
 - Đợt 1 (thiết bị, kho vật tư, kiểm định, hợp đồng, nhắc hạn/Gmail, quản trị, sao lưu, nhập/xuất Excel, tem QR) — đang chạy THẬT.
-- Đợt 2 (bảo trì, sửa chữa, vật tư trên phiếu, Công việc) và Đợt 3 (điện nước: đồng hồ, chỉ số lũy kế, chốt kỳ, biểu giá; tra cứu lộ điện: tủ ↔ thiết bị, đường cấp; báo cáo: 8 mẫu, Excel/PDF không logo, báo cáo đã lưu có QR) — đang thử trên THỬ với dữ liệu mẫu.
+- Đợt 2 (bảo trì, sửa chữa, vật tư trên phiếu, Công việc) và Đợt 3 (điện nước: đồng hồ, chỉ số lũy kế, chốt kỳ, biểu giá; tra cứu lộ điện: tủ ↔ thiết bị, đường cấp; báo cáo: 8 mẫu, Excel/PDF không logo app (từ d4.11 có logo công ty nếu quản trị tải lên), báo cáo đã lưu có QR) — đang thử trên THỬ với dữ liệu mẫu.
 - Máy chủ bật từng đợt theo `schema_version` (chạy `migrateSchema` sau khi dán `Code.gs` mới).
 
 ## Cấu trúc
@@ -36,4 +36,4 @@ Triển khai: xem `HUONG_DAN_TRIEN_KHAI.md`.
 
 - Không commit đặc tả, bản vẽ, ảnh nhà máy gốc, ID bảng tính, dữ liệu, PIN, khóa bí mật. Bí mật nằm trong Thuộc tính tập lệnh của Apps Script.
 - Mọi tên lưu trữ trình duyệt có tiền tố `me` (IndexedDB `me_*`, Cache `me-*`, localStorage `me.*`) vì có thể chung origin với app khác.
-- Logo 57 chỉ ở biểu tượng iPhone, màn đăng nhập và trang chủ.
+- Logo 57 chỉ ở biểu tượng iPhone, màn đăng nhập và trang chủ. Logo công ty trên báo cáo/PDF/Excel (d4.11) do quản trị tải lên trong app, lưu riêng tư trên Drive — không có trong repo.

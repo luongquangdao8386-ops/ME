@@ -538,7 +538,9 @@ function reportCompute_(ctx, def, filters) {
 /** report.run {report_definition_id | code, filters}: báo cáo trực tiếp theo bộ lọc (cần mạng, không lưu) */
 function reportRun_(ctx) {
   var p = ctx.req.payload || {};
-  return reportCompute_(ctx, reportDefOrThrow_(p), p.filters || {});
+  var out = reportCompute_(ctx, reportDefOrThrow_(p), p.filters || {});
+  out.logo_rev = reportLogoRev_(); // logo công ty hiện tại (app lấy tệp khi khác bản đã lưu trên máy)
+  return out;
 }
 
 /**
@@ -627,7 +629,7 @@ function reportView_(ctx) {
   if (p.report_run_id) {
     var run = reportRunOrThrow_(ctx, p.report_run_id);
     var o = projectRow_(ctx, run, 'ReportRuns'); o.qr_key = qm[run.report_run_id] || null;
-    return { run: o, snapshot: reportSnapshot_(run) };
+    return { run: o, snapshot: reportSnapshot_(run), logo_rev: reportLogoRev_() };
   }
   var cache = {};
   var items = readRows_('ReportRuns').filter(function (r) { return !r.archived_at && reportRunVisible_(ctx, r, cache); })
@@ -646,7 +648,7 @@ function reportExport_(ctx) {
   var data, run = null;
   if (p.report_run_id) { run = reportRunOrThrow_(ctx, p.report_run_id); data = reportSnapshot_(run); data.report_run_code = run.report_run_code; }
   else data = reportCompute_(ctx, reportDefOrThrow_(p), p.filters || {});
-  var out = { format: p.format, report: data };
+  var out = { format: p.format, report: data, logo_rev: reportLogoRev_() };
   if (p.format === 'PDF') {
     if (data.rows.length > REPORT_PDF_ROW_MAX_) throw validationError_([fieldError_('format', 'PDF_TOO_MANY_ROWS')]);
     var pdf = reportPdf_(data);
@@ -739,7 +741,7 @@ function reportDatasetsInfo_(ctx) {
   return out;
 }
 
-/* ---------------- PDF (Google Docs → PDF, không logo) ---------------- */
+/* ---------------- PDF: định dạng ô (dựng tài liệu ở 35_report_pdf: logo công ty nếu có, không logo app) ---------------- */
 
 function fmtNumSrv_(n, maxFrac) {
   if (n === null || n === undefined || n === '' || isNaN(Number(n))) return '';
@@ -795,59 +797,8 @@ function reportFilterLines_(data) {
 }
 
 /**
- * Dựng PDF bằng Google Docs (tạm, rồi bỏ vào thùng rác): tiêu đề song ngữ, kỳ/khu vực, số báo cáo, tóm tắt, bảng, chú thích,
- * Người lập / Người duyệt. Không logo, ô vàng hay cụm M&E (1.4 §3.5).
- */
-function reportPdf_(data) {
-  var doc = DocumentApp.create('ME_TMP_' + uuid_());
-  var id = doc.getId();
-  try {
-    var body = doc.getBody();
-    var wide = data.columns.length > 7;
-    if (wide) { body.setPageWidth(842); body.setPageHeight(595); }
-    body.setMarginTop(36).setMarginBottom(36).setMarginLeft(36).setMarginRight(36);
-    var title = body.appendParagraph(data.title_vi + ' / ' + data.title_zh);
-    title.setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    var meta = [];
-    reportFilterLines_(data).forEach(function (x) { meta.push(x); });
-    meta.push(lab_('rpt.generated_at') + ': ' + fmtTimeSrv_(data.generated_at) + (data.report_run_code ? '   ·   ' + lab_('rpt.number') + ': ' + data.report_run_code : ''));
-    meta.push(lab_('rpt.prepared_by') + ': ' + (data.generated_by_name || ''));
-    meta.forEach(function (m) { body.appendParagraph(m).setFontSize(9); });
-    if ((data.summary || []).length) {
-      var sumRows = data.summary.map(function (s) {
-        var label = s.enumKey ? lab_(s.enumKey + '.' + s.enum) + (s.label_vi ? ' — ' + s.label_vi + ' · ' + s.label_zh : '') : s.label_vi + ' · ' + s.label_zh;
-        var val = s.money ? fmtMoneySrv_(s.value, s.currency) : (s.value === null ? lab_(s.na_key || 'field.not_set') : fmtNumSrv_(s.value) + (s.unit ? (s.unit === '%' ? '%' : ' ' + s.unit) : ''));
-        if (s.partial) val += ' (' + lab_('ut.partial') + ')';
-        return [label, val];
-      });
-      body.appendParagraph(lab_('rpt.summary')).setHeading(DocumentApp.ParagraphHeading.HEADING3);
-      var st = body.appendTable(sumRows);
-      st.setFontSize(9);
-    }
-    body.appendParagraph(lab_('rpt.detail')).setHeading(DocumentApp.ParagraphHeading.HEADING3);
-    var head = data.columns.map(function (c) { return c.label_vi + '\n' + c.label_zh; });
-    var cells = [head].concat(data.rows.map(function (r) { return data.columns.map(function (c) { return reportCellText_(c, r); }); }));
-    if (cells.length === 1) cells.push(data.columns.map(function (c, i) { return i ? '' : lab_('field.no_records'); }));
-    var t = body.appendTable(cells);
-    t.setFontSize(8);
-    var hr = t.getRow(0);
-    for (var i = 0; i < hr.getNumCells(); i++) hr.getCell(i).setBold(true).setBackgroundColor('#EEF1F5');
-    if (data.cost_hidden) body.appendParagraph(lab_('cost.hidden')).setFontSize(8).setItalic(true);
-    (data.notes || []).forEach(function (n) { body.appendParagraph(lab_(n)).setFontSize(8).setItalic(true); });
-    if (data.truncated) body.appendParagraph(lab_('rpt.truncated', { N: data.total_rows })).setFontSize(8).setItalic(true);
-    body.appendParagraph('');
-    var sign = body.appendTable([[lab_('rpt.prepared_by'), lab_('rpt.approved_by')], ['\n\n\n', '\n\n\n']]);
-    sign.setBorderWidth(0);
-    doc.saveAndClose();
-    return DriveApp.getFileById(id).getAs('application/pdf').getBytes();
-  } finally {
-    try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* bỏ qua */ }
-  }
-}
-
-/**
  * export.pdf {entity_type: EQUIPMENT | WORK_ORDER | REPAIR, entity_id}: In/xuất PDF hồ sơ, phiếu (4.4.11; Đợt 3).
- * Theo quyền xem và quyền giá của module hồ sơ; không logo.
+ * Theo quyền xem và quyền giá của module hồ sơ; logo công ty (nếu có) ở đầu trang, không logo app.
  */
 function exportPdf_(ctx) {
   var p = ctx.req.payload || {};
@@ -868,7 +819,7 @@ function exportPdf_(ctx) {
     add('field.model', rec.model); add('field.serial', rec.serial); add('field.status', lab_('equipment_status.' + rec.status));
     var specs = findAll_('EquipmentSpecs', 'equipment_id', rec.equipment_id).filter(function (s) { return !s.archived_at; })
       .map(function (s) { return [bi2(s, 'label'), s.value_num !== null && s.value_num !== '' ? fmtNumSrv_(s.value_num) : (s.value_text || ''), s.unit || '']; });
-    if (specs.length) tables.push({ title: lab_('tab.specs'), head: [lab_('field.name'), lab_('field.spec_value'), lab_('field.unit')], rows: specs });
+    if (specs.length) tables.push({ title: lab_('tab.specs'), head: [lab_('field.name'), lab_('field.spec_value'), lab_('field.unit')], rows: specs, types: ['text', 'text', 'code'] });
   } else if (p.entity_type === 'WORK_ORDER') {
     title = ['Phiếu bảo trì', '保养工单'];
     add('col.code', rec.work_order_code); add('module.equipment', rptEq_(L, rec.equipment_id) + ' · ' + rptEqName_(L, rec.equipment_id));
@@ -876,10 +827,13 @@ function exportPdf_(ctx) {
     add('wk.col.assignee', rptUser_(L, rec.assignee_user_id)); add('mt.start_at', fmtTimeSrv_(rec.start_at)); add('mt.end_at', fmtTimeSrv_(rec.end_at));
     if (rec.overall_result) add('mt.overall_result', lab_('overall_result.' + rec.overall_result));
     if (cost && (rec.labor_cost !== null || rec.other_cost !== null)) { add('cost.labor', fmtMoneySrv_(rec.labor_cost, rec.cost_currency)); add('cost.other', fmtMoneySrv_(rec.other_cost, rec.cost_currency)); }
-    var res = findAll_('WorkOrderResults', 'work_order_id', rec.work_order_id).filter(function (r) { return !r.archived_at; })
-      .sort(function (a, b) { return Number(a.step_no) - Number(b.step_no); })
-      .map(function (r) { return [String(r.step_no), bi2(r, 'label'), r.measured_value !== null && r.measured_value !== '' ? fmtNumSrv_(r.measured_value) + (r.unit ? ' ' + r.unit : '') : '', lab_('check_result.' + (r.result_status || 'PENDING')), bi2(r, 'note')]; });
-    if (res.length) tables.push({ title: lab_('mt.checklist'), head: ['#', lab_('field.name'), lab_('mt.measured_value'), lab_('col.status'), lab_('field.note')], rows: res });
+    var resRows = findAll_('WorkOrderResults', 'work_order_id', rec.work_order_id).filter(function (r) { return !r.archived_at; })
+      .sort(function (a, b) { return Number(a.step_no) - Number(b.step_no); });
+    var res = resRows.map(function (r) { return [String(r.step_no), bi2(r, 'label'), r.measured_value !== null && r.measured_value !== '' ? fmtNumSrv_(r.measured_value) + (r.unit ? ' ' + r.unit : '') : '', lab_('check_result.' + (r.result_status || 'PENDING')), bi2(r, 'note')]; });
+    // Kết quả Đạt / Không đạt tô màu chữ (kèm chữ, không chỉ dựa vào màu)
+    if (res.length) tables.push({ title: lab_('mt.checklist'), head: ['#', lab_('field.name'), lab_('mt.measured_value'), lab_('col.status'), lab_('field.note')], rows: res,
+      types: ['num', 'text', 'num', 'text', 'text'],
+      cellColor: function (i, c) { var st = resRows[i].result_status; return c === 3 ? (st === 'PASS' ? PDF_C_.good : (st === 'FAIL' ? PDF_C_.bad : null)) : null; } });
   } else {
     title = ['Phiếu sửa chữa', '维修单'];
     add('col.code', rec.repair_code); add('module.equipment', rptEq_(L, rec.equipment_id) + ' · ' + rptEqName_(L, rec.equipment_id));
@@ -889,29 +843,8 @@ function exportPdf_(ctx) {
     add('rp.diagnosis', bi2(rec, 'diagnosis')); add('rp.action', bi2(rec, 'action'));
     if (cost && (rec.labor_cost !== null || rec.outside_cost !== null)) { add('cost.labor', fmtMoneySrv_(rec.labor_cost, rec.cost_currency)); add('cost.outside', fmtMoneySrv_(rec.outside_cost, rec.cost_currency)); }
   }
-  var doc = DocumentApp.create('ME_TMP_' + uuid_());
-  var id = doc.getId();
-  var bytes;
-  try {
-    var body = doc.getBody();
-    body.setMarginTop(36).setMarginBottom(36).setMarginLeft(36).setMarginRight(36);
-    body.appendParagraph(title[0] + ' / ' + title[1]).setHeading(DocumentApp.ParagraphHeading.HEADING1);
-    body.appendParagraph(lab_('rpt.generated_at') + ': ' + fmtTimeSrv_(isoVN_(now_()))).setFontSize(9);
-    var t1 = body.appendTable(kv.length ? kv : [[lab_('field.no_records'), '']]);
-    t1.setFontSize(9);
-    tables.forEach(function (t) {
-      body.appendParagraph(t.title).setHeading(DocumentApp.ParagraphHeading.HEADING3);
-      var tt = body.appendTable([t.head].concat(t.rows));
-      tt.setFontSize(8);
-    });
-    if (!cost && p.entity_type !== 'EQUIPMENT') body.appendParagraph(lab_('cost.hidden')).setFontSize(8).setItalic(true);
-    body.appendParagraph('');
-    body.appendTable([[lab_('rpt.prepared_by'), lab_('rpt.approved_by')], ['\n\n\n', '\n\n\n']]).setBorderWidth(0);
-    doc.saveAndClose();
-    bytes = DriveApp.getFileById(id).getAs('application/pdf').getBytes();
-  } finally {
-    try { DriveApp.getFileById(id).setTrashed(true); } catch (e) { /* bỏ qua */ }
-  }
+  var bytes = entityPdf_({ title: title, code: rec[et.code] || '', kv: kv, tables: tables, costNote: !cost && p.entity_type !== 'EQUIPMENT',
+    preparedName: (userDirectory_()[ctx.user.user_id] || {}).display_name || '' });
   withWriteLock_(function () {
     writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'export.pdf', entity_type: p.entity_type, entity_id: p.entity_id, before_json: null, after_json: { bytes: bytes.length }, auth_basis: authBasis_(ctx) });
   });

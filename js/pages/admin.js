@@ -6,6 +6,7 @@ import { roleLevel, isOwner, mapOf, CODE } from '../data.js';
 import { textInput, selectInput, dateInput, wireForm, readField, showErrors, writeWithPin, busy, evBtn } from '../form.js';
 import { callWithPin } from './account.js';
 import { handleWriteError } from './equipment.js';
+import { rememberReportLogo } from '../report-logo.js';
 
 const SUBROLES = ['KY_THUAT', 'DOC_DIEN_NUOC', 'HD_KD', 'THU_KHO', 'BAO_SU_CO'];
 const MODULES = ['equipment', 'maintenance', 'repairs', 'warehouse', 'utilities', 'reports', 'circuits', 'contracts', 'inspections', 'catalog', 'users', 'notifications', 'audit', 'backup', 'system'];
@@ -423,3 +424,85 @@ export async function renderStatus(view, { shell }) {
   }));
 }
 
+/* ====================== Logo trên báo cáo (d4.11) ====================== */
+
+const LOGO_MAX_EDGE = 800;
+const LOGO_MAX_BYTES = 1048576;
+
+const blobB64 = (blob) => new Promise((ok, fail) => {
+  const fr = new FileReader();
+  fr.onload = () => ok(String(fr.result).split(',')[1]);
+  fr.onerror = () => fail(fr.error);
+  fr.readAsDataURL(blob);
+});
+
+/** Ảnh người dùng chọn → PNG/JPEG cạnh dài ≤ 800 px, ≤ 1 MB (PNG giữ nền trong suốt; quá lớn thì JPEG nền trắng) */
+async function shrinkLogo(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = url; });
+    const w0 = img.naturalWidth, h0 = img.naturalHeight;
+    if (!w0 || !h0) throw new Error('size');
+    const k = Math.min(1, LOGO_MAX_EDGE / Math.max(w0, h0));
+    if (k === 1 && file.size <= LOGO_MAX_BYTES) return { b64: await blobB64(file), mime: file.type };
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(w0 * k)); cv.height = Math.max(1, Math.round(h0 * k));
+    const g = cv.getContext('2d');
+    const toBlob = (type, q) => new Promise((ok) => cv.toBlob(ok, type, q));
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, cv.width, cv.height);
+    let blob = file.type === 'image/png' ? await toBlob('image/png') : await toBlob('image/jpeg', 0.92);
+    if (blob && blob.size > LOGO_MAX_BYTES) {
+      g.globalCompositeOperation = 'destination-over'; g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+      blob = await toBlob('image/jpeg', 0.88);
+    }
+    if (!blob) throw new Error('encode');
+    return { b64: await blobB64(blob), mime: blob.type };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+/** Mẫu đầu trang PDF: logo cao 56 px trên nền trang giấy */
+const logoPageHtml = (url) => `<div class="logo-page"><img class="paper-logo" src="${esc(url)}" alt=""><div class="logo-page-lines"><i></i><i></i><i></i></div></div>`;
+
+export async function renderReportLogo(view, { shell }) {
+  shell.setScreen({ title: 'admin.report_logo', back: '/account' });
+  if (offline(view)) return;
+  view.innerHTML = spinner;
+  const r = await api('report.logo.get', {}, { retry: true });
+  if (!r.ok) { view.innerHTML = errBox(r); return; }
+  const cur = await rememberReportLogo(r.data.rev ? { rev: r.data.rev, mime: r.data.mime_type, b64: r.data.content_b64 } : null);
+  view.innerHTML = `<section class="card"><h2>${bi('admin.report_logo')}</h2>
+      <p class="muted small">${bi('logo.where')}</p>
+      ${cur ? `<p class="lbl">${bi('logo.current')}</p><img class="logo-big" id="lg-cur" src="${esc(cur.url)}" alt="">
+        <p class="muted small">${bi('logo.preview_note')}</p>${logoPageHtml(cur.url)}` : `<p class="banner" id="lg-none">${bi('logo.none')}</p>`}
+      <p class="muted small">${bi('logo.hint')}</p>
+      <div class="row"><label class="btn file${cur ? '' : ' primary'}">${ICON.upload}<span>${bi(cur ? 'logo.replace' : 'logo.upload')}</span><input type="file" id="lg-file" accept="image/png,image/jpeg" hidden></label>
+        ${cur ? `<button type="button" class="btn danger" id="lg-remove">${ICON.trash}<span>${bi('logo.remove')}</span></button>` : ''}</div></section>`;
+  const again = () => renderReportLogo(view, { shell });
+  $('#lg-file', view).addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.type !== 'image/png' && f.type !== 'image/jpeg') { toast(bi('logo.bad_type'), 'err'); return; }
+    let out;
+    try { out = await shrinkLogo(f); } catch (err) { toast(bi('logo.bad_type'), 'err'); return; }
+    const yes = await dialog({
+      title: bi('admin.report_logo'),
+      body: `<p class="muted small">${bi('logo.preview_note')}</p>${logoPageHtml(`data:${out.mime};base64,${out.b64}`)}`,
+      actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('btn.save'), kind: 'primary', value: true }]
+    });
+    if (!yes) return;
+    const res = await writeWithPin('report.logo.set', { content_b64: out.b64, mime_type: out.mime });
+    if (res.ok) { await rememberReportLogo({ rev: res.data.rev, mime: out.mime, b64: out.b64 }); toast(bi('logo.saved'), 'ok'); again(); return; }
+    if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
+  });
+  const rm = $('#lg-remove', view);
+  if (rm) rm.addEventListener('click', async () => {
+    const yes = await dialog({ title: bi('logo.remove'), body: `<p>${bi('logo.remove_confirm')}</p>`,
+      actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('logo.remove'), kind: 'danger', value: true }] });
+    if (!yes) return;
+    const res = await writeWithPin('report.logo.set', { remove: true });
+    if (res.ok) { await rememberReportLogo(null); toast(bi('logo.removed'), 'ok'); again(); return; }
+    if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
+  });
+}

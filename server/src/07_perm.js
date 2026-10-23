@@ -102,6 +102,9 @@ var ACTION_TABLE_ = [
   'report.save|reports|X|IFON IFON IFON IFON IFON N Y Y|net|3|W',
   'report.export|reports|X|IFON IFON IFON IFON IFON N Y Y|net|3|R',
   'report.definition.edit|reports|E|N N N N N N N Y|net|3|W',
+  // Bổ sung d4.11: logo công ty trên báo cáo (C4 tải lên/gỡ, có PIN; ai xem được báo cáo thì lấy được logo cho bản xem trước/Excel)
+  'report.logo.set|reports|E|N N N N N N N Y|pin|3|W',
+  'report.logo.get|reports|V|Y Y Y Y Y Y Y Y|net|3|R',
   // 4.4.11 Nhập/xuất, QR
   'import.template|*|I|N MC MC MC MC N Y Y|net|1|R',
   'import.preview|*|I|N MC MC MC MC N Y Y|net|1|W',

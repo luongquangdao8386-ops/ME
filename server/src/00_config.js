@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.10';
+var SERVER_VERSION = '1.0.0-d4.11';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.4';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4)
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -76,7 +76,10 @@ var SETTINGS_DEFAULTS = [
   // Đợt 2: phiếu bảo trì theo lịch được tạo trước hạn N ngày (đề xuất mặc định, phiên Đợt 2)
   ['wo_generate_days_ahead', 'INT', 7, true, 2, 'Tạo phiếu bảo trì trước hạn (ngày)', '提前生成保养工单（天）'],
   ['meter_boundary_window_hours', 'INT', 24, true, 3, 'Cửa sổ chốt chỉ số theo kỳ (giờ)', '抄表周期结算时间窗（小时）'],
-  ['reading_self_edit_hours', 'INT', 24, true, 3, 'Thời gian tự sửa chỉ số của mình (giờ)', '本人修改读数时限（小时）']
+  ['reading_self_edit_hours', 'INT', 24, true, 3, 'Thời gian tự sửa chỉ số của mình (giờ)', '本人修改读数时限（小时）'],
+  // d4.11: logo công ty trên báo cáo/PDF/Excel (tệp riêng tư trong thư mục dữ liệu; sửa bằng report.logo.set, không sửa ở đây)
+  ['report_logo_file_id', 'STRING', '', false, 3, 'Tệp logo trên báo cáo (Drive)', '报表标志文件（云端硬盘）'],
+  ['report_logo_rev', 'STRING', '', true, 3, 'Phiên bản logo trên báo cáo', '报表标志版本']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */

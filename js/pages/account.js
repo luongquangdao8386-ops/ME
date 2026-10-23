@@ -70,6 +70,7 @@ export async function renderAccount(view, { shell }) {
   if (await can('backup.view')) admin.push(['admin.backup', '/admin/backup']);
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
+  if (await can('report.logo.set')) admin.push(['admin.report_logo', '/admin/report-logo']);
   // Đợt 4: chỉ owner có quyền xóa sạch (1.4 §21.1)
   if (isOwner() && await can('system.reset.status')) admin.push(['admin.system_data', '/admin/system-data']);
   view.innerHTML = `

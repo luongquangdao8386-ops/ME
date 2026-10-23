@@ -65,10 +65,59 @@ export function aoaSheet(X, aoa) {
   return X.utils.aoa_to_sheet(aoa.map((r) => r.map((v) => (v === null || v === undefined ? '' : v))));
 }
 
-/** Ghi workbook thành File .xlsx */
-export function workbookFile(X, wb, name) {
-  const bytes = X.write(wb, { type: 'array', bookType: 'xlsx', compression: true });
+/**
+ * Ghi workbook thành File .xlsx. image (d4.11, logo công ty ở báo cáo): {sheet: số thứ tự sheet (1 = sheet đầu), bytes, mime, wPx, hPx}
+ * — SheetJS bản cộng đồng không ghi ảnh, nên chèn vào gói zip sau khi ghi (ảnh neo ô A1, giữ tỷ lệ).
+ */
+export function workbookFile(X, wb, name, image = null) {
+  let bytes = X.write(wb, { type: 'array', bookType: 'xlsx', compression: true });
+  if (image) bytes = withSheetImage(X, bytes, image);
   return new File([bytes], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+
+const EMU_PER_PX = 9525;
+const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/** Chèn một ảnh vào sheet thứ `sheet` của tệp xlsx (zip): media, drawing, quan hệ của sheet, thẻ <drawing> */
+export function withSheetImage(X, bytes, { sheet = 1, bytes: img, mime = 'image/png', wPx, hPx }) {
+  const CFB = X.CFB;
+  const zip = CFB.read(new Uint8Array(bytes), { type: 'array' });
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  const get = (p) => { const f = CFB.find(zip, '/' + p); return f ? dec.decode(f.content) : null; };
+  const put = (p, data) => {
+    const buf = typeof data === 'string' ? enc.encode(data) : data;
+    const f = CFB.find(zip, '/' + p);
+    if (f) { f.content = buf; f.size = buf.length; } else CFB.utils.cfb_add(zip, '/' + p, buf);
+  };
+  const ext = mime === 'image/jpeg' ? 'jpeg' : 'png';
+  const cx = Math.round(wPx * EMU_PER_PX), cy = Math.round(hPx * EMU_PER_PX);
+  const media = `me_logo.${ext}`, drawing = 'drawing_me1.xml', rid = 'rIdMeLogo1';
+  put(`xl/media/${media}`, img);
+  put(`xl/drawings/${drawing}`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    + '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+    + `xmlns:r="${NS_R}"><xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>${4 * EMU_PER_PX}</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>${4 * EMU_PER_PX}</xdr:rowOff></xdr:from>`
+    + `<xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`
+    + '<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+    + `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>`
+    + '</xdr:pic><xdr:clientData/></xdr:oneCellAnchor></xdr:wsDr>');
+  put(`xl/drawings/_rels/${drawing}.rels`, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + `<Relationship Id="rId1" Type="${NS_R}/image" Target="../media/${media}"/></Relationships>`);
+  const relsPath = `xl/worksheets/_rels/sheet${sheet}.xml.rels`;
+  const rels = get(relsPath) || '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  put(relsPath, rels.replace('</Relationships>', `<Relationship Id="${rid}" Type="${NS_R}/drawing" Target="../drawings/${drawing}"/></Relationships>`));
+  let sx = get(`xl/worksheets/sheet${sheet}.xml`);
+  if (!/xmlns:r=/.test(sx)) sx = sx.replace('<worksheet ', `<worksheet xmlns:r="${NS_R}" `);
+  // <drawing> đứng trước legacyDrawing/tableParts/extLst… theo thứ tự của lược đồ worksheet
+  const tag = `<drawing r:id="${rid}"/>`;
+  const after = /<(legacyDrawing|legacyDrawingHF|drawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b/.exec(sx);
+  sx = after ? sx.slice(0, after.index) + tag + sx.slice(after.index) : sx.replace('</worksheet>', tag + '</worksheet>');
+  put(`xl/worksheets/sheet${sheet}.xml`, sx);
+  let ct = get('[Content_Types].xml');
+  if (!new RegExp(`Extension="${ext}"`).test(ct)) ct = ct.replace('<Override ', `<Default Extension="${ext}" ContentType="${mime}"/><Override `);
+  ct = ct.replace('</Types>', `<Override PartName="/xl/drawings/${drawing}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+  put('[Content_Types].xml', ct);
+  return CFB.write(zip, { fileType: 'zip', type: 'array', compression: true });
 }
 
 /** Giải mã CSV: UTF-8 (fatal) rồi Windows-1258; chuẩn hóa NFC (Excel tiếng Việt lưu dấu rời) */

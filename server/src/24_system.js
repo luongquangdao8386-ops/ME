@@ -116,7 +116,7 @@ function auditAuth_(ctx) {
 /* ---------------- Cấu hình ---------------- */
 
 /** Khóa không sửa trong app: mốc A7 cố định, kho làm sau, khóa của đợt sau */
-var SETTINGS_READONLY_ = { email_stages: 1, overdue_repeat_days: 1, lead_days: 1, warehouse_connected: 1 };
+var SETTINGS_READONLY_ = { email_stages: 1, overdue_repeat_days: 1, lead_days: 1, warehouse_connected: 1, report_logo_file_id: 1, report_logo_rev: 1 };
 var SETTINGS_BOUNDS_ = {
   session_days: [1, 90], session_warn_days: [0, 30], change_pin_session_minutes: [5, 60], reauth_window_minutes: [1, 30], temp_pin_hours: [1, 168],
   max_sessions_per_user: [1, 50], login_fail_limit: [3, 20], login_fail_window_minutes: [1, 120], login_lock_minutes: [1, 1440],

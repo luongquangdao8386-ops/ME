@@ -298,7 +298,7 @@ function makeDrive() {
       const d = drive._docs.get(rec.id);
       if (!d) throw new Error('getAs: not a document');
       if (!d.saved) throw new Error('getAs before saveAndClose');
-      const text = d.parts.map((x) => (x.type === 'p' ? x.text : x.type === 'image' ? '[IMAGE]' : x.cells.map((r) => r.join(' | ')).join('\n'))).join('\n');
+      const text = d.text();
       return new MockBlob(Buffer.from('%PDF-1.4\n' + text, 'utf8'), mime, rec.name + '.pdf');
     },
     setSharing: (a, p) => { if (drive._failSharing) throw new Error('sharing failed'); rec.access = a; rec.permission = p; },
@@ -342,34 +342,197 @@ function makeDrive() {
   return drive;
 }
 
-/* ---------------- DocumentApp (PDF báo cáo, Đợt 3) ---------------- */
+/* ---------------- DocumentApp (PDF báo cáo, Đợt 3; chặt từ d4.11) ----------------
+ * Chỉ có các phương thức có trong tài liệu Apps Script (không Proxy "gọi gì cũng được"): mã máy chủ gọi sai tên phương thức
+ * hay truyền sai kiểu → test hỏng ngay, thay vì chỉ lộ ra khi người dùng xuất PDF thật. Kiểm thêm: cỡ chữ số nguyên dương,
+ * màu dạng #RRGGBB, độ rộng cột trong phạm vi, ô bảng hình chữ nhật. drive._docs giữ mô hình tài liệu để test xem bố cục. */
 function makeDocumentApp(drive) {
   const docs = new Map();
-  const chain = (o) => new Proxy(o, { get: (t, k) => (k in t ? t[k] : () => chain(t)) });
-  const ParagraphHeading = { HEADING1: 'H1', HEADING2: 'H2', HEADING3: 'H3', NORMAL: 'N' };
+  const enumOf = (...ks) => Object.freeze(Object.fromEntries(ks.map((k) => [k, k])));
+  const Attribute = enumOf('BACKGROUND_COLOR', 'BOLD', 'BORDER_COLOR', 'BORDER_WIDTH', 'CODE', 'FONT_FAMILY', 'FONT_SIZE', 'FOREGROUND_COLOR',
+    'HEADING', 'HEIGHT', 'HORIZONTAL_ALIGNMENT', 'INDENT_END', 'INDENT_FIRST_LINE', 'INDENT_START', 'ITALIC', 'GLYPH_TYPE', 'LEFT_TO_RIGHT',
+    'LINE_SPACING', 'LINK_URL', 'LIST_ID', 'MARGIN_BOTTOM', 'MARGIN_LEFT', 'MARGIN_RIGHT', 'MARGIN_TOP', 'NESTING_LEVEL', 'MINIMUM_HEIGHT',
+    'PADDING_BOTTOM', 'PADDING_LEFT', 'PADDING_RIGHT', 'PADDING_TOP', 'PAGE_HEIGHT', 'PAGE_WIDTH', 'SPACING_AFTER', 'SPACING_BEFORE',
+    'STRIKETHROUGH', 'UNDERLINE', 'VERTICAL_ALIGNMENT', 'WIDTH');
+  const HorizontalAlignment = enumOf('LEFT', 'CENTER', 'RIGHT', 'JUSTIFY');
+  const VerticalAlignment = enumOf('BOTTOM', 'CENTER', 'TOP');
+  const ParagraphHeading = enumOf('NORMAL', 'HEADING1', 'HEADING2', 'HEADING3', 'HEADING4', 'HEADING5', 'HEADING6', 'TITLE', 'SUBTITLE');
+  const ElementType = enumOf('BODY_SECTION', 'HEADER_SECTION', 'FOOTER_SECTION', 'PARAGRAPH', 'TABLE', 'TABLE_ROW', 'TABLE_CELL', 'TEXT', 'INLINE_IMAGE', 'HORIZONTAL_RULE');
+  const fail = (m) => { throw new Error('DocumentApp (giả lập): ' + m); };
+  const num = (v, what, { int = false, min = 0 } = {}) => {
+    if (typeof v !== 'number' || !isFinite(v) || v < min || (int && !Number.isInteger(v))) fail(what + ' không hợp lệ: ' + v);
+    return v;
+  };
+  const color = (c) => { if (typeof c !== 'string' || !/^#[0-9A-Fa-f]{6}$/.test(c)) fail('màu không hợp lệ: ' + c); return c; };
+  const oneOf = (e, v, what) => { if (!Object.values(e).includes(v)) fail(what + ' không hợp lệ: ' + v); return v; };
+  const attrs = (el, o) => {
+    if (!o || typeof o !== 'object') fail('setAttributes cần object');
+    Object.keys(o).forEach((k) => { if (!(k in Attribute)) fail('thuộc tính lạ ' + k); });
+    Object.assign(el.st, o); return el;
+  };
+  // Chữ của một phần tử (đoạn, ô, hàng, bảng, phần): định dạng ghi vào phần tử
+  function makeText(owner) {
+    const t = {
+      getType: () => ElementType.TEXT,
+      getText: () => owner.getText(),
+      setFontSize: (...a) => { owner.st.FONT_SIZE = num(a.length === 3 ? a[2] : a[0], 'cỡ chữ', { int: true, min: 1 }); return t; },
+      setBold: (...a) => { const v = a.length === 3 ? a[2] : a[0]; if (typeof v !== 'boolean') fail('setBold cần boolean'); owner.st.BOLD = v; return t; },
+      setItalic: (...a) => { const v = a.length === 3 ? a[2] : a[0]; if (typeof v !== 'boolean') fail('setItalic cần boolean'); owner.st.ITALIC = v; return t; },
+      setForegroundColor: (...a) => { owner.st.FOREGROUND_COLOR = color(a.length === 3 ? a[2] : a[0]); return t; },
+      setBackgroundColor: (...a) => { owner.st.TEXT_BG = color(a.length === 3 ? a[2] : a[0]); return t; },
+      setAttributes: (o) => { attrs(owner, o); return t; }
+    };
+    return t;
+  }
+  function makeImage(blob) {
+    if (!blob || typeof blob.getBytes !== 'function') fail('appendInlineImage cần Blob');
+    const b = Buffer.from(blob.getBytes());
+    let w = 100, h = 100;
+    if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) { w = b.readUInt32BE(16); h = b.readUInt32BE(20); }
+    const img = {
+      kind: 'image', st: {}, w, h,
+      getType: () => ElementType.INLINE_IMAGE,
+      getWidth: () => img.w, getHeight: () => img.h,
+      setWidth: (v) => { img.w = num(v, 'rộng ảnh', { min: 1 }); return img; },
+      setHeight: (v) => { img.h = num(v, 'cao ảnh', { min: 1 }); return img; },
+      setAttributes: (o) => attrs(img, o)
+    };
+    return img;
+  }
+  function makePara(text) {
+    if (typeof text !== 'string') fail('appendParagraph cần chuỗi');
+    const p = {
+      kind: 'p', text, images: [], st: {},
+      getType: () => ElementType.PARAGRAPH, asParagraph: () => p,
+      getText: () => p.text,
+      setText: (t) => { if (typeof t !== 'string') fail('setText cần chuỗi'); p.text = t; return p; },
+      appendText: (t) => { p.text += String(t); return makeText(p); },
+      appendInlineImage: (blob) => { const im = makeImage(blob); p.images.push(im); return im; },
+      editAsText: () => makeText(p),
+      setAlignment: (v) => { p.st.HORIZONTAL_ALIGNMENT = oneOf(HorizontalAlignment, v, 'căn lề'); return p; },
+      getAlignment: () => p.st.HORIZONTAL_ALIGNMENT || null,
+      setHeading: (v) => { p.st.HEADING = oneOf(ParagraphHeading, v, 'heading'); return p; },
+      setSpacingBefore: (v) => { p.st.SPACING_BEFORE = num(v, 'spacing'); return p; },
+      setSpacingAfter: (v) => { p.st.SPACING_AFTER = num(v, 'spacing'); return p; },
+      setLineSpacing: (v) => { p.st.LINE_SPACING = num(v, 'line spacing', { min: 0.5 }); return p; },
+      setIndentStart: (v) => { p.st.INDENT_START = num(v, 'indent'); return p; },
+      setIndentEnd: (v) => { p.st.INDENT_END = num(v, 'indent'); return p; },
+      setIndentFirstLine: (v) => { p.st.INDENT_FIRST_LINE = num(v, 'indent'); return p; },
+      setAttributes: (o) => attrs(p, o), getAttributes: () => ({ ...p.st })
+    };
+    return p;
+  }
+  function makeTable(cells) {
+    if (!Array.isArray(cells) || !cells.length || !cells.every(Array.isArray)) fail('appendTable cần mảng hai chiều');
+    const n = cells[0].length;
+    if (!n || cells.some((r) => r.length !== n)) fail('appendTable: các hàng phải cùng số ô');
+    cells.forEach((r) => r.forEach((c) => { if (typeof c !== 'string') fail('ô bảng phải là chuỗi'); }));
+    const t = { kind: 'table', st: {}, colWidths: new Array(n).fill(null) };
+    t.rows = cells.map((r) => makeRow(t, r));
+    const rowAt = (i) => { if (!Number.isInteger(i) || i < 0 || i >= t.rows.length) fail('getRow ngoài phạm vi ' + i); return t.rows[i]; };
+    Object.assign(t, {
+      getType: () => ElementType.TABLE, asTable: () => t,
+      getRow: rowAt, getNumRows: () => t.rows.length,
+      getCell: (r, c) => rowAt(r).getCell(c),
+      getText: () => t.rows.map((r) => r.getText()).join('\n'),
+      editAsText: () => makeText(t),
+      setBorderWidth: (v) => { t.st.BORDER_WIDTH = num(v, 'viền'); return t; },
+      setBorderColor: (v) => { t.st.BORDER_COLOR = color(v); return t; },
+      setColumnWidth: (i, w) => { if (!Number.isInteger(i) || i < 0 || i >= n) fail('setColumnWidth cột ngoài phạm vi ' + i); t.colWidths[i] = num(w, 'rộng cột', { min: 1 }); return t; },
+      getColumnWidth: (i) => t.colWidths[i],
+      setAttributes: (o) => attrs(t, o)
+    });
+    return t;
+  }
+  function makeRow(table, texts) {
+    const r = { kind: 'row', st: {} };
+    r.cells = texts.map((x) => makeCell(r, x));
+    Object.assign(r, {
+      getType: () => ElementType.TABLE_ROW,
+      getCell: (i) => { if (!Number.isInteger(i) || i < 0 || i >= r.cells.length) fail('getCell ngoài phạm vi ' + i); return r.cells[i]; },
+      getNumCells: () => r.cells.length,
+      getText: () => r.cells.map((c) => c.getText()).join(' | '),
+      editAsText: () => makeText(r),
+      setMinimumHeight: (v) => { r.st.MINIMUM_HEIGHT = num(v, 'cao hàng'); return r; },
+      setAttributes: (o) => attrs(r, o)
+    });
+    return r;
+  }
+  function makeCell(row, text) {
+    const c = { kind: 'cell', st: {}, children: [makePara(text)] };
+    Object.assign(c, container(c), {
+      getType: () => ElementType.TABLE_CELL, asTableCell: () => c,
+      getText: () => c.children.map((x) => x.getText()).join('\n'),
+      setText: (t) => { c.children = [makePara(String(t))]; return c; },
+      setBackgroundColor: (v) => { c.st.BACKGROUND_COLOR = color(v); return c; },
+      setPaddingTop: (v) => { c.st.PADDING_TOP = num(v, 'padding'); return c; },
+      setPaddingBottom: (v) => { c.st.PADDING_BOTTOM = num(v, 'padding'); return c; },
+      setPaddingLeft: (v) => { c.st.PADDING_LEFT = num(v, 'padding'); return c; },
+      setPaddingRight: (v) => { c.st.PADDING_RIGHT = num(v, 'padding'); return c; },
+      setVerticalAlignment: (v) => { c.st.VERTICAL_ALIGNMENT = oneOf(VerticalAlignment, v, 'căn dọc'); return c; },
+      setWidth: (v) => { c.st.WIDTH = num(v, 'rộng ô', { min: 1 }); return c; },
+      editAsText: () => makeText(c),
+      setAttributes: (o) => attrs(c, o)
+    });
+    return c;
+  }
+  // Phần chung của khung chứa (thân, đầu/chân trang, ô bảng)
+  function container(o) {
+    return {
+      appendParagraph: (t) => { const p = makePara(typeof t === 'string' ? t : fail('appendParagraph cần chuỗi')); o.children.push(p); return p; },
+      appendTable: (cells) => { const t = makeTable(cells); o.children.push(t); return t; },
+      getChild: (i) => { if (!Number.isInteger(i) || i < 0 || i >= o.children.length) fail('getChild ngoài phạm vi ' + i); return o.children[i]; },
+      getNumChildren: () => o.children.length
+    };
+  }
+  function makeSection(kind) {
+    const s = { kind, st: {}, children: [makePara('')] };
+    Object.assign(s, container(s), {
+      getType: () => (kind === 'body' ? ElementType.BODY_SECTION : kind === 'header' ? ElementType.HEADER_SECTION : ElementType.FOOTER_SECTION),
+      getParagraphs: () => s.children.filter((x) => x.kind === 'p'),
+      getText: () => s.children.map((x) => x.getText()).join('\n'),
+      editAsText: () => makeText(s),
+      setAttributes: (o) => attrs(s, o)
+    });
+    if (kind === 'body') {
+      const m = (k) => (v) => { s.st[k] = num(v, k); return s; };
+      Object.assign(s, {
+        setMarginTop: m('MARGIN_TOP'), setMarginBottom: m('MARGIN_BOTTOM'), setMarginLeft: m('MARGIN_LEFT'), setMarginRight: m('MARGIN_RIGHT'),
+        setPageWidth: m('PAGE_WIDTH'), setPageHeight: m('PAGE_HEIGHT'),
+        appendImage: (blob) => { const im = makeImage(blob); const p = makePara(''); p.images.push(im); s.children.push(p); return im; }
+      });
+    }
+    return s;
+  }
+  // Chữ để tìm trong "PDF" giả: đầu trang, thân, chân trang; ảnh ghi [IMAGE]
+  function flatText(sec) {
+    if (!sec) return [];
+    const out = [];
+    const walk = (x) => {
+      if (x.kind === 'p') { x.images.forEach(() => out.push('[IMAGE]')); out.push(x.text); return; }
+      if (x.kind === 'table') { x.rows.forEach((r) => out.push(r.cells.map((c) => c.children.map((ch) => (ch.kind === 'p' ? ch.text : ch.getText())).join('\n')).join(' | '))); return; }
+    };
+    sec.children.forEach(walk);
+    return out;
+  }
   const app = {
-    ParagraphHeading,
+    Attribute, HorizontalAlignment, VerticalAlignment, ParagraphHeading, ElementType,
     create: (name) => {
       const id = 'doc_' + crypto.randomBytes(8).toString('hex');
-      const rec = { id, name, parts: [], saved: false, page: { w: 595, h: 842 } };
+      const rec = { id, name, saved: false, body: makeSection('body'), header: null, footer: null };
+      Object.defineProperty(rec, 'page', { get: () => ({ w: rec.body.st.PAGE_WIDTH || 612, h: rec.body.st.PAGE_HEIGHT || 792 }) });
+      rec.text = () => [...flatText(rec.header), ...flatText(rec.body), ...flatText(rec.footer)].join('\n');
       docs.set(id, rec);
       drive._registerExternal(id, name, 'application/vnd.google-apps.document');
       drive._docs.set(id, rec);
-      const para = (text) => { rec.parts.push({ type: 'p', text: String(text) }); return chain({}); };
-      const body = chain({
-        appendParagraph: para,
-        appendTable: (cells) => {
-          const t = { type: 'table', cells: cells.map((r) => r.map(String)) };
-          rec.parts.push(t);
-          const row = (i) => chain({ getNumCells: () => (t.cells[i] || []).length, getCell: () => chain({}) });
-          return chain({ getRow: row, getNumRows: () => t.cells.length });
-        },
-        appendImage: () => { rec.parts.push({ type: 'image' }); return chain({}); },
-        insertImage: () => { rec.parts.push({ type: 'image' }); return chain({}); },
-        setPageWidth: (w) => { rec.page.w = w; return body; },
-        setPageHeight: (h) => { rec.page.h = h; return body; }
-      });
-      return { getId: () => id, getBody: () => body, saveAndClose: () => { rec.saved = true; } };
+      const doc = {
+        getId: () => id, getName: () => name, getBody: () => rec.body,
+        addHeader: () => { if (rec.header) fail('đã có đầu trang'); rec.header = makeSection('header'); return rec.header; },
+        addFooter: () => { if (rec.footer) fail('đã có chân trang'); rec.footer = makeSection('footer'); return rec.footer; },
+        getHeader: () => rec.header, getFooter: () => rec.footer,
+        saveAndClose: () => { rec.saved = true; }
+      };
+      return doc;
     },
     _docs: docs
   };

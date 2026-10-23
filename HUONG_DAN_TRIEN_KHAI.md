@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.1 (Đợt 1, 2, 3 đang chạy THẬT từ 16/10/2026 · Đợt 4 thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.11 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.11 báo cáo đẹp + logo công ty thử trên THỬ)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,9 +16,39 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Thứ tự lần này (d4.11 — báo cáo/PDF đẹp + logo công ty):** Phần S (đưa lên THỬ, tải logo, thử) → báo Claude chỗ chưa ưng → nói **"phát hành THẬT"** → Phần T. Đợt 4 (Phần P–R) đã xong và chạy THẬT từ 21/10/2026.
+
 **Thứ tự lần này (Đợt 4 — Xóa sạch dữ liệu):** Phần P (đưa máy chủ Đợt 4 lên THỬ) → Phần Q (thử Đợt 4 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng ở THẬT, nói **"phát hành THẬT"** → Phần R. **Trạng thái 16/10/2026:** Đợt 1, 2, 3 đang chạy THẬT (Phần M, N, O của Đợt 3 đã xong). Phần J–L (Đợt 2), F–I (dựng THẬT), A–E (Đợt 1) giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+
+---
+
+## Phần S — Bản 1.0.0-d4.11 trên THỬ: báo cáo/PDF đẹp hơn + logo công ty
+
+Bản này chỉ đổi cách trình bày báo cáo và thêm logo công ty; **không thêm sheet, không cần `migrateSchema`, không cần cấp quyền mới**.
+- **PDF** (Báo cáo, Xuất PDF hồ sơ thiết bị, phiếu bảo trì, phiếu sửa chữa): logo công ty ở đầu **mỗi trang**; tiêu đề tiếng Việt to, tiếng Trung dòng dưới; thông tin hai cột (kỳ, khu vực | số báo cáo, thời gian lập, người lập); **ô tóm tắt**; **biểu đồ thanh**; bảng chi tiết có **cột #**, độ rộng cột theo nội dung, số căn phải, hàng xen kẽ; checklist **Đạt** chữ xanh / **Không đạt** chữ đỏ; khối **Người lập / Người duyệt** có dòng "Ký, ghi rõ họ tên"; chân trang mỗi trang ghi tên báo cáo, số báo cáo, thời gian lập. Google Docs không cho chèn số trang nên PDF không có số trang.
+- **Bản xem trước** trong app cùng bố cục với PDF. **Excel báo cáo**: logo ở góc trang **Tóm tắt** (trang Chi tiết giữ nguyên để lọc/sắp xếp).
+- **Logo** do quản trị (cấp 4) tải lên ở **Tài khoản → Quản trị → Logo trên báo cáo**; lưu riêng tư trong thư mục dữ liệu của từng máy chủ (THỬ và THẬT tải riêng). Chưa tải logo thì báo cáo như trên nhưng không có ảnh. Logo app 57 vẫn không xuất hiện trên báo cáo.
+
+1. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/lucid-lovelace-r60wfl/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+2. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+3. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.11` → **Triển khai** (giữ nguyên link).
+4. Mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: app **1.0.0-d4.11**, máy chủ **1.0.0-d4.11**.
+5. Đăng nhập **NV001** → **Tài khoản → Quản trị → Logo trên báo cáo** → **Chọn ảnh logo** → chọn tệp `paishing-logo.png` (Claude gửi trong chat) → xem mẫu đầu trang → **Lưu** → nhập PIN. Trang hiện logo đang dùng.
+6. **Báo cáo** → Xem **Hồ sơ và linh kiện thiết bị**: bản xem trước có logo, ô tóm tắt, biểu đồ, cột #, khối ký. Bấm **PDF** → mở tệp: logo đầu mỗi trang, chân trang có tên báo cáo. Bấm **Xuất Excel** → trang Tóm tắt có logo.
+7. Báo cáo **Điện nước**, **Sự cố và sửa chữa** → **PDF** (xem biểu đồ thanh: kỳ chưa đủ số ghi chữ, không vẽ thanh 0). **Lưu báo cáo** rồi PDF → chân trang có số **BC-…**.
+8. **Thiết bị** → một máy → **Xuất PDF**; một **phiếu bảo trì** đã làm → **Xuất PDF**: checklist Đạt xanh / Không đạt đỏ; một **phiếu sửa chữa** → **Xuất PDF**.
+9. iPhone (app THỬ): mở một báo cáo → logo hiện, không tràn ngang; PDF → **Mở / Lưu**.
+10. Chụp PDF gửi Claude, ghi chỗ chưa ưng (cỡ chữ, khoảng cách, màu, vị trí logo…).
+
+## Phần T — Phát hành d4.11 lên THẬT (sau khi nói "phát hành THẬT")
+
+1. Claude đẩy đúng bản đã thử lên `main` của ME (trang `/ME/` tự cập nhật sau 2–3 phút).
+2. Link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C → dự án **ME_MayChu_THAT** → `Code.gs` → xóa → dán → **Lưu** → **Triển khai → Quản lý bản triển khai** → **Phiên bản mới** `THẬT d4.11` → **Triển khai**. Không chạy `migrateSchema`.
+3. App THẬT: Ctrl+Shift+R → Tài khoản → Thông tin: app và máy chủ **1.0.0-d4.11** (gặp lỗi bấm **Tải lại bản mới**).
+4. **Tải logo lại trên THẬT**: Tài khoản → Quản trị → **Logo trên báo cáo** → chọn `paishing-logo.png` → Lưu → PIN.
+5. Xuất thử một PDF báo cáo và một PDF phiếu trên THẬT.
 
 ---
 

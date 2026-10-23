@@ -1,6 +1,7 @@
 // Báo cáo (Đợt 3): RE-01 danh sách mẫu (iPhone) / WEB-RE-01 mẫu + xem trước + báo cáo đã lưu; RE-02 báo cáo theo bộ lọc (tóm tắt,
 // biểu đồ, chi tiết), xuất Excel (SheetJS trên máy) / PDF (máy chủ dựng), lưu bản chụp (mã BC, QR); RE-03 mẫu do quản trị lập.
-// Màn, Excel, PDF không có logo hay cụm nhận diện app (1.4 §3.5). Số liệu theo quyền xem và quyền giá (4.5). Cần mạng.
+// Màn, Excel, PDF không có logo app 57 hay cụm nhận diện app (1.4 §3.5); từ d4.11 có logo công ty khi quản trị đã tải lên
+// (đầu bản xem trước, trang Tóm tắt của Excel; PDF máy chủ tự chèn). Số liệu theo quyền xem và quyền giá (4.5). Cần mạng.
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session, b64ToBytes, BUILD_VERSION, L } from '../core.js';
 import { ICON, toast, dialog, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
@@ -11,6 +12,7 @@ import { selectInput, textInput, bilingualInputs, dateInput, wireForm, readField
 import { shareFileNow, isTouchMobile } from '../media.js';
 import { handleWriteError } from './equipment.js';
 import { loadXlsx, buildSheet, aoaSheet, workbookFile } from '../xlsx.js';
+import { reportLogo, logoBytes, logoSize } from '../report-logo.js';
 import { columnChartHtml, barListHtml, wireCharts } from '../chart.js';
 import { chartPoints, chartStateKey } from './utilities.js';
 import { PERIOD_TYPES, UNIT, TONE, periodOf } from '../meters.js';
@@ -70,7 +72,7 @@ function summaryRows(d) {
   return (d.summary || []).map((s) => {
     const label = s.enumKey ? biText(s.enumKey + '.' + s.enum) + (s.label_vi ? ` — ${s.label_vi} · ${s.label_zh}` : '') : `${s.label_vi} · ${s.label_zh}`;
     const val = s.money ? `${fmtNumber(s.value, s.currency === 'VND' ? 0 : 2)}\u00A0${s.currency || ''}` : (s.value === null ? biText(s.na_key || 'field.not_set') : fmtNumber(s.value) + (s.unit ? (s.unit === '%' ? '%' : '\u00A0' + s.unit) : ''));
-    return { label, val: val + (s.partial ? ` (${biText('ut.partial')})` : ''), raw: s };
+    return { label, val: val + (s.partial ? ` (${biText('ut.partial')})` : ''), main: val, note: s.partial ? biText('ut.partial') : '', raw: s };
   });
 }
 
@@ -106,18 +108,26 @@ function chartHtml(d) {
   return '';
 }
 
-/** Bản xem trước như trang in (không logo): tiêu đề song ngữ, kỳ/khu vực, ngày lập, số báo cáo, tóm tắt, biểu đồ, chi tiết, chú thích, ký */
-async function paperHtml(d, { code = '' } = {}) {
+/** Logo công ty cho bản xem trước/Excel; lỗi mạng hay chưa có logo → không logo (báo cáo vẫn hiện) */
+const logoOf = (rev) => reportLogo(rev).catch(() => null);
+
+/**
+ * Bản xem trước như trang in, cùng bố cục với PDF máy chủ dựng: logo công ty (nếu có), tiêu đề hai dòng, thông tin hai cột,
+ * tóm tắt dạng ô, biểu đồ, chi tiết (cột #, hàng xen kẽ), chú thích, khối ký. Không logo app 57.
+ */
+async function paperHtml(d, { code = '', logoRev } = {}) {
   const lines = await filterLines(d);
   const sum = summaryRows(d);
   const cols = d.columns || [];
+  const logo = await logoOf(logoRev !== undefined ? logoRev : d.logo_rev);
+  const right = [...(code ? [[biText('rpt.number'), code, true]] : []), [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']];
+  const kv = ([k, v, strong]) => `<div><span class="muted">${esc(k)}${v ? ':' : ''}</span> ${strong ? `<strong>${esc(v)}</strong>` : esc(v)}</div>`;
+  const sign = (key, name) => `<div><strong>${bi(key)}</strong><span class="muted small">${bi('rpt.sign_hint')}</span><span class="sign-line"></span><span class="sign-name">${esc(name || '')}</span></div>`;
   return `<article class="paper" aria-label="${esc(biText('rpt.preview_paper'))}">
-    <h2 class="paper-title"><span>${esc(d.title_vi || '')}</span>${d.title_zh ? `<span class="zh"> / ${esc(d.title_zh)}</span>` : ''}</h2>
-    <div class="paper-meta"><div>${lines.map(([k, v]) => `<div><span class="muted">${esc(k)}${v ? ':' : ''}</span> ${esc(v)}</div>`).join('')}</div>
-      <div class="paper-meta-r"><div><span class="muted">${bi('rpt.generated_at')}:</span> ${esc(fmtDateTime(d.generated_at))}</div>
-        ${code ? `<div><span class="muted">${bi('rpt.number')}:</span> <strong>${esc(code)}</strong></div>` : ''}
-        <div><span class="muted">${bi('rpt.prepared_by')}:</span> ${esc(d.generated_by_name || '')}</div></div></div>
-    ${sum.length ? `<h3>${bi('rpt.summary')}</h3><table class="tbl paper-sum"><tbody>${sum.map((s) => `<tr><td>${esc(s.label)}</td><td class="num"><strong>${esc(s.val)}</strong></td></tr>`).join('')}</tbody></table>` : ''}
+    ${logo ? `<div class="paper-brand"><img class="paper-logo" src="${esc(logo.url)}" alt=""></div>` : ''}
+    <h2 class="paper-title"><span class="vi">${esc(d.title_vi || d.title_zh || '')}</span>${d.title_zh && d.title_vi ? `<span class="zh">${esc(d.title_zh)}</span>` : ''}</h2>
+    <div class="paper-meta"><div>${lines.map(kv).join('')}</div><div class="paper-meta-r">${right.map(kv).join('')}</div></div>
+    ${sum.length ? `<h3>${bi('rpt.summary')}</h3><div class="paper-tiles">${sum.map((s) => `<div class="paper-tile"><div class="pt-label">${esc(s.label)}</div><div class="pt-value">${esc(s.main)}</div>${s.note ? `<div class="pt-note">${esc(s.note)}</div>` : ''}</div>`).join('')}</div>` : ''}
     ${chartHtml(d)}
     <h3>${bi('rpt.detail')} <span class="muted small">${bi('rpt.rows_n', { N: fmtNumber(d.total_rows) })}</span></h3>
     ${d.rows.length ? `<div class="table-wrap"><table class="tbl paper-tbl"><thead><tr><th class="num">#</th>${cols.map((c) => `<th${isNumCol(c) ? ' class="num"' : ''}>${bi([c.label_vi, c.label_zh])}</th>`).join('')}</tr></thead>
@@ -127,7 +137,7 @@ async function paperHtml(d, { code = '' } = {}) {
     ${d.truncated ? `<p class="muted small">${bi('rpt.truncated', { N: fmtNumber(d.total_rows) })}</p>` : ''}
     ${d.cost_hidden ? `<p class="muted small">${bi('cost.hidden')}</p>` : ''}
     ${(d.notes || []).map((n) => `<p class="muted small">${bi(n)}</p>`).join('')}
-    <div class="paper-sign"><div>${bi('rpt.prepared_by')}<span class="sign-line"></span></div><div>${bi('rpt.approved_by')}<span class="sign-line"></span></div></div>
+    <div class="paper-sign">${sign('rpt.prepared_by', d.generated_by_name)}${sign('rpt.approved_by', '')}</div>
   </article>`;
 }
 
@@ -136,11 +146,17 @@ async function paperHtml(d, { code = '' } = {}) {
 const stamp = (d) => String(d.generated_at || '').slice(0, 10);
 
 /** Tệp Excel (5.4.6): Tóm tắt, Chi tiết (khóa + nhãn hai thứ tiếng; số #,##0, ngày thật, mã @), Điều kiện lọc. Không logo. */
-async function excelFile(d, code, fileName) {
+async function excelFile(d, code, fileName, logoRev) {
   const X = await loadXlsx();
   const wb = X.utils.book_new();
   const sum = summaryRows(d);
-  X.utils.book_append_sheet(wb, aoaSheet(X, [[`${d.title_vi || ''} · ${d.title_zh || ''}`], [], [biText('rpt.summary'), ''], ...sum.map((s) => [s.label, s.val])]), biText('rpt.summary').slice(0, 31));
+  // Logo công ty (nếu có) neo ô A1 trang Tóm tắt; chừa 4 dòng trống cho ảnh cao 60 px
+  const logo = await logoOf(logoRev);
+  const top = logo ? [[''], [''], [''], ['']] : [];
+  const sumWs = aoaSheet(X, [...top, [`${d.title_vi || ''} · ${d.title_zh || ''}`], [], [biText('rpt.summary'), ''], ...sum.map((s) => [s.label, s.val]),
+    [], [biText('rpt.number'), code || ''], [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']]);
+  sumWs['!cols'] = [{ wch: 48 }, { wch: 28 }];
+  X.utils.book_append_sheet(wb, sumWs, biText('rpt.summary').slice(0, 31));
   const cols = d.columns || [];
   const keys = cols.map((c) => c.key);
   const labels = cols.map((c) => [c.label_vi, c.label_zh]);
@@ -163,7 +179,8 @@ async function excelFile(d, code, fileName) {
     ...(d.cost_hidden ? [[biText('cost.hidden'), '']] : []), ...(d.notes || []).map((n) => [biText(n), '']), ['app', BUILD_VERSION]
   ]), biText('rpt.filters').slice(0, 31));
   const name = (fileName && fileName.replace(/\.xlsx$/i, '')) || `${code || d.definition.code}_${stamp(d)}`;
-  return workbookFile(X, wb, name.replace(/[\\/:*?"<>|]+/g, '_') + '.xlsx');
+  const image = logo ? { sheet: 1, bytes: logoBytes(logo), mime: logo.mime, ...(await logoSize(logo, 60).then((z) => ({ wPx: z.w, hPx: z.h }))) } : null;
+  return workbookFile(X, wb, name.replace(/[\\/:*?"<>|]+/g, '_') + '.xlsx', image);
 }
 
 /** Đưa tệp cho người dùng: máy tính tải thẳng; iPhone bước 2 "Mở / Lưu" gọi share trong lần chạm (2.6) */
@@ -181,7 +198,7 @@ function wireExports(root, getData, { runId = '', code = '', def = null } = {}) 
       // Ghi nhật ký xuất ở máy chủ (report.export XLSX trả dữ liệu đã lọc theo quyền), dựng tệp trên máy
       const r = await api('report.export', runId ? { format: 'XLSX', report_run_id: runId } : { format: 'XLSX', code: def.code, filters: getData().filters }, { retry: true });
       if (!r.ok) { toast(esc(resMsg(r)), 'err'); return; }
-      deliver(await excelFile(r.data.report, code || r.data.report.report_run_code || '', def && def.file_name), $('[data-file="xlsx"]', root));
+      deliver(await excelFile(r.data.report, code || r.data.report.report_run_code || '', def && def.file_name, r.data.logo_rev), $('[data-file="xlsx"]', root));
     } finally { busy(evBtn(ev), false); }
   });
   if (pdf) pdf.addEventListener('click', async (ev) => {
@@ -392,12 +409,12 @@ export async function renderSavedReport(view, ctx) {
   if (!navigator.onLine) { view.innerHTML = `<div class="card">${bi('rpt.need_network')}</div>`; return; }
   const r = await api('report.view', { report_run_id: params.id }, { retry: true });
   if (!r.ok) { view.innerHTML = `<div class="card"><p class="banner warn">${esc(resMsg(r))}</p></div>`; return; }
-  const { run: rr, snapshot } = r.data;
+  const { run: rr, snapshot, logo_rev: logoRev } = r.data;
   const canX = await can('report.export');
   view.innerHTML = `<section class="card rp-run-head"><div class="rec-top"><span class="code big">${esc(rr.report_run_code)}</span>${badge('report_status.' + (rr.status || 'SAVED'))}</div>
       <p class="muted small">${bi('rpt.snapshot_note', { T: fmtDateTime(rr.snapshot_at || rr.generated_at) })}</p>
       <div class="row rp-actions">${exportBtns(canX)}${rr.qr_key ? `<a class="btn small" href="#/qr/REPORT_RUN/${esc(rr.report_run_id)}">${ICON.qr}<span>${bi('btn.view_qr')}</span></a>` : ''}</div></section>
-    <section class="card">${await paperHtml(snapshot, { code: rr.report_run_code })}</section>`;
+    <section class="card">${await paperHtml(snapshot, { code: rr.report_run_code, logoRev })}</section>`;
   wireCharts(view);
   wireExports(view, () => snapshot, { runId: rr.report_run_id, code: rr.report_run_code });
 }

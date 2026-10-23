@@ -137,6 +137,8 @@ var HANDLERS_ = {
   'report.view': function (ctx) { return (ctx.req.payload || {}).datasets ? { datasets: reportDatasetsInfo_(ctx) } : reportView_(ctx); },
   'report.save': function (ctx) { return reportSave_(ctx); },
   'report.export': function (ctx) { return reportExport_(ctx); },
+  'report.logo.set': function (ctx) { return reportLogoSet_(ctx); },
+  'report.logo.get': function (ctx) { return reportLogoGet_(ctx); },
   'report.definition.edit': function (ctx) { return reportDefinitionEdit_(ctx); },
   'export.pdf': function (ctx) { return exportPdf_(ctx); },
   // Đợt 4: Xóa sạch dữ liệu vận hành (chỉ owner; PIN nhập ngay trong request/resume)

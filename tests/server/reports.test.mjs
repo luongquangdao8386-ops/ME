@@ -160,7 +160,7 @@ test('lưu báo cáo: mã BC-2610-001, QR, bản chụp không đổi khi nguồ
   assert.equal(env.rows('ReportRuns').filter((x) => x.report_run_id === id3).length, 1);
 });
 
-test('xuất: Excel trả dữ liệu để dựng tệp; PDF dựng ở máy chủ, có số báo cáo, Người lập/Người duyệt, không logo/ảnh/cụm M&E; ghi nhật ký; ĐN không xuất', () => {
+test('xuất: Excel trả dữ liệu để dựng tệp; PDF dựng ở máy chủ, có số báo cáo, Người lập/Người duyệt; chưa tải logo công ty → không ảnh; không cụm M&E; ghi nhật ký; ĐN không xuất', () => {
   const { env, c, c3, dn } = setup();
   utilityData(env, c, c3, dn);
   const id = uuid();
@@ -173,8 +173,8 @@ test('xuất: Excel trả dữ liệu để dựng tệp; PDF dựng ở máy ch
   assert.equal(p.file_name, 'BC-2610-001_2026-10-20.pdf');
   const text = Buffer.from(p.content_b64, 'base64').toString('utf8');
   assert.ok(text.startsWith('%PDF'));
-  for (const s of ['Điện nước / 水电', 'BC-2610-001', 'Người lập', 'Người duyệt', '12\u202F480', '280\u202F800\u00A0VND', '01/10/2026']) assert.ok(text.includes(s), s);
-  assert.ok(!text.includes('[IMAGE]') && !text.includes('M&E') && !/logo/i.test(text), 'không logo, không cụm nhận diện app');
+  for (const s of ['Điện nước', '水电', 'BC-2610-001', 'Người lập', 'Người duyệt', '12\u202F480', '280\u202F800\u00A0VND', '01/10/2026']) assert.ok(text.includes(s), s);
+  assert.ok(!text.includes('[IMAGE]') && !text.includes('M&E') && !/logo/i.test(text), 'chưa có logo công ty → không ảnh; không cụm nhận diện app');
   // Tệp Docs tạm đã bỏ vào thùng rác
   assert.ok([...env.drive._docs.keys()].every((k) => env.drive._files.get(k)?.trashed !== false));
   assert.equal(dn.call('report.export', { format: 'XLSX', code: 'RPT_UTILITIES', filters: UF }).code, 'FORBIDDEN');
@@ -212,7 +212,7 @@ test('In/xuất PDF hồ sơ (export.pdf): thiết bị, phiếu sửa; không l
   ok(c.write('equipment.create', { equipment_id: e, name_vi: 'Máy nén khí', model: 'GA-37' }));
   const p = ok(c3.call('export.pdf', { entity_type: 'EQUIPMENT', entity_id: e })).data;
   const text = Buffer.from(p.content_b64, 'base64').toString('utf8');
-  assert.ok(text.startsWith('%PDF') && text.includes('Hồ sơ thiết bị / 设备档案') && text.includes('GA-37'));
+  assert.ok(text.startsWith('%PDF') && text.includes('Hồ sơ thiết bị') && text.includes('设备档案') && text.includes('GA-37'));
   assert.ok(!text.includes('[IMAGE]') && !text.includes('M&E'));
   assert.equal(p.file_name, 'TB-0001.pdf');
   const rid = uuid();

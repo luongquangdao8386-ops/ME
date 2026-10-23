@@ -19,9 +19,9 @@ test('setup tạo 53 sheet Đợt 1–4, Settings, SystemState, 60 dòng RolePer
   assert.deepEqual(sec.getSheets().map((s) => s.getName()).sort(), ['AuthAttempts', 'RolePermissions', 'Sessions', 'UserScopes', 'Users']);
   assert.ok(biz.getSheetByName('Glossary'));
   assert.equal(biz.getSheetByName('Sheet1'), null);
-  assert.equal(g.SETTINGS_DEFAULTS.length, 51);
+  assert.equal(g.SETTINGS_DEFAULTS.length, 53, '51 + 2 khóa logo báo cáo (d4.11)');
   const settings = env.rows('Settings');
-  assert.equal(settings.length, 51, 'khóa của Đợt 1–3');
+  assert.equal(settings.length, 53, 'khóa của Đợt 1–3 + logo báo cáo');
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
@@ -50,7 +50,7 @@ test('setup chạy lại không làm gì; migrateSchema chạy nhiều lần v�
   env.g.migrateSchema();
   env.g.migrateSchema();
   assert.equal(env.rows('RolePermissions').length, 60);
-  assert.equal(env.rows('Settings').length, 51);
+  assert.equal(env.rows('Settings').length, 53);
   assert.equal(env.rows('ReportDefinitions').length, 8, 'mẫu tích hợp không nạp trùng');
   const keys = env.rows('SystemState').map((r) => r.state_key);
   assert.equal(new Set(keys).size, keys.length, 'không trùng khóa SystemState');

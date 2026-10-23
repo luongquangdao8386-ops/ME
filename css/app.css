@@ -894,15 +894,35 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
   .rf-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
   .rp-preview .paper { max-height: 70vh; overflow: auto; }
 }
-/* Bản xem trước như trang in: không logo, không ô vàng, không cụm M&E */
-.paper { background: #fff; color: #111; padding: 18px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 10px rgba(23,50,79,0.06); }
-.paper-title { font-size: 1.25rem; color: var(--navy); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--navy); }
-.paper-title .zh { font-weight: 700; }
-.paper-meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 0.8125rem; margin-bottom: 10px; }
-.paper-meta-r { text-align: left; }
+/* Bản xem trước như trang in, cùng bố cục với PDF (d4.11): logo công ty nếu quản trị đã tải lên (không logo app 57, không ô vàng,
+   không cụm M&E), tiêu đề hai dòng căn giữa, thông tin hai cột, ô tóm tắt, bảng có cột # và hàng xen kẽ, khối ký */
+.paper { background: #fff; color: #1F2933; padding: 18px; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 10px rgba(23,50,79,0.06); }
+.paper-brand { margin: -4px 0 6px; }
+.paper-logo { display: block; height: 56px; width: auto; max-width: 220px; }
+.paper-title { font-size: 1.25rem; color: var(--navy); margin: 0 0 12px; padding-bottom: 10px; border-bottom: 2px solid var(--navy); text-align: center; }
+.paper-title .vi, .paper-title .zh { display: block; }
+.paper-title .zh { font-size: 1rem; font-weight: 700; margin-top: 2px; }
+.paper-meta { display: flex; justify-content: space-between; gap: 4px 16px; flex-wrap: wrap; font-size: 0.8125rem; margin-bottom: 10px; }
+.paper-meta > div:empty { display: none; }
+.paper-meta-r { text-align: right; margin-left: auto; }
+@media (max-width: 599px) { .paper-meta-r { text-align: left; margin-left: 0; } }
 .paper h3 { font-size: 0.875rem; margin: 14px 0 6px; color: var(--navy); }
 .paper .tbl { font-size: 0.8125rem; }
-.paper-tbl thead th { background: #EEF1F5; }
+.paper-tbl thead th { background: #E6ECF3; color: var(--navy); }
+.paper-tbl tbody tr:nth-child(even) td { background: #F7F9FC; }
+.paper-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.paper-tile { background: #F1F5F9; border-radius: 4px; padding: 7px 9px; min-width: 0; }
+.pt-label { font-size: 0.75rem; color: #5B6875; }
+.pt-value { font-size: 1.125rem; font-weight: 700; color: var(--navy); margin-top: 2px; overflow-wrap: anywhere; }
+.pt-note { font-size: 0.6875rem; color: #5B6875; }
+/* Quản trị → Logo trên báo cáo: ảnh lớn + mẫu đầu trang PDF (logo cao 56 px trên nền giấy) */
+.logo-big { display: block; max-width: min(100%, 320px); max-height: 200px; margin: 4px 0 10px; }
+.logo-page { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 12px 16px 14px; margin: 4px 0 10px; box-shadow: 0 1px 4px rgba(23,50,79,0.08); }
+.logo-page-lines { margin-top: 10px; }
+.logo-page-lines i { display: block; height: 6px; border-radius: 3px; background: #E6ECF3; margin-top: 6px; }
+.logo-page-lines i:first-child { width: 60%; margin: 0 auto; background: #C9D3DF; }
+.logo-page-lines i:nth-child(2) { width: 85%; }
+.logo-page-lines i:nth-child(3) { width: 70%; }
 /* Bảng chi tiết nhiều cột: chữ giữ trên một dòng, cuộn ngang trong khung (iPhone) — không ép cột còn một chữ */
 .paper-tbl { min-width: 100%; }
 .paper-tbl th, .paper-tbl td { white-space: nowrap; overflow-wrap: normal; }
@@ -922,8 +942,11 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .ut-read .form-actions .btn { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 0; }
 .ut-read .form-actions .btn .vi, .ut-read .form-actions .btn .zh { display: block; }
 .ut-read .form-actions .btn .sep { display: none; }
-.paper-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; font-size: 0.875rem; }
-.sign-line { display: block; height: 56px; border-bottom: 1px solid #9AA5B1; }
+.paper-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; font-size: 0.875rem; text-align: center; }
+.paper-sign > div > * { display: block; }
+.paper-sign strong { color: var(--navy); }
+.sign-line { height: 56px; }
+.sign-name { font-weight: 700; min-height: 1.2em; border-top: 1px solid #9AA5B1; padding-top: 4px; }
 @media print {
   .rp-filters, .rp-run-head, .rp-left, .rp-preview .card-head { display: none !important; }
   .paper { border: 0; box-shadow: none; padding: 0; max-height: none !important; overflow: visible !important; }
