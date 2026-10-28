@@ -350,6 +350,8 @@ function healthRows_() {
   add('last_mail_sent', true, lastSent ? lastSent.slice(0, 16).replace('T', ' ') : '', setting_('gmail_enabled') ? 'Gmail ON' : 'Gmail OFF');
   var base = String(setting_('app_base_url') || '');
   add('app_base_url', !!base, base, base ? '' : 'Chưa điền app_base_url (link trong email)');
+  // d4.12: mã kết nối cho app Checksheet (chỉ báo có/không, không in mã)
+  add('checksheet_feed', true, prop_('FEED_KEY_CS') ? 'ON' : 'OFF', prop_('FEED_KEY_CS') ? '' : 'Chưa nối Checksheet (chạy adminCreateFeedKey khi cần)');
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;

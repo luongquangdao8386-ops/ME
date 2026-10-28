@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.11 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.11 báo cáo đẹp + logo công ty thử trên THỬ)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.12 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 thêm cửa đọc thiết bị cho app Checksheet)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,11 +16,33 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Thứ tự lần này (d4.11 — báo cáo/PDF đẹp + logo công ty):** Phần S (đưa lên THỬ, tải logo, thử) → báo Claude chỗ chưa ưng → nói **"phát hành THẬT"** → Phần T. Đợt 4 (Phần P–R) đã xong và chạy THẬT từ 21/10/2026.
+**Thứ tự lần này (d4.12 — nối app Checksheet):** Phần U (dán Code.gs d4.12 vào máy chủ THỬ, tạo mã kết nối, nhập bên Checksheet THỬ) → thử → nói **"phát hành THẬT"** → làm lại Phần U ở máy chủ THẬT (nhập mã bên Checksheet THẬT).
+
+**Thứ tự lần trước (d4.11 — báo cáo/PDF đẹp + logo công ty):** Phần S (đưa lên THỬ, tải logo, thử) → báo Claude chỗ chưa ưng → nói **"phát hành THẬT"** → Phần T. Đợt 4 (Phần P–R) đã xong và chạy THẬT từ 21/10/2026.
 
 **Thứ tự lần này (Đợt 4 — Xóa sạch dữ liệu):** Phần P (đưa máy chủ Đợt 4 lên THỬ) → Phần Q (thử Đợt 4 trên `/ME-thu/`) → báo Claude kết quả → khi muốn dùng ở THẬT, nói **"phát hành THẬT"** → Phần R. **Trạng thái 16/10/2026:** Đợt 1, 2, 3 đang chạy THẬT (Phần M, N, O của Đợt 3 đã xong). Phần J–L (Đợt 2), F–I (dựng THẬT), A–E (Đợt 1) giữ để tra cứu.
 
 Cần 2 tệp trong thư mục `apps-script/` của repo: `appsscript.json` và `Code.gs`. Tệp `Code.gs` lớn: mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+
+---
+
+## Phần U — Bản 1.0.0-d4.12: nối app Checksheet (lấy danh sách thiết bị một chiều)
+
+Bản này chỉ thêm **một cửa chỉ-đọc** (`feed.equipment`) để app Checksheet lấy **khu vực và thiết bị** (mã, tên, khu vực, trạng thái, loại, model, mã QR) mỗi giờ. Không có giá, hợp đồng, người dùng hay dữ liệu khác; Checksheet không sửa được gì bên M&E. **Không thêm sheet, không cần `migrateSchema`, không cần cấp quyền mới.** App M&E trên điện thoại không đổi gì.
+
+Làm ở máy chủ **THỬ** trước (Checksheet THỬ nối M&E THỬ); khi phát hành thì làm lại ở máy chủ **THẬT** (Checksheet THẬT nối M&E THẬT).
+
+1. Mở dự án Apps Script `ME_MayChu_THU` (THẬT: `ME_MayChu_THAT`) → tệp **Code.gs** → Ctrl+A, Delete.
+2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME-thu/main/apps-script/Code.gs` (THẬT: `…/ME/main/…` sau khi Claude đẩy `main`) → Ctrl+A → Ctrl+C → dán vào Code.gs → **Lưu** (Ctrl+S).
+3. **Triển khai → Quản lý các bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → mô tả `d4.12` → **Triển khai**. Link `/exec` giữ nguyên.
+4. Chọn hàm **`adminCreateFeedKey`** → **Chạy** → **Nhật ký thực thi** hiện dòng "Đã tạo mã kết nối Checksheet: …" — chép **cả dãy ký tự** sau dấu hai chấm (dài khoảng 43 ký tự). Chạy lại lúc nào cũng in lại đúng mã đó.
+5. Chép **link `/exec`** của chính máy chủ này (Triển khai → Quản lý các bản triển khai → URL ứng dụng web).
+6. Mở **app Checksheet** (cùng môi trường: THỬ với THỬ, THẬT với THẬT) bằng tài khoản Quản trị → **Tài khoản → Quản trị → Kết nối M&E** → dán link `/exec` và mã kết nối → **Lưu và lấy danh sách** → nhập PIN. Thành công: hiện số khu vực, số thiết bị vừa lấy.
+7. Chạy `healthCheck` bên M&E: dòng `checksheet_feed` = ON.
+
+- Mã kết nối giống mật khẩu: không gửi qua chat, không dán vào nơi khác ngoài màn Kết nối M&E của Checksheet.
+- Lộ mã: xóa thuộc tính `FEED_KEY_CS` (Cài đặt dự án → Thuộc tính tập lệnh) → chạy lại `adminCreateFeedKey` → nhập mã mới bên Checksheet.
+- Từ lúc nối, thiết bị **chỉ sửa ở M&E**; Checksheet tự cập nhật trong vòng 1 giờ (hoặc bấm **Cập nhật từ M&E** trong Checksheet).
 
 ---
 

@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d4.11
+ * M&E · 机电管理 — Code.gs 1.0.0-d4.12
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.11';
+var SERVER_VERSION = '1.0.0-d4.12';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.4';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4)
 var TZ = 'Asia/Ho_Chi_Minh';
@@ -2093,6 +2093,8 @@ var ACTION_TABLE_ = [
   // 4.4.17 Hệ thống, đồng bộ, dịch
   'system.health|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   'system.getPublicState|-|-|Y Y Y Y Y Y Y Y|public|1|R',
+  // Bổ sung d4.12: app Checksheet lấy danh sách thiết bị (không phiên, khóa bằng mã kết nối FEED_KEY_CS)
+  'feed.equipment|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   'sync.bootstrap|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.changes|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.push|-|-|Y Y Y Y Y Y Y Y|session|1|R',
@@ -2769,6 +2771,7 @@ var HANDLERS_ = {
   'user.revokeSessions': function (ctx) { return userRevokeSessions_(ctx); },
   'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
+  'feed.equipment': function (req) { return feedEquipment_(req); },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
   'sync.push': function (ctx) { return syncPush_(ctx); },
@@ -2925,7 +2928,7 @@ var DUE_ACTIONS_ = {
 };
 
 /** Action không cần phiên (chỉ qua bước 1 và 3 của 4.2) */
-var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1 };
+var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1, 'feed.equipment': 1 };
 
 /**
  * Action được chạy khi bảo trì. Đợt 4 (1.4 §21.5.1): đăng nhập (chỉ owner, nhận phiên phục hồi), tiến độ và tiếp tục đợt Xóa sạch.
@@ -3051,7 +3054,8 @@ function dispatchInner_(req, viaPush) {
   if (!def || def.net === 'internal') throw apiError_('FORBIDDEN');
   if (!dotReleased_(def.dot) || !HANDLERS_[req.action]) throw apiError_('FEATURE_NOT_ENABLED');
   if (req.action !== 'system.health' && req.action !== 'system.getPublicState') {
-    if (cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
+    // feed.equipment do máy chủ Checksheet gọi: không theo phiên bản app M&E tối thiểu
+    if (req.action !== 'feed.equipment' && cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
     if (!isUuidV4_(req.device_id)) throw validationError_([fieldError_('device_id', 'ID_INVALID')]);
   }
   // 3. Bảo trì
@@ -8056,6 +8060,8 @@ function healthRows_() {
   add('last_mail_sent', true, lastSent ? lastSent.slice(0, 16).replace('T', ' ') : '', setting_('gmail_enabled') ? 'Gmail ON' : 'Gmail OFF');
   var base = String(setting_('app_base_url') || '');
   add('app_base_url', !!base, base, base ? '' : 'Chưa điền app_base_url (link trong email)');
+  // d4.12: mã kết nối cho app Checksheet (chỉ báo có/không, không in mã)
+  add('checksheet_feed', true, prop_('FEED_KEY_CS') ? 'ON' : 'OFF', prop_('FEED_KEY_CS') ? '' : 'Chưa nối Checksheet (chạy adminCreateFeedKey khi cần)');
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;
@@ -15618,6 +15624,68 @@ function entityPdf_(o) {
     throw e;
   }
   return pdfFinish_(pd);
+}
+
+// ===== 36_feed.js =====
+/* 36_feed: cửa chỉ-đọc danh sách thiết bị cho app Checksheet (1.0.0-d4.12, người dùng yêu cầu 28/10/2026).
+ * Không cần phiên; khóa bằng mã kết nối FEED_KEY_CS trong Thuộc tính tập lệnh (tạo bằng adminCreateFeedKey, chép sang app
+ * Checksheet). Chỉ trả khu vực và thiết bị (mã, tên, khu vực, trạng thái, loại, model, mã QR) — không có giá, hợp đồng, người dùng
+ * hay dữ liệu khác. Checksheet lấy một chiều mỗi giờ; thiết bị vẫn chỉ sửa ở M&E. */
+
+var FEED_MIN_KEY_ = 24;
+
+/** Mốc phiên bản nguồn: đổi khi Thiết bị, Khu vực, Danh mục tra cứu hoặc mã QR đổi (Checksheet không đổi thì khỏi tải lại) */
+function feedRev_(st) {
+  return ['Equipment', 'Locations', 'LookupValues', 'QrRegistry'].map(function (n) { return Number(stateGet_(st, 'table_rev.' + n, 0)); }).join('.') +
+    ':' + String(sysProps_().dataset_epoch || '').slice(0, 8);
+}
+
+/** feed.equipment {key, since_rev?, client?} — public; sai mã → FORBIDDEN */
+function feedEquipment_(req) {
+  var p = req.payload || {};
+  var want = prop_('FEED_KEY_CS') || '';
+  if (want.length < FEED_MIN_KEY_ || !ctEqualStr_(String(p.key || ''), want)) throw apiError_('FORBIDDEN');
+  var st = readState_();
+  var rev = feedRev_(st);
+  if (p.since_rev && String(p.since_rev) === rev) return { unchanged: true, rev: rev };
+  var tc = tableCache_(['Equipment', 'Locations', 'LookupValues', 'QrRegistry'], st);
+  var cat = {};
+  tc.rows('LookupValues').forEach(function (v) { if (v.group_key === 'EQUIPMENT_CATEGORY') cat[v.value_id] = v; });
+  var qr = {};
+  tc.rows('QrRegistry').forEach(function (q) { if (q.entity_type === 'EQUIPMENT' && q.active) qr[q.entity_id] = q.qr_key; });
+  var locations = tc.rows('Locations').map(function (l) {
+    return {
+      location_id: l.location_id, location_code: l.location_code, name_vi: l.name_vi, name_zh: l.name_zh,
+      parent_location_id: l.parent_location_id || '', active: l.active !== false && !l.archived_at
+    };
+  });
+  var equipment = tc.rows('Equipment').map(function (e) {
+    var c = cat[e.category_id];
+    return {
+      equipment_id: e.equipment_id, equipment_code: e.equipment_code, name_vi: e.name_vi, name_zh: e.name_zh,
+      location_id: e.location_id || '', status: e.status || '', category_vi: c ? c.name_vi : '', category_zh: c ? c.name_zh : '',
+      model: e.model || '', qr_key: qr[e.equipment_id] || '', archived: !!e.archived_at
+    };
+  });
+  return { rev: rev, locations: locations, equipment: equipment, server_time: isoVN_(now_()) };
+}
+
+/**
+ * Chạy từ trình soạn: tạo mã kết nối cho app Checksheet (một lần) và in ra nhật ký để chép sang
+ * Checksheet → Tài khoản → Quản trị → Kết nối M&E. Đã có mã thì in lại mã cũ (không đổi, Checksheet vẫn chạy).
+ * Muốn đổi mã (lộ mã): xóa FEED_KEY_CS trong Thuộc tính tập lệnh rồi chạy lại, nhập mã mới bên Checksheet.
+ */
+function adminCreateFeedKey() {
+  var props = PropertiesService.getScriptProperties();
+  var k = props.getProperty('FEED_KEY_CS');
+  if (!k) {
+    k = b64url_(randomSecret32_());
+    props.setProperty('FEED_KEY_CS', k);
+    log_('Đã tạo mã kết nối Checksheet: ' + k);
+  } else {
+    log_('Mã kết nối Checksheet (đang dùng): ' + k);
+  }
+  log_('Chép mã này và link /exec của máy chủ M&E này sang app Checksheet → Tài khoản → Quản trị → Kết nối M&E.');
 }
 
 // ===== i18n/labels.json =====

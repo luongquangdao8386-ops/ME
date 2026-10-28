@@ -174,6 +174,8 @@ var ACTION_TABLE_ = [
   // 4.4.17 Hệ thống, đồng bộ, dịch
   'system.health|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   'system.getPublicState|-|-|Y Y Y Y Y Y Y Y|public|1|R',
+  // Bổ sung d4.12: app Checksheet lấy danh sách thiết bị (không phiên, khóa bằng mã kết nối FEED_KEY_CS)
+  'feed.equipment|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   'sync.bootstrap|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.changes|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.push|-|-|Y Y Y Y Y Y Y Y|session|1|R',

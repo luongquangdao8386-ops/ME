@@ -20,6 +20,7 @@ var HANDLERS_ = {
   'user.revokeSessions': function (ctx) { return userRevokeSessions_(ctx); },
   'system.getPublicState': function (req) { return publicState_(req); },
   'system.health': function () { return { app_id: APP_ID }; },
+  'feed.equipment': function (req) { return feedEquipment_(req); },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
   'sync.push': function (ctx) { return syncPush_(ctx); },
@@ -176,7 +177,7 @@ var DUE_ACTIONS_ = {
 };
 
 /** Action không cần phiên (chỉ qua bước 1 và 3 của 4.2) */
-var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1 };
+var PUBLIC_ACTIONS_ = { 'auth.login': 1, 'system.getPublicState': 1, 'system.health': 1, 'feed.equipment': 1 };
 
 /**
  * Action được chạy khi bảo trì. Đợt 4 (1.4 §21.5.1): đăng nhập (chỉ owner, nhận phiên phục hồi), tiến độ và tiếp tục đợt Xóa sạch.
@@ -302,7 +303,8 @@ function dispatchInner_(req, viaPush) {
   if (!def || def.net === 'internal') throw apiError_('FORBIDDEN');
   if (!dotReleased_(def.dot) || !HANDLERS_[req.action]) throw apiError_('FEATURE_NOT_ENABLED');
   if (req.action !== 'system.health' && req.action !== 'system.getPublicState') {
-    if (cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
+    // feed.equipment do máy chủ Checksheet gọi: không theo phiên bản app M&E tối thiểu
+    if (req.action !== 'feed.equipment' && cmpVersion_(req.app_version, setting_('min_client_version')) < 0) throw apiError_('CLIENT_UPDATE_REQUIRED');
     if (!isUuidV4_(req.device_id)) throw validationError_([fieldError_('device_id', 'ID_INVALID')]);
   }
   // 3. Bảo trì
