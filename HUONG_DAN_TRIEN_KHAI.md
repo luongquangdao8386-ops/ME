@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.14 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14 thanh nút dưới to hơn)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.15 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,7 +16,7 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Bản d4.14 (thanh 5 nút dưới iPhone to hơn) cũng chỉ đổi app — không dán Code.gs;** iPhone tắt hẳn app rồi mở lại, Tài khoản → Thông tin: **1.0.0-d4.14**.
+**Bản d4.14–d4.15 (thanh 5 nút dưới iPhone to hơn, ô vàng Quét QR to và nổi lên) cũng chỉ đổi app — không dán Code.gs;** iPhone tắt hẳn app rồi mở lại, Tài khoản → Thông tin: **1.0.0-d4.15**.
 
 **Bản d4.13 (lịch tháng, tab Thuật ngữ) chỉ đổi app — không phải dán Code.gs:** trang THỬ `/ME-thu/` tự cập nhật; mở app → Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.13**. Thử: **Nhắc hạn → Lịch tháng** (bộ lọc theo loại, bấm ngày, Hôm nay; máy tính có danh sách bên phải) và **Tài khoản → Quản trị → Danh mục chung → Thuật ngữ** (đổi tab ngay). Ưng thì nói **"phát hành THẬT"**.
 

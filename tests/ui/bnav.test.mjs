@@ -1,5 +1,6 @@
 // d4.14: thanh 5 nút dưới (iPhone) to hơn — chữ Việt 13 px / Trung 12 px, biểu tượng 28 px, vạch navy trên nút đang mở;
-// 390 px và 320 px (iPhone SE): nhãn không tràn, mỗi thứ tiếng một dòng; cuối trang không bị thanh nút che
+// 390 px và 320 px (iPhone SE): nhãn không tràn, mỗi thứ tiếng một dòng; cuối trang không bị thanh nút che.
+// d4.15: ô vàng Quét QR to (≥ 68 × 52 / 60 × 48 px), nhô lên khỏi mép thanh ≥ 10 px, chữ thẳng hàng với các nút khác
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -27,12 +28,19 @@ const measure = (page) => page.evaluate(() => {
       // một dòng mỗi thứ tiếng, không thò ra ngoài ô nút
       oneLine: vi.getBoundingClientRect().height <= lineH(vi) + 1 && zh.getBoundingClientRect().height <= lineH(zh) + 1,
       inside: vi.getBoundingClientRect().left >= r.left - 1 && vi.getBoundingClientRect().right <= r.right + 1 && zh.getBoundingClientRect().right <= r.right + 1,
-      active: it.classList.contains('active'), bar: getComputedStyle(it, '::before').content !== 'none' && getComputedStyle(it, '::before').height
+      active: it.classList.contains('active'), bar: getComputedStyle(it, '::before').content !== 'none' && getComputedStyle(it, '::before').height,
+      labelTop: it.querySelector('.bnav-label').getBoundingClientRect().top
     };
   });
 });
 
-for (const [name, width, minVi] of [['iPhone 390', 390, 13], ['iPhone SE 320', 320, 12]]) {
+const scanBox = (page) => page.evaluate(() => {
+  const b = document.querySelector('.bnav-scan-box').getBoundingClientRect();
+  const nav = document.querySelector('.bnav').getBoundingClientRect();
+  return { w: b.width, h: b.height, top: b.top, navTop: nav.top };
+});
+
+for (const [name, width, minVi, boxW, boxH] of [['iPhone 390', 390, 13, 68, 52], ['iPhone SE 320', 320, 12, 60, 48]]) {
   test(`thanh nút dưới ${name}: chữ ≥ ${minVi} px, biểu tượng ≥ 26 px, nhãn một dòng không tràn, vạch nút đang mở; cuối trang không bị che`, async () => {
     const env = freshServer();
     ownerClient(env);
@@ -49,6 +57,11 @@ for (const [name, width, minVi] of [['iPhone 390', 390, 13], ['iPhone SE 320', 3
         assert.ok(x.oneLine, `${x.vi}: nhãn xuống dòng`);
         assert.ok(x.inside, `${x.vi}: nhãn tràn khỏi nút`);
       }
+      const tops = m.map((x) => x.labelTop);
+      assert.ok(Math.max(...tops) - Math.min(...tops) <= 3, `chữ các nút lệch hàng: ${tops.join(', ')}`);
+      const sb = await scanBox(page);
+      assert.ok(sb.w >= boxW && sb.h >= boxH, `ô vàng Quét QR ${sb.w} × ${sb.h}`);
+      assert.ok(sb.top <= sb.navTop - 10 && sb.top >= 0, `ô vàng nhô lên khỏi thanh: ô ${sb.top}, thanh ${sb.navTop}`);
       const home = m.find((x) => x.active);
       assert.ok(home && home.vi === 'Trang chủ' && home.bar === '3px', 'nút đang mở có vạch navy 3 px');
       // Cuộn hết trang chủ: ô cuối của lưới 9 mục nằm trên thanh nút

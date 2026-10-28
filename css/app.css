@@ -328,14 +328,20 @@ main { padding: 10px 12px 24px; max-width: 1100px; margin: 0 auto; }
 .bnav-item.active { color: var(--navy); font-weight: 700; }
 .bnav-item.active::before { content: ''; position: absolute; top: -6px; left: 22%; right: 22%; height: 3px; border-radius: 0 0 3px 3px; background: var(--navy); }
 .bnav-item .soon { font-size: 0.59375rem; margin-top: 0; }
-.bnav-scan-box { display: inline-flex; align-items: center; justify-content: center; width: 50px; height: 36px; border-radius: 10px; background: var(--yellow); color: var(--navy); flex: none; }
-.bnav-scan-box svg { width: 26px; height: 26px; }
+/* d4.15: ô vàng Quét QR to, nhô lên khỏi thanh ~14 px (viền trắng + bóng) — cao trừ phần nhô = cỡ biểu tượng các nút khác (28 px),
+   nên thanh không cao thêm và chữ thẳng hàng */
+.bnav-scan-box { display: inline-flex; align-items: center; justify-content: center; width: 68px; height: 52px; margin-top: -24px; border-radius: 16px;
+  background: var(--yellow); color: var(--navy); flex: none; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(23,50,79,0.22); }
+.bnav-scan-box svg { width: 32px; height: 32px; }
+.bnav-scan:active .bnav-scan-box { transform: translateY(1px); box-shadow: 0 1px 5px rgba(23,50,79,0.22); }
 .bnav-scan { color: var(--navy); font-weight: 700; }
 /* Màn hẹp (iPhone SE, 320–360 px): chữ nhỏ lại một chút để "Công việc", "Tài khoản" không xuống dòng */
 @media (max-width: 360px) {
   .bnav-item { font-size: 0.75rem; }
   .bnav-item .bnav-label .zh { font-size: 0.6875rem; }
   .bnav-item svg { width: 26px; height: 26px; }
+  .bnav-scan-box { width: 60px; height: 48px; margin-top: -22px; }
+  .bnav-scan-box svg { width: 30px; height: 30px; }
 }
 
 /* trang chủ */
