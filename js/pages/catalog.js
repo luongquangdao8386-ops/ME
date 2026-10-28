@@ -7,12 +7,40 @@ import { textInput, textArea, selectInput, bilingualInputs, wireForm, readField,
 import { afterCommit } from '../app.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
+import { getMeta, setMeta } from '../sync.js';
 
 const TABS = ['locations', 'vendors', 'lookups', 'glossary'];
 const LOC_TYPES = ['AREA', 'BUILDING', 'WORKSHOP', 'ROOM', 'STATION', 'OTHER'];
 const GROUPS = ['EQUIPMENT_CATEGORY', 'UNIT', 'SPEC_KEY', 'CAUSE'];
 let tab = 'locations';
 let group = 'EQUIPMENT_CATEGORY';
+
+// Thuật ngữ không đồng bộ xuống máy (chỉ đọc qua catalog.view, một lượt Apps Script 2–4 giây): giữ bản gần nhất trên máy
+// (meta cat:glossary) để bấm tab là hiện ngay, hỏi máy chủ ở nền rồi vẽ lại khi khác; mở Danh mục chung là lấy sẵn (d4.13)
+const GLOSS_FRESH_MS = 60000;
+let gloss = null;          // {items, at}
+let glossLoading = null;
+let glossErr = null;
+async function glossaryCached() {
+  if (gloss) return gloss;
+  const m = await getMeta('cat:glossary');
+  if (m && Array.isArray(m.items)) gloss = m;
+  return gloss;
+}
+function fetchGlossary() {
+  if (!glossLoading) {
+    glossLoading = api('catalog.view', {}, { retry: true }).then(async (r) => {
+      if (!r.ok) { glossErr = r; return { error: r }; }
+      glossErr = null;
+      const v = { items: r.data.glossary || [], at: Date.now() };
+      const changed = !gloss || JSON.stringify(gloss.items) !== JSON.stringify(v.items);
+      gloss = v;
+      await setMeta('cat:glossary', v).catch(() => {});
+      return { changed };
+    }).finally(() => { glossLoading = null; });
+  }
+  return glossLoading;
+}
 
 const activeBadge = (r) => badge(r.active === false ? 'catalog.inactive' : 'catalog.active');
 const check = (id, key, on) => `<div class="fld" data-field="${id}"><label class="check"><input type="checkbox" id="f-${id}"${on ? ' checked' : ''}><span>${bi(key)}</span></label><div class="ferr" role="alert"></div></div>`;
@@ -129,6 +157,9 @@ export async function renderCatalog(view, { shell, query }) {
     history.replaceState(history.state, '', '#/admin/catalog');
   }
   shell.setScreen({ title: 'admin.catalog', back: '/account' });
+  const g0 = await glossaryCached();
+  const glossStale = navigator.onLine && !glossErr && (!g0 || Date.now() - g0.at > GLOSS_FRESH_MS);
+  if (glossStale && tab !== 'glossary') fetchGlossary(); // lấy sẵn khi đang ở tab khác
   const perm = { locations: await can('location.edit'), vendors: await can('vendor.edit'), lookups: await can('lookup.edit'), glossary: await can('glossary.edit') };
   const repaint = () => renderCatalog(view, { shell });
   const tabBar = `<div class="tabs-bar" role="tablist">${TABS.map((t) => `<button type="button" role="tab" class="tab${t === tab ? ' on' : ''}" data-tab="${t}" aria-selected="${t === tab}">${bi('adm.cat.' + t)}</button>`).join('')}</div>`;
@@ -160,27 +191,33 @@ export async function renderCatalog(view, { shell, query }) {
         card: `<div class="rec-top"><span class="code">${esc(x.code)}</span>${activeBadge(x)}</div><div class="rec-name">${biName(x)}</div>`
       })));
   } else {
-    if (!navigator.onLine) body = `<p class="muted">${bi('sync.need_network')}</p>`;
-    else {
-      const r = await api('catalog.view', {}, { retry: true });
-      if (!r.ok) body = `<p class="muted">${esc(resMsg(r))}</p>`;
-      else {
-        items = r.data.glossary.slice().sort((a, b) => String(a.term_vi).localeCompare(String(b.term_vi), 'vi'));
-        const st = (x) => `${badge(x.approved_by ? 'glossary.approved' : 'glossary.unapproved')} ${x.active === false ? badge('catalog.inactive') : ''}`;
-        body = `<p class="muted small">${bi('glossary.help')}</p>` + table([bi('field.term_vi'), bi('field.term_zh'), bi('field.note'), bi('col.status')], items.map((x) => ({
-          id: x.glossary_id, cells: [esc(x.term_vi), esc(x.term_zh), esc(x.note || ''), st(x)],
-          card: `<div class="rec-name">${esc(x.term_vi)} · ${esc(x.term_zh)}</div>${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ''}<div class="rec-badges">${st(x)}</div>`
-        })));
-      }
+    if (glossStale) {
+      const seq = view._glossSeq = (view._glossSeq || 0) + 1;
+      fetchGlossary().then((res) => {
+        if (view._glossSeq !== seq || tab !== 'glossary' || !view.isConnected) return;
+        if (res.changed || res.error) repaint();
+      });
+    }
+    if (!g0) {
+      if (glossErr) body = `<p class="muted">${esc(resMsg(glossErr))}</p>`;
+      else if (!navigator.onLine) body = `<p class="muted">${bi('sync.need_network')}</p>`;
+      else body = '<div class="spinner small" role="status"></div>';
+    } else {
+      items = g0.items.slice().sort((a, b) => String(a.term_vi).localeCompare(String(b.term_vi), 'vi'));
+      const st = (x) => `${badge(x.approved_by ? 'glossary.approved' : 'glossary.unapproved')} ${x.active === false ? badge('catalog.inactive') : ''}`;
+      body = `<p class="muted small">${bi('glossary.help')}</p>` + table([bi('field.term_vi'), bi('field.term_zh'), bi('field.note'), bi('col.status')], items.map((x) => ({
+        id: x.glossary_id, cells: [esc(x.term_vi), esc(x.term_zh), esc(x.note || ''), st(x)],
+        card: `<div class="rec-name">${esc(x.term_vi)} · ${esc(x.term_zh)}</div>${x.note ? `<div class="muted small">${esc(x.note)}</div>` : ''}<div class="rec-badges">${st(x)}</div>`
+      })));
     }
   }
   const xl = await excelLink({ locations: 'locations', vendors: 'vendors', lookups: 'lookups', glossary: 'glossary' }[tab]);
   view.innerHTML = `${tabBar}<div class="tab-body"><div class="toolbar"><div class="row"><span class="muted">${bi('field.total', { N: items.length })}</span>${addBtn}${xl}</div></div>${body}</div>`;
-  $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; repaint(); }));
+  $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { tab = b.dataset.tab; glossErr = null; repaint(); }));
   $$('[data-group]', view).forEach((b) => b.addEventListener('click', () => { group = b.dataset.group; repaint(); }));
   const open = async (rec) => {
     const done = tab === 'locations' ? await locationDialog(rec, items) : tab === 'vendors' ? await vendorDialog(rec) : tab === 'lookups' ? await lookupDialog(rec) : await glossaryDialog(rec);
-    if (done) repaint();
+    if (done) { if (tab === 'glossary' && gloss) gloss.at = 0; repaint(); }
   };
   const add = $('#cat-add', view);
   if (add) add.addEventListener('click', () => open(null));

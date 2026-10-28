@@ -19,8 +19,8 @@ export async function deadlineText(it) {
   return nameText(it.rec, 'title');
 }
 
-const KIND_KEY = { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', REPAIR: 'home.item_repair', READING: 'home.item_reading' };
-function kindTag(kind) {
+const KIND_KEY = { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', PLAN: 'cal.item_plan', REPAIR: 'home.item_repair', READING: 'home.item_reading' };
+export function kindTag(kind) {
   return `<span class="kind k-${kind.toLowerCase()}">${bi(KIND_KEY[kind] || 'home.item_service')}</span>`;
 }
 
@@ -40,22 +40,38 @@ async function meterReads() {
   return { meters, by };
 }
 
-/** Mục trong lịch tuần: hạn kiểm định, hạn hợp đồng (hạn báo gia hạn, ngày hết hạn), dịch vụ HĐ chưa làm (6.6) */
-async function weekItems(from, to) {
+/**
+ * Việc theo ngày trong [from, to] cho lịch tuần (trang chủ) và lịch tháng: hạn kiểm định, hạn hợp đồng (hạn báo gia hạn, ngày hết hạn),
+ * dịch vụ HĐ chưa làm (6.6), mốc đọc chỉ số (Đợt 3), phiếu bảo trì theo hạn (Đợt 2); `plans` thêm hạn kế tiếp của kế hoạch bảo trì
+ * chưa sinh phiếu (lịch tháng). Mỗi mục {date, kind, code, title, href, done, sub}.
+ */
+export async function calendarItems(from, to, { plans = false } = {}) {
   const out = [];
+  const types = await mapOf('INSPECTION_TYPE');
+  const eqs = await mapOf('EQUIPMENT');
+  const eqText = (id) => { const e = eqs.get(id); return e ? `${e.equipment_code} ${nameText(e)}` : ''; };
   for (const r of await recs('INSPECTION_REQUIREMENT')) {
     if (r.active === false || !r.current_due_date) continue;
-    if (r.current_due_date >= from && r.current_due_date <= to) out.push({ date: r.current_due_date, kind: 'INSPECTION', code: r.requirement_code, href: '/inspections/' + r.requirement_id });
+    if (r.current_due_date >= from && r.current_due_date <= to) {
+      const ty = types.get(r.inspection_type_id);
+      out.push({ date: r.current_due_date, kind: 'INSPECTION', code: r.requirement_code, href: '/inspections/' + r.requirement_id,
+        title: [ty ? nameText(ty) : '', eqText(r.equipment_id)].filter(Boolean).join(' — ') });
+    }
   }
+  const contracts = new Map();
   for (const c of await recs('CONTRACT')) {
+    contracts.set(c.contract_id, c);
     if (c.lifecycle_status !== 'ACTIVE') continue; // dự thảo, phiên cũ, đã kết thúc: không nhắc
-    for (const d of [c.renewal_notice_date, c.end_date]) {
-      if (d && d >= from && d <= to) out.push({ date: d, kind: 'CONTRACT', code: c.contract_code, href: '/contracts/' + c.contract_id });
+    for (const [d, sub] of [[c.renewal_notice_date, 'RENEWAL'], [c.end_date, 'END']]) {
+      if (d && d >= from && d <= to) out.push({ date: d, kind: 'CONTRACT', code: c.contract_code, href: '/contracts/' + c.contract_id, title: nameText(c, 'title'), sub });
     }
   }
   for (const s of await recs('CONTRACT_SERVICE')) {
     if (s.performed_at || !s.due_date) continue;
-    if (s.due_date >= from && s.due_date <= to) out.push({ date: s.due_date, kind: 'SERVICE', code: '', href: '/contracts/' + s.contract_id });
+    if (s.due_date >= from && s.due_date <= to) {
+      const c = contracts.get(s.contract_id);
+      out.push({ date: s.due_date, kind: 'SERVICE', code: c ? c.contract_code : '', href: '/contracts/' + s.contract_id, title: c ? nameText(c, 'title') : '' });
+    }
   }
   // Mốc đọc chỉ số (Đợt 3): một mục mỗi ngày có mốc, kèm số đồng hồ; đã đọc đủ thì mờ
   if (dot3()) {
@@ -65,14 +81,22 @@ async function weekItems(from, to) {
       const due = meters.filter((m) => lastBoundary(m, d) === d);
       if (!due.length) continue;
       const done = d <= today() && due.every((m) => readingDue(m, by.get(m.meter_id) || [], d).state === 'DONE');
-      out.push({ date: d, kind: 'READING', code: String(due.length), href: '/utilities/meters', done });
+      out.push({ date: d, kind: 'READING', code: String(due.length), href: '/utilities/meters', done, title: biText('home.meters_due', { N: due.length }) });
     }
   }
-  // Phiếu bảo trì theo hạn (Đợt 2)
+  // Phiếu bảo trì theo hạn (Đợt 2); kế hoạch chưa sinh phiếu cho hạn kế tiếp (lịch tháng)
   if (dot2()) {
-    for (const w of await recs('WORK_ORDER')) {
-      if (w.status === 'CANCELLED' || !w.due_date) continue;
-      if (w.due_date >= from && w.due_date <= to) out.push({ date: w.due_date, kind: 'WO', code: w.work_order_code, href: '/maintenance/wo/' + w.work_order_id, done: w.status === 'COMPLETED' });
+    const wos = (await recs('WORK_ORDER')).filter((w) => w.status !== 'CANCELLED' && w.due_date);
+    for (const w of wos) {
+      if (w.due_date >= from && w.due_date <= to) out.push({ date: w.due_date, kind: 'WO', code: w.work_order_code, href: '/maintenance/wo/' + w.work_order_id, done: w.status === 'COMPLETED',
+        title: [nameText(w, 'title'), eqText(w.equipment_id)].filter(Boolean).join(' — ') });
+    }
+    if (plans) {
+      for (const p of await recs('MAINTENANCE_PLAN')) {
+        if (p.active === false || p.archived_at || !p.next_due_date || p.next_due_date < from || p.next_due_date > to) continue;
+        if (wos.some((w) => w.plan_id === p.plan_id && w.due_date === p.next_due_date)) continue;
+        out.push({ date: p.next_due_date, kind: 'PLAN', code: p.plan_code, href: '/maintenance/plans/' + p.plan_id, title: [nameText(p, 'title'), eqText(p.equipment_id)].filter(Boolean).join(' — ') });
+      }
     }
   }
   return out;
@@ -81,7 +105,7 @@ async function weekItems(from, to) {
 async function weekHtml() {
   const t = today();
   const from = weekStart(t), to = addDays(from, 6);
-  const items = await weekItems(from, to);
+  const items = await calendarItems(from, to);
   const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
   return `<section class="card home-week">
     <div class="card-head"><h2>${bi('home.week')}</h2><span class="muted">${esc(fmtDate(from))} – ${esc(fmtDate(to))}</span>

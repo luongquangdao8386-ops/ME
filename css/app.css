@@ -429,14 +429,76 @@ a.rec-card:active, .tile:active { background: #EEF2F6; }
 label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 
 /* lịch tháng (HOME-02) */
-.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
-.mg-head { font-size: 0.6875rem; text-align: center; color: var(--graphite); }
-.mg-head .vi, .mg-head .zh { display: block; }
-.mg-head .sep { display: none; }
-.mg-cell { min-height: 44px; border-radius: 8px; background: #fff; border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
-.mg-cell.out { opacity: 0.35; }
-.mg-cell.today { border-color: var(--navy); }
-.mg-dot { font-size: 0.6875rem; font-weight: 700; background: var(--amber); color: #fff; border-radius: 999px; padding: 0 6px; }
+/* Lịch tháng (HOME-02, d4.13): màu theo loại việc giống lịch tuần (kiểm định xanh, hợp đồng nâu, dịch vụ xanh lá, bảo trì tím,
+   kế hoạch tím viền rỗng, chỉ số cam); quá hạn chữ đỏ, xong thì mờ; T7/CN nền nhạt; hôm nay số trong ô tròn navy */
+.ck-inspection { --c: #3A6EA5; }
+.ck-contract { --c: #8A6D1F; }
+.ck-service { --c: #4F7D6B; }
+.ck-wo, .ck-plan { --c: #5B4FA0; }
+.ck-reading { --c: #C2611D; }
+.cal-page { display: grid; gap: 12px; }
+.cal-page > .card { margin: 0; }
+.cal { padding: 14px 12px; }
+.cal-head { display: flex; align-items: center; gap: 4px; }
+.cal-title { font-size: 1.0625rem; margin: 0 2px; color: var(--navy); line-height: 1.2; min-width: 0; }
+.cal-title .vi, .cal-title .zh { display: block; white-space: nowrap; }
+.cal-title .sep { display: none; }
+.cal-title .zh { font-size: 0.8125rem; font-weight: 600; color: var(--graphite); }
+.cal-today { margin-left: auto; flex: none; }
+.cal-sum { display: flex; gap: 6px 12px; flex-wrap: wrap; font-size: 0.8125rem; color: var(--graphite); margin: 4px 2px 0; }
+.cal-sum-over { color: var(--red); font-weight: 600; }
+.cal-chips { margin: 8px 0 10px; }
+.cal-key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: 0; flex: none; }
+.cal-chip.ck-plan .cal-key { background: #fff; box-shadow: inset 0 0 0 1.5px var(--c); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.cal-wd { font-size: 0.6875rem; text-align: center; color: var(--graphite); line-height: 1.2; padding: 0 0 4px; }
+.cal-wd .vi, .cal-wd .zh { display: block; }
+.cal-wd .sep { display: none; }
+.cal-wd.we { color: var(--amber); }
+.cal-cell { -webkit-appearance: none; appearance: none; font: inherit; color: var(--text); text-align: left; cursor: pointer; min-width: 0; min-height: 54px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 2px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.cal-cell.we { background: #FAFAF7; }
+.cal-cell.out { opacity: 0.4; }
+.cal-cell.has-over { border-color: #F0C2BC; }
+.cal-cell.sel { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+.cal-cell:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+.cal-num { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+.cal-cell.today .cal-num { background: var(--navy); color: #fff; }
+.cal-pills { display: none; }
+.cal-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: 100%; }
+.cal-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.cal-dot.ck-plan { background: #fff; box-shadow: inset 0 0 0 1.5px var(--c); }
+.cal-dot.done { opacity: 0.4; }
+.cal-dot.plus { background: var(--muted); }
+.cal-agenda .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cal-group + .cal-group { margin-top: 12px; }
+.cal-date { display: flex; align-items: baseline; gap: 8px; font-size: 0.8125rem; color: var(--navy); padding: 2px 0 5px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.cal-date.today strong { background: var(--navy); color: #fff; padding: 1px 8px; border-radius: 999px; }
+.cal-item { display: block; text-decoration: none; color: inherit; padding: 7px 10px; border-radius: 8px; background: var(--bg); margin-bottom: 6px; }
+.cal-item:hover { background: #EDF1F5; }
+.cal-item.done { opacity: 0.6; }
+.cal-item-top { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.cal-item .kind { border-left: 0; }
+.cal-item-title { font-size: 0.875rem; margin-top: 3px; overflow-wrap: anywhere; }
+.cal-done { display: inline-flex; align-items: center; gap: 3px; font-size: 0.75rem; font-weight: 600; color: var(--green); }
+.cal-done svg { width: 14px; height: 14px; }
+.cal-agenda .empty-state { text-align: center; padding: 20px 8px; }
+.cal-agenda .empty-state svg { width: 36px; height: 36px; color: var(--muted); }
+@media (min-width: 900px) {
+  .cal-page { grid-template-columns: minmax(0, 1fr) 340px; align-items: start; }
+  .cal { padding: 16px 18px; }
+  .cal-title { font-size: 1.25rem; }
+  .cal-agenda { position: sticky; top: 76px; max-height: calc(100vh - 96px); overflow: auto; }
+  .cal-cell { min-height: 108px; align-items: stretch; padding: 5px; gap: 4px; }
+  .cal-pills { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cal-dots { display: none; }
+  .cal-ev { display: block; font-size: 0.6875rem; line-height: 1.35; padding: 1px 6px; border-radius: 5px; border-left: 3px solid var(--c);
+    background: color-mix(in srgb, var(--c) 11%, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cal-ev.ck-plan { border-left-style: dashed; background: #fff; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, #fff); }
+  .cal-ev.done { opacity: 0.5; }
+  .cal-ev.over { color: var(--red); font-weight: 600; }
+  .cal-more { font-size: 0.6875rem; color: var(--graphite); padding-left: 3px; }
+}
 
 /* QR */
 .qr-view { text-align: center; }

@@ -1,11 +1,11 @@
-// Nhắc hạn (nav 4, 5.2) và lịch kiểm định tháng (HOME-02)
+// Nhắc hạn (nav 4, 5.2) và lịch tháng (HOME-02; từ d4.13 gom mọi việc theo ngày như lịch tuần ở trang chủ)
 import { bi, biText, esc, fmtDate, badge, nameText } from '../core.js';
 import { ICON, toast, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
-import { mapOf, deadlineItems, dueSort, today, addDays, weekday, recs, dueInfo, can } from '../data.js';
+import { mapOf, deadlineItems, dueSort, today, addDays, weekday, recs, can } from '../data.js';
 import { writeOnline } from '../form.js';
 import { afterCommit } from '../app.js';
-import { deadlineText } from './home.js';
+import { deadlineText, calendarItems, kindTag } from './home.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
 
@@ -84,36 +84,112 @@ export async function renderAlerts(view, { shell }) {
 }
 
 let monthCursor = null;
+let selDay = null;   // ngày đang chọn (danh sách bên dưới/bên phải); null = cả tháng
+let calKind = '';    // lọc theo loại việc; '' = tất cả
+const CAL_KINDS = ['INSPECTION', 'CONTRACT', 'SERVICE', 'WO', 'PLAN', 'READING'];
+const CAL_ORDER = Object.fromEntries(CAL_KINDS.map((k, i) => [k, i]));
 
-/** HOME-02: lịch tháng, chỉ hạn kiểm định hiện hành, và danh sách đến hạn trong tháng */
+/** Trạng thái hiển thị của một việc: xong · quá hạn · hôm nay */
+function calState(x, t) {
+  if (x.done) return 'done';
+  if (x.date < t) return 'over';
+  return x.date === t ? 'today' : '';
+}
+
+function calBadge(x, t) {
+  const st = calState(x, t);
+  if (st === 'done') return `<span class="cal-done">${ICON.check}${bi('cal.done')}</span>`;
+  if (st === 'over') return badge('due_filter.OVERDUE');
+  if (st === 'today') return badge('due_filter.DUE_TODAY');
+  return '';
+}
+
+/**
+ * HOME-02 lịch tháng: mọi việc theo ngày (kiểm định, hợp đồng, dịch vụ HĐ, phiếu/kế hoạch bảo trì, mốc đọc chỉ số), lọc theo loại có số đếm,
+ * nút Hôm nay; ô ngày có tối đa 3 việc (web) hoặc chấm màu (iPhone); bấm ngày → danh sách việc của ngày đó, bấm lại → cả tháng.
+ * Quá hạn tô đỏ, xong thì mờ. Dữ liệu trên máy (xem được khi mất mạng).
+ */
 export async function renderMonth(view, { shell }) {
   shell.setScreen({ title: 'btn.month_calendar', back: '/alerts' });
   const t = today();
-  if (!monthCursor) monthCursor = t.slice(0, 7);
+  if (!monthCursor) { monthCursor = t.slice(0, 7); selDay = t; }
   const [y, m] = monthCursor.split('-').map(Number);
   const first = `${monthCursor}-01`;
   const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
   const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
   const last = addDays(`${nextMonth}-01`, -1);
-  const reqs = (await recs('INSPECTION_REQUIREMENT')).filter((r) => r.active !== false && r.current_due_date && r.current_due_date >= first && r.current_due_date <= last)
-    .sort((a, b) => a.current_due_date.localeCompare(b.current_due_date));
-  const types = await mapOf('INSPECTION_TYPE');
-  const eqs = await mapOf('EQUIPMENT');
   const start = addDays(first, 1 - weekday(first));
   const cells = [];
   for (let d = start; d <= last || weekday(d) !== 1; d = addDays(d, 1)) cells.push(d);
-  view.innerHTML = `<div class="card month">
-    <div class="card-head"><button type="button" class="icon-btn" id="m-prev" aria-label="‹">${ICON.back}</button><h2>${String(m).padStart(2, '0')}/${y}</h2><button type="button" class="icon-btn flip" id="m-next" aria-label="›">${ICON.back}</button></div>
-    <div class="month-grid">${[1, 2, 3, 4, 5, 6, 7].map((w) => `<div class="mg-head">${bi('weekday.' + w)}</div>`).join('')}
-    ${cells.map((d) => {
-      const n = reqs.filter((r) => r.current_due_date === d).length;
-      return `<div class="mg-cell${d.slice(0, 7) !== monthCursor ? ' out' : ''}${d === t ? ' today' : ''}"><span>${Number(d.slice(8, 10))}</span>${n ? `<span class="mg-dot">${n}</span>` : ''}</div>`;
-    }).join('')}</div></div>
-    <div class="cards">${reqs.map((r) => {
-      const ty = types.get(r.inspection_type_id), e = eqs.get(r.equipment_id), due = dueInfo(r.current_due_date);
-      return `<a class="card rec-card" href="#/inspections/${esc(r.requirement_id)}"><div class="rec-top"><span class="code">${esc(r.requirement_code)}</span><span>${esc(fmtDate(r.current_due_date))}</span></div>
-        <div class="rec-name">${esc(ty ? nameText(ty) : '')}</div><div class="muted small">${esc(e ? e.equipment_code + ' · ' + nameText(e) : '')}</div>${badge(due.key, due.vars)}</a>`;
-    }).join('') || `<p class="muted">${bi('home.none')}</p>`}</div>`;
-  view.querySelector('#m-prev').addEventListener('click', () => { monthCursor = prevMonth; renderMonth(view, { shell }); });
-  view.querySelector('#m-next').addEventListener('click', () => { monthCursor = nextMonth; renderMonth(view, { shell }); });
+  if (selDay && selDay.slice(0, 7) !== monthCursor) selDay = null;
+  const all = (await calendarItems(start, cells[cells.length - 1], { plans: true }))
+    .sort((a, b) => a.date.localeCompare(b.date) || CAL_ORDER[a.kind] - CAL_ORDER[b.kind] || String(a.code).localeCompare(String(b.code)));
+  const inMonth = (x) => x.date >= first && x.date <= last;
+  const monthAll = all.filter(inMonth);
+  if (calKind && !monthAll.some((x) => x.kind === calKind)) calKind = '';
+  const shown = all.filter((x) => !calKind || x.kind === calKind);
+  const byDay = new Map();
+  shown.forEach((x) => { if (!byDay.has(x.date)) byDay.set(x.date, []); byDay.get(x.date).push(x); });
+  const over = monthAll.filter((x) => calState(x, t) === 'over').length;
+  const chips = [`<button type="button" class="chip${calKind ? '' : ' on'}" data-kind="">${bi('due_filter.ALL')} <span class="count">${monthAll.length}</span></button>`]
+    .concat(CAL_KINDS.map((k) => [k, monthAll.filter((x) => x.kind === k).length]).filter(([, n]) => n)
+      .map(([k, n]) => `<button type="button" class="chip cal-chip ck-${k.toLowerCase()}${calKind === k ? ' on' : ''}" data-kind="${k}"><i class="cal-key"></i>${bi(kindKey(k))} <span class="count">${n}</span></button>`)).join('');
+  const cellHtml = (d) => {
+    const list = byDay.get(d) || [];
+    const out = d.slice(0, 7) !== monthCursor;
+    const wd = weekday(d);
+    const cls = ['cal-cell', out ? 'out' : '', d === t ? 'today' : '', d === selDay ? 'sel' : '', wd >= 6 ? 'we' : '', list.some((x) => calState(x, t) === 'over') ? 'has-over' : ''].filter(Boolean).join(' ');
+    const label = `${fmtDate(d)} · ${list.length}`;
+    return `<button type="button" class="${cls}" data-day="${d}" aria-label="${esc(label)}" aria-pressed="${d === selDay}">
+      <span class="cal-num">${Number(d.slice(8, 10))}</span>
+      <span class="cal-pills">${list.slice(0, 3).map((x) => `<span class="cal-ev ck-${x.kind.toLowerCase()} ${calState(x, t)}">${esc(x.kind === 'READING' ? biText('home.meters_due', { N: x.code }) : x.code || biText(kindKey(x.kind)))}</span>`).join('')}
+        ${list.length > 3 ? `<span class="cal-more">${bi('cal.more', { N: list.length - 3 })}</span>` : ''}</span>
+      <span class="cal-dots">${list.slice(0, 4).map((x) => `<i class="cal-dot ck-${x.kind.toLowerCase()} ${calState(x, t)}"></i>`).join('')}${list.length > 4 ? '<i class="cal-dot plus"></i>' : ''}</span>
+    </button>`;
+  };
+  // Danh sách: ngày đang chọn hoặc cả tháng, nhóm theo ngày
+  const listDays = selDay ? [selDay] : [...byDay.keys()].filter((d) => d >= first && d <= last);
+  const agenda = listDays.map((d) => {
+    const list = byDay.get(d) || [];
+    return `<div class="cal-group"><div class="cal-date${d === t ? ' today' : ''}"><strong>${esc(fmtDate(d))}</strong> <span class="muted">${bi('weekday.' + weekday(d))}</span></div>
+      ${list.length ? list.map((x) => `<a class="cal-item k-${x.kind.toLowerCase()} ${calState(x, t)}" href="#${esc(x.href)}">
+        <div class="cal-item-top">${kindTag(x.kind)}${x.kind !== 'READING' && x.code ? `<span class="code">${esc(x.code)}</span>` : ''}${x.sub ? `<span class="muted small">${bi(x.sub === 'END' ? 'field.end_date' : 'field.renewal_notice_date')}</span>` : ''}${calBadge(x, t)}</div>
+        ${x.title ? `<div class="cal-item-title">${esc(x.title)}</div>` : ''}</a>`).join('') : `<p class="muted small">${bi('cal.no_items_day')}</p>`}</div>`;
+  }).join('');
+  const agendaHead = selDay
+    ? `<h2>${bi('cal.day_title', { D: fmtDate(selDay) })}</h2><button type="button" class="btn tiny" id="cal-all">${bi('cal.all_month')}</button>`
+    : `<h2>${bi('cal.month_list')}</h2>`;
+  const isCur = monthCursor === t.slice(0, 7);
+  view.innerHTML = `<div class="cal-page">
+    <section class="card cal">
+      <div class="cal-head">
+        <button type="button" class="icon-btn" id="m-prev" aria-label="‹">${ICON.back}</button>
+        <h2 class="cal-title">${bi('cal.month_title', { M: String(m).padStart(2, '0'), Y: y })}</h2>
+        <button type="button" class="icon-btn flip" id="m-next" aria-label="›">${ICON.back}</button>
+        <button type="button" class="btn tiny cal-today" id="m-today"${isCur && selDay === t ? ' disabled' : ''}>${ICON.calendar}<span>${bi('cal.today')}</span></button>
+      </div>
+      <div class="cal-sum">${monthAll.length ? `<span>${bi('cal.month_count', { N: monthAll.length })}</span>${over ? `<span class="cal-sum-over">${bi('cal.over_count', { N: over })}</span>` : ''}` : `<span class="muted">${bi('cal.empty_month')}</span>`}</div>
+      ${monthAll.length ? `<div class="chips cal-chips">${chips}</div>` : ''}
+      <div class="cal-grid" role="grid">${[1, 2, 3, 4, 5, 6, 7].map((w) => `<div class="cal-wd${w >= 6 ? ' we' : ''}">${bi('weekday.' + w)}</div>`).join('')}${cells.map(cellHtml).join('')}</div>
+    </section>
+    <section class="card cal-agenda"><div class="card-head">${agendaHead}</div>
+      ${listDays.length ? agenda : `<div class="empty-state">${ICON.calendar}<p class="muted">${bi(monthAll.length ? 'cal.no_items_filter' : 'cal.empty_month')}</p></div>`}</section>
+  </div>`;
+  const again = () => renderMonth(view, { shell });
+  view.querySelector('#m-prev').addEventListener('click', () => { monthCursor = prevMonth; selDay = null; again(); });
+  view.querySelector('#m-next').addEventListener('click', () => { monthCursor = nextMonth; selDay = null; again(); });
+  view.querySelector('#m-today').addEventListener('click', () => { monthCursor = t.slice(0, 7); selDay = t; again(); });
+  const all2 = view.querySelector('#cal-all');
+  if (all2) all2.addEventListener('click', () => { selDay = null; again(); });
+  view.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { calKind = b.dataset.kind; again(); }));
+  view.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => {
+    const d = b.dataset.day;
+    if (d.slice(0, 7) !== monthCursor) { monthCursor = d.slice(0, 7); selDay = d; again(); return; }
+    selDay = selDay === d ? null : d;
+    again();
+  }));
+}
+
+function kindKey(k) {
+  return { INSPECTION: 'home.item_inspection', CONTRACT: 'home.item_contract', SERVICE: 'home.item_service', WO: 'home.item_wo', PLAN: 'cal.item_plan', READING: 'home.item_reading' }[k];
 }
