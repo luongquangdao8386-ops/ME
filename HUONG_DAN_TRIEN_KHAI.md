@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.12 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 thêm cửa đọc thiết bị cho app Checksheet)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.13 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -15,6 +15,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Hai app cùng một mã; app tự chọn máy chủ theo địa chỉ trang. Một iPhone cài được cả hai biểu tượng, dữ liệu không lẫn nhau.
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
+
+**Bản d4.13 (lịch tháng, tab Thuật ngữ) chỉ đổi app — không phải dán Code.gs:** trang THỬ `/ME-thu/` tự cập nhật; mở app → Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.13**. Thử: **Nhắc hạn → Lịch tháng** (bộ lọc theo loại, bấm ngày, Hôm nay; máy tính có danh sách bên phải) và **Tài khoản → Quản trị → Danh mục chung → Thuật ngữ** (đổi tab ngay). Ưng thì nói **"phát hành THẬT"**.
 
 **Thứ tự lần này (d4.12 — nối app Checksheet):** Phần U (dán Code.gs d4.12 vào máy chủ THỬ, tạo mã kết nối, nhập bên Checksheet THỬ) → thử → nói **"phát hành THẬT"** → làm lại Phần U ở máy chủ THẬT (nhập mã bên Checksheet THẬT).
 
