@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.16 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16 Kế hoạch bảo trì năm)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.17 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,7 +16,7 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Bản d4.16 (Bảo trì → tab Kế hoạch năm) chỉ đổi app — không dán Code.gs:** trang THỬ `/ME-thu/` tự cập nhật; mở app → Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.16**. Thử: **Bảo trì → Kế hoạch năm** — bảng 12 tháng gom theo **Loại thiết bị** (Thiết bị → Loại; máy chưa chọn loại vào nhóm "Chưa phân loại"), mỗi máy một dòng cho từng kế hoạch bảo trì, hạn kiểm định và dịch vụ hợp đồng. Ký hiệu: ○ dự kiến · ● xanh xong đúng hạn · ● cam xong trễ · ◐ đang làm · ✕ quá hạn · ⊘ huỷ · ≈ ước tính theo giờ chạy (cần ≥ 2 lần ghi giờ chạy cách ≥ 7 ngày). % hoàn thành/đúng hạn chỉ tính lần đã tới hạn — chưa có lần nào thì ghi "—", không ghi 0 %. Nút **‹ ›** đổi năm, **Xuất Excel** (có logo công ty nếu đã tải lên). Kế hoạch lập giữa năm chỉ tính từ ngày lập. Ưng thì nói **"phát hành THẬT"**.
+**Bản d4.16–d4.17 (Bảo trì → tab Kế hoạch năm; d4.17: các tab màn hình xuống dòng, iPhone thấy đủ 4 tab) chỉ đổi app — không dán Code.gs:** trang THỬ `/ME-thu/` tự cập nhật; mở app → Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.17**. Thử: **Bảo trì → Kế hoạch năm** — bảng 12 tháng gom theo **Loại thiết bị** (Thiết bị → Loại; máy chưa chọn loại vào nhóm "Chưa phân loại"), mỗi máy một dòng cho từng kế hoạch bảo trì, hạn kiểm định và dịch vụ hợp đồng. Ký hiệu: ○ dự kiến · ● xanh xong đúng hạn · ● cam xong trễ · ◐ đang làm · ✕ quá hạn · ⊘ huỷ · ≈ ước tính theo giờ chạy (cần ≥ 2 lần ghi giờ chạy cách ≥ 7 ngày). % hoàn thành/đúng hạn chỉ tính lần đã tới hạn — chưa có lần nào thì ghi "—", không ghi 0 %. Nút **‹ ›** đổi năm, **Xuất Excel** (có logo công ty nếu đã tải lên). Kế hoạch lập giữa năm chỉ tính từ ngày lập. Ưng thì nói **"phát hành THẬT"**.
 
 **Bản d4.14–d4.15 (thanh 5 nút dưới iPhone to hơn, ô vàng Quét QR to và nổi lên) cũng chỉ đổi app — không dán Code.gs;** iPhone tắt hẳn app rồi mở lại, Tài khoản → Thông tin: **1.0.0-d4.15**.
 

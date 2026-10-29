@@ -1,6 +1,6 @@
 // d4.16: Bảo trì → tab Kế hoạch năm — web bảng 12 tháng theo Loại thiết bị (dòng loại mở/thu, ký hiệu kèm chữ rê chuột, ô có phiếu
 // bấm mở phiếu, tháng hiện tại tô, năm sau chưa tới hạn thì % trống chứ không 0 %), Excel có dòng từng máy; iPhone thẻ theo loại
-// có dải 12 ô, bấm mở từng máy; không tràn ngang
+// có dải 12 ô, bấm mở từng máy; không tràn ngang; d4.17 đủ 4 tab trong màn hình (không phải vuốt ngang)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -71,6 +71,11 @@ function setup() {
 async function openYear(page) {
   await go(page, '#/maintenance');
   await page.waitForSelector('[data-tab="year"]');
+  // d4.17: đủ 4 tab nằm trong màn hình (không phải vuốt ngang mới thấy Kế hoạch năm)
+  const tabs = await page.$$eval('.chips.tabs .chip', (els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right }; }));
+  assert.equal(tabs.length, 4);
+  const w = await page.evaluate(() => window.innerWidth);
+  for (const t of tabs) assert.ok(t.l >= 0 && t.r <= w, `tab khuất: ${t.l}–${t.r} / ${w}`);
   await page.click('[data-tab="year"]');
   await page.waitForSelector('.yr-head');
 }

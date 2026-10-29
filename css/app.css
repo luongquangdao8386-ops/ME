@@ -431,6 +431,8 @@ a.rec-card:active, .tile:active { background: #EEF2F6; }
 .chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
 .chip { flex: none; min-height: 40px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--navy); font-size: 0.8125rem; cursor: pointer; }
 .chip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+/* Tab màn hình (Bảo trì, Nháp): xuống dòng thay vì cuộn ngang — iPhone thấy đủ mọi tab, không bị khuất bên phải (d4.17) */
+.chips.tabs { flex-wrap: wrap; overflow-x: visible; }
 .chip.on .sep { color: rgba(255,255,255,0.7); }
 .chip .count { font-weight: 700; font-variant-numeric: tabular-nums; }
 .sel { min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; background: #fff; max-width: 100%; font-size: 0.9375rem; }
