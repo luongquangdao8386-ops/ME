@@ -255,3 +255,53 @@ export function yearModel(inp) {
   const allMonths = Array.from({ length: 12 }, (_, i) => groups.flatMap((g) => g.months[i]));
   return { year, today, from, to, groups, monthTally: allMonths.map((m) => tally(m, today)), tally: tally(allMonths.flat(), today) };
 }
+
+/* ---------------- So với bản kế hoạch năm đã duyệt (d4.18, Bước 3) ---------------- */
+
+/** Khóa dòng: kế hoạch (cả theo giờ chạy) / yêu cầu kiểm định / máy trong hợp đồng — giống ref_id của bản chụp */
+export function rowKey(r) {
+  if (r.kind === 'PLAN' || r.kind === 'HOURS') return 'P:' + r.plan.plan_id;
+  if (r.kind === 'INSPECTION') return 'I:' + r.requirement.requirement_id;
+  return 'S:' + r.contractEquipment.contract_equipment_id;
+}
+const snapKey = (r) => (r.kind === 'PLAN' || r.kind === 'HOURS' ? 'P:' : (r.kind === 'INSPECTION' ? 'I:' : 'S:')) + r.ref_id;
+
+/**
+ * Đối chiếu bản chụp đã duyệt với tình hình hiện tại (mô hình yearModel cùng năm). Mỗi lần trong bản duyệt ghép với lần thực tế của
+ * cùng dòng (cùng ngày, rồi cùng tháng); không có → quá ngày là bỏ sót, chưa tới là dự kiến. Lần thực tế chưa ghép: phiếu/chứng nhận/
+ * dịch vụ đã làm hoặc đang làm → ngoài kế hoạch (extra); lịch dự kiến mới (kế hoạch lập/sửa sau khi duyệt) → added (không vào %).
+ * Trả {entries[{date, st, base}], tally, months[12], extra, added}.
+ */
+export function compareBaseline(snap, model, today) {
+  const live = new Map();
+  for (const g of model.groups) for (const r of g.rows) live.set(rowKey(r), r);
+  const used = new Set();
+  const entries = [];
+  for (const g of (snap && snap.groups) || []) {
+    for (const r of g.rows || []) {
+      const lr = live.get(snapKey(r));
+      const list = lr ? lr.months.flat().filter((x) => !x.est) : [];
+      for (const d of r.dates || []) {
+        const e = list.find((x) => !used.has(x) && x.date === d) || list.find((x) => !used.has(x) && x.date.slice(0, 7) === d.slice(0, 7));
+        if (e) used.add(e);
+        const st = e ? e.st : (d < today ? 'missed' : 'planned');
+        entries.push({ date: e && e.st === 'planned' && e.date > d ? e.date : d, st: st === 'planned' && !e && d < today ? 'missed' : st, base: d });
+      }
+    }
+  }
+  let extra = 0, added = 0;
+  for (const r of live.values()) {
+    for (const x of r.months.flat()) {
+      if (x.est || used.has(x) || x.st === 'cancelled') continue;
+      if (x.st === 'done' || x.st === 'late' || x.st === 'open' || x.st === 'overdue') extra++;
+      else added++;
+    }
+  }
+  const months = Array.from({ length: 12 }, (_, i) => tally(entries.filter((e) => Number(e.base.slice(5, 7)) - 1 === i), today));
+  return { entries, tally: tally(entries, today), months, extra, added };
+}
+
+/** Đếm các lần của bản duyệt trong khoảng tháng [m0, m1] (0–11), vd một quý */
+export function tallyMonths(entries, m0, m1, today) {
+  return tally(entries.filter((e) => { const m = Number(e.base.slice(5, 7)) - 1; return m >= m0 && m <= m1; }), today);
+}

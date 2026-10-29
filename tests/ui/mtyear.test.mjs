@@ -133,7 +133,7 @@ test('web: Kế hoạch năm — bảng 12 tháng theo loại, ô phiếu bấm 
     await dl.saveAs(file);
     const X = loadXLSX();
     const wb = X.read(fs.readFileSync(file), { type: 'buffer' });
-    assert.deepEqual(Array.from(wb.SheetNames), [`KH ${Y}`]);
+    assert.deepEqual(Array.from(wb.SheetNames), [`KH ${Y}`, `TH ${Y}`], 'd4.18: thêm sheet Thực hiện');
     const aoa = X.utils.sheet_to_json(wb.Sheets[`KH ${Y}`], { header: 1, defval: '' });
     const head = aoa.findIndex((r) => String(r[0]).startsWith('Loại thiết bị'));
     assert.ok(head >= 0);

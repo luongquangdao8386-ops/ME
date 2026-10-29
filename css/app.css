@@ -599,6 +599,44 @@ a.yc:hover, a.yc:focus-visible { background: #EAF2FB; }
   .yr-kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 }
 
+/* d4.18 Kế hoạch cho cả loại / nhóm kế hoạch: danh sách máy có tick, ngày mốc rải lịch, ô mốc giờ chạy */
+.pg-machines { margin: 12px 0; }
+.pg-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.pg-head h3 { margin: 0; font-size: 1rem; color: var(--navy); }
+.pg-sel { margin: 0 0 0 auto; gap: 6px; }
+.pg-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.pg-item { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; min-width: 0; }
+.pg-item .check { flex: 1 1 220px; min-width: 0; margin: 0; }
+.pg-item a { flex: 1 1 220px; min-width: 0; text-decoration: none; color: var(--text); font-weight: 600; }
+.pg-item .pg-pick { flex: none; min-height: 0; margin: 0; }
+.pg-item .pg-pick + a { flex: 1 1 180px; }
+.pg-item .code { color: var(--navy); font-variant-numeric: tabular-nums; }
+.pg-when { color: var(--navy); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pg-hrs { display: inline-flex; align-items: center; gap: 6px; }
+.pg-target { width: 9rem; min-height: 36px; padding: 4px 8px; }
+.pg-line { margin: 2px 0 8px; font-size: 0.875rem; color: var(--graphite); }
+.pg-add .form-grid { margin-bottom: 8px; }
+
+/* d4.18 Kế hoạch năm — khung bản chốt/duyệt, KPI theo bản duyệt, máy chưa có kế hoạch */
+.ap-box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 10px 0 6px; background: #FBFCFE; }
+.ap-title h3 { margin: 0 0 6px; font-size: 0.9375rem; color: var(--navy); }
+.ap-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin: 4px 0; }
+.ap-line .btn { margin-left: 0; }
+.ap-st { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: var(--bg); color: var(--graphite); }
+.ap-approved { background: #E3F4EA; color: var(--green); }
+.ap-submitted { background: #FFF4D6; color: var(--amber); }
+.ap-returned { background: #FDECEA; color: var(--red); }
+.ap-draft { background: #EAF2FB; color: var(--navy); }
+.ap-actions { margin-top: 8px; }
+.ap-none { margin: 2px 0; }
+.ap-help { margin-top: 8px; }
+.ap-help summary { cursor: pointer; color: var(--navy); }
+.ap-kpi-head { margin: 10px 0 0; font-size: 0.8125rem; color: var(--navy); }
+.ap-kpi-head + .yr-kpis { margin-top: 6px; }
+.ap-base-note { margin: 8px 0 0; }
+.yr-missing { margin: 8px 0 4px; color: var(--graphite); }
+.yr-missing a { color: var(--navy); white-space: nowrap; }
+
 /* QR */
 .qr-view { text-align: center; }
 .qr-big svg { width: min(70vw, 280px); height: auto; stroke: none; }

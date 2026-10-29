@@ -56,7 +56,9 @@ export const KEY = {
   MATERIAL_REQUEST_LINE: 'request_line_id', MATERIAL_USAGE: 'usage_line_id',
   // Đợt 3
   METER: 'meter_id', METER_SEGMENT: 'segment_id', METER_READING: 'reading_id', METER_EVENT: 'event_id', TARIFF: 'tariff_id',
-  PANEL: 'panel_id', CIRCUIT: 'circuit_id', CIRCUIT_LOAD: 'load_link_id', REPORT_DEFINITION: 'report_definition_id', REPORT_RUN: 'report_run_id'
+  PANEL: 'panel_id', CIRCUIT: 'circuit_id', CIRCUIT_LOAD: 'load_link_id', REPORT_DEFINITION: 'report_definition_id', REPORT_RUN: 'report_run_id',
+  // d4.18
+  ANNUAL_PLAN: 'annual_plan_id'
 };
 
 function keyOf(type, rec) {

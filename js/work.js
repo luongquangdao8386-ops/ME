@@ -180,7 +180,10 @@ export async function pendingForMe() {
   const u = uid();
   if (!u) return [];
   const [cw, cr, cm, cd] = [await can('maintenance.accept'), await can('repair.accept'), await can('matreq.approve'), await can('circuit.drawing.approve')];
-  if (!cw && !cr && !cm && !cd) return [];
+  // d4.18: kế hoạch năm chờ duyệt / bị trả lại / nhắc lập năm sau (tải động: lỗi phần này không làm hỏng ô Chờ bạn xử lý)
+  let annual = [];
+  try { const m = await import('./pages/mtannual.js'); if (typeof m.annualPending === 'function') annual = await m.annualPending(); } catch (e) { annual = []; }
+  if (!cw && !cr && !cm && !cd) return annual;
   const eqs = await mapOf('EQUIPMENT');
   const eqText0 = (id) => { const e = eqs.get(id); return e ? e.equipment_code : ''; };
   const out = [];
@@ -220,13 +223,14 @@ export async function pendingForMe() {
       out.push({ kind: 'DRAWING', code: host.circuit_code || host.panel_code, sub: [d.title_vi || d.title_zh, d.created_by_name].filter(Boolean).join(' · '), href, at: d.created_at || '' });
     }
   }
-  return out.sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  return out.concat(annual).sort((a, b) => String(a.at).localeCompare(String(b.at)));
 }
 
 /** Ô "Chờ bạn xử lý" (trang chủ, Công việc): mỗi dòng bấm tới phiếu có nút nghiệm thu/duyệt */
 export function pendingPanelHtml(items) {
   if (!items.length) return '';
-  const label = { WO: 'wk.pending.wo', REPAIR: 'wk.pending.repair', MATREQ: 'wk.pending.matreq', DRAWING: 'wk.pending.drawing' };
+  const label = { WO: 'wk.pending.wo', REPAIR: 'wk.pending.repair', MATREQ: 'wk.pending.matreq', DRAWING: 'wk.pending.drawing',
+    ANNUAL: 'wk.pending.annual', ANNUAL_RET: 'wk.pending.annual_returned', ANNUAL_TODO: 'wk.pending.annual_todo' };
   return `<section class="card pending-me"><div class="card-head"><h2>${bi('wk.pending_me')} <span class="badge t-amber">${items.length}</span></h2></div>
     <ul class="list">${items.slice(0, 8).map((x) => `<li><a class="link-row row" href="#${esc(x.href)}"><span class="code">${esc(x.code)}</span><span>${bi(label[x.kind])}</span>${x.sub ? `<span class="muted small">${esc(x.sub)}</span>` : ''}</a></li>`).join('')}</ul>
     ${items.length > 8 ? `<p class="muted small">${bi('wk.pending_more', { N: items.length - 8 })}</p>` : ''}</section>`;

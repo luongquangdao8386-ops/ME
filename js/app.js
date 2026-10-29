@@ -205,6 +205,8 @@ function registerRoutes() {
   // Đợt 2: Bảo trì (MT-01..03, WEB-MT-01), Sửa chữa (RP-01..03, WEB-RP-01)
   route('/maintenance', soonOr(2, lazy('./pages/maintenance.js', 'renderMaintenance')), { nav: 'maintenance' });
   route('/maintenance/plans/new', soonOr(2, lazy('./pages/maintenance.js', 'renderPlanForm')), { nav: 'maintenance' });
+  route('/maintenance/plans/group', soonOr(5, lazy('./pages/plangroup.js', 'renderPlanGroupForm')), { nav: 'maintenance' });
+  route('/maintenance/plans/group/:gid', soonOr(5, lazy('./pages/plangroup.js', 'renderPlanGroup')), { nav: 'maintenance' });
   route('/maintenance/plans/:id', soonOr(2, lazy('./pages/maintenance.js', 'renderPlan')), { nav: 'maintenance' });
   route('/maintenance/plans/:id/edit', soonOr(2, lazy('./pages/maintenance.js', 'renderPlanForm')), { nav: 'maintenance' });
   route('/maintenance/checklists', soonOr(2, lazy('./pages/maintenance.js', 'renderChecklists')), { nav: 'maintenance' });

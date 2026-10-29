@@ -287,6 +287,9 @@ function annualPlanView_(ctx) {
 
 /* ---------------- PDF ---------------- */
 
+/** Số lần cả năm: "4", "4 + ≈2", chỉ ước tính → "≈3" */
+function annualCount_(n, e) { return n || !e ? String(n) + (e ? ' + ≈' + e : '') : '≈' + e; }
+
 /** Ô tháng: ngày trong tháng ("05, 20"); nhiều hơn 3 lần → "×n"; ngày ước tính có "≈" */
 function annualMonthCell_(dates, est, m) {
   var mm = annualPad2_(m + 1);
@@ -359,9 +362,9 @@ function annualPdf_(rec, snap) {
       });
       months.forEach(function (v, i) { tot[i] += v; });
       totAll += n; totEst += e; totMachines += g.machines;
-      return [gname(g), String(g.machines)].concat(months.map(function (v) { return v ? String(v) : ''; })).concat([String(n) + (e ? ' + ≈' + e : '')]);
+      return [gname(g), String(g.machines)].concat(months.map(function (v) { return v ? String(v) : ''; })).concat([annualCount_(n, e)]);
     });
-    sumRows.push([lab_('ap.total'), String(totMachines)].concat(tot.map(function (v) { return v ? String(v) : ''; })).concat([String(totAll) + (totEst ? ' + ≈' + totEst : '')]));
+    sumRows.push([lab_('ap.total'), String(totMachines)].concat(tot.map(function (v) { return v ? String(v) : ''; })).concat([annualCount_(totAll, totEst)]));
     var numTypes = monthHead.map(function () { return 'num'; });
     var sumTable = pdfTable_(pd, [lab_('yr.col.category'), lab_('ap.machines')].concat(monthHead).concat([lab_('yr.col.year_sum')]), sumRows,
       ['text', 'num'].concat(numTypes).concat(['num']), { fontSize: 7 });
@@ -378,7 +381,7 @@ function annualPdf_(rec, snap) {
         var cells = [];
         for (var mi = 0; mi < 12; mi++) cells.push(annualMonthCell_(r.dates, r.est, mi));
         return [r.equipment_code, eqName, work, [r.code, r.cycle].filter(Boolean).join('\n')].concat(cells)
-          .concat([String(r.dates.length) + (r.est.length ? ' + ≈' + r.est.length : '')]);
+          .concat([annualCount_(r.dates.length, r.est.length)]);
       });
       pdfTable_(pd, [lab_('col.code'), lab_('yr.col.equipment'), lab_('yr.col.work'), lab_('yr.col.cycle')].concat(monthHead).concat([lab_('yr.col.year_sum')]),
         rows, ['code', 'text', 'text', 'text'].concat(monthHead.map(function () { return 'date'; })).concat(['num']), { fontSize: 7 });

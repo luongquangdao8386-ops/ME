@@ -16,7 +16,7 @@ import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.js';
 import { replaceDialog } from './partreplace.js';
-import { yearTab, wireYearTab } from './mtyear.js';
+import { yearTab, wireYearTab, setYear } from './mtyear.js';
 import {
   myQueue, overlayWorkOrder, localCreations, woSubmitIssues, outOfRange, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
   queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList, woSelfPeople, pendingForMe
@@ -69,10 +69,17 @@ const fromLocalInput = (v) => (v ? `${v}:00+07:00` : '');
 export async function renderMaintenance(view, ctx) {
   const { shell } = ctx;
   freshFilters(ctx, st, ST0, ['tab']);
+  // Link có ?tab=year&year=2027 (Chờ bạn xử lý): áp một lần cho mỗi địa chỉ, bấm tab sau đó không bị kéo về
+  const q = ctx.query;
+  if (q && q.get('tab') && view.dataset.q !== location.hash) {
+    view.dataset.q = location.hash;
+    if (['wo', 'plans', 'calendar', 'year'].includes(q.get('tab'))) st.tab = q.get('tab');
+    if (q.get('year')) setYear(Number(q.get('year')));
+  }
   const wide = isWide();
   const can_ = {
     plan: await can('maintenance.plan.edit'), cl: await can('maintenance.checklist.edit'), wo: await can('maintenance.wo.create'),
-    hours: await can('maintenance.hours.record')
+    hours: await can('maintenance.hours.record'), group: await can('maintenance.plan.group')
   };
   shell.setScreen({
     title: 'module.maintenance', back: '/',
@@ -96,6 +103,7 @@ export async function renderMaintenance(view, ctx) {
       <div class="row tools">
         ${wide && can_.wo ? `<a class="btn small primary" href="#/maintenance/wo/new">${ICON.plus}<span>${bi('mt.wo_new')}</span></a>` : ''}
         ${wide && can_.plan ? `<a class="btn small" href="#/maintenance/plans/new">${ICON.calendar}<span>${bi('mt.plan_new')}</span></a>` : ''}
+        ${can_.group ? `<a class="btn small" href="#/maintenance/plans/group" id="mt-group"${navigator.onLine ? '' : ' aria-disabled="true"'}>${ICON.calendar}<span>${bi('pg.new')}</span></a>` : ''}
         ${can_.cl ? `<a class="btn small" href="#/maintenance/checklists">${ICON.inspections}<span>${bi('mt.checklists')}</span></a>` : ''}
         ${can_.hours ? `<button type="button" class="btn small" id="mt-hours">${ICON.sync}<span>${bi('mt.hours_record')}</span></button>` : ''}
         ${excelBtn}
@@ -294,6 +302,7 @@ export async function renderPlan(view, ctx) {
   view.innerHTML = `<section class="card">
     <div class="rec-top"><span class="code big">${esc(p.plan_code)}</span>${badge('plan_active.' + (p.active === false ? 'FALSE' : 'TRUE'))}</div>
     <h2 class="eq-name">${biName(p, 'title')}</h2>
+    ${p.plan_group_id ? await (await import('./plangroup.js')).groupLineHtml(p) : ''}
     <div class="kv-grid">
       ${kv('module.equipment', e ? `<a href="#/equipment/${esc(e.equipment_id)}">${esc(eqText(e))}</a>` : '')}
       ${kv('mt.interval', intervalText(p))}

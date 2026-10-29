@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
-import { planDates, hoursRate, hoursDates, tally, pct, yearModel } from '../../js/mtyear-model.js';
+import { planDates, hoursRate, hoursDates, tally, pct, yearModel, compareBaseline, tallyMonths, rowKey } from '../../js/mtyear-model.js';
 
 test('planDates khớp occurrence_ của máy chủ: tháng (ngày 29/30/31, năm nhuận), ngày; mốc trước/trong/sau năm', () => {
   const env = loadServer();
@@ -168,4 +168,33 @@ test('yearModel: ghép phiếu theo hạn rồi theo tháng, phiếu thừa là 
   assert.equal(m.monthTally.reduce((n, t) => n + t.due, 0), m.tally.due);
   // Năm không có gì: không nhóm
   assert.deepEqual(yearModel({ year: 2030, today: '2026-06-15', equipment, lookups, plans: [], workOrders: [] }).groups, []);
+});
+
+test('compareBaseline: % theo bản đã duyệt — ghép phiếu theo ngày/tháng, lần dời ngày trong tháng chưa tới hạn, làm ngoài kế hoạch, lịch thêm sau duyệt', () => {
+  const equipment = [{ equipment_id: 'E1', equipment_code: 'TB-0001' }, { equipment_id: 'E2', equipment_code: 'TB-0002' }];
+  const P1 = { plan_id: 'P1', plan_code: 'KH-0001', equipment_id: 'E1', interval_type: 'MONTH', interval_value: 1, anchor_date: '2026-01-10', created_at: '2025-12-01T00:00:00+07:00' };
+  const workOrders = [
+    { work_order_id: 'W1', plan_id: 'P1', due_date: '2026-01-10', status: 'COMPLETED', end_at: '2026-01-10T10:00:00+07:00' },
+    { work_order_id: 'W2', plan_id: 'P1', due_date: '2026-03-12', status: 'COMPLETED', end_at: '2026-03-20T10:00:00+07:00' },
+    { work_order_id: 'W3', plan_id: 'P1', due_date: '2026-03-25', status: 'COMPLETED', end_at: '2026-03-25T10:00:00+07:00' }
+  ];
+  const before = yearModel({ year: 2026, today: '2026-01-02', equipment, lookups: [], plans: [P1], workOrders: [] });
+  // Bản duyệt lập đầu năm: 12 lần ngày 10
+  const snap = { year: 2026, groups: before.groups.map((g) => ({ rows: g.rows.map((r) => ({ kind: r.kind, ref_id: r.plan.plan_id, dates: r.months.flat().map((e) => e.date) })) })) };
+  assert.equal(snap.groups[0].rows[0].dates.length, 12);
+  assert.equal(rowKey(before.groups[0].rows[0]), 'P:P1');
+  // Sau duyệt: thêm kế hoạch P2 cho máy 2 (không có trong bản duyệt)
+  const P2 = { plan_id: 'P2', plan_code: 'KH-0002', equipment_id: 'E2', interval_type: 'MONTH', interval_value: 6, anchor_date: '2026-05-01', created_at: '2026-04-01T00:00:00+07:00' };
+  const now = yearModel({ year: 2026, today: '2026-04-05', equipment, lookups: [], plans: [P1, P2], workOrders });
+  const cmp = compareBaseline(snap, now, '2026-04-05');
+  assert.deepEqual(cmp.entries.slice(0, 4).map((e) => e.st), ['done', 'missed', 'late', 'planned']);
+  assert.equal(cmp.tally.planned, 12);
+  assert.deepEqual({ due: cmp.tally.due, done: cmp.tally.done, onTime: cmp.tally.onTime, missed: cmp.tally.missed }, { due: 3, done: 2, onTime: 1, missed: 1 });
+  assert.equal(cmp.extra, 1, 'phiếu W3 ngoài lịch');
+  assert.equal(cmp.added, 2, 'P2: 2 lần sau duyệt (01/05, 01/11) không vào %');
+  assert.equal(pct(cmp.tally.done, cmp.tally.due), 67);
+  assert.deepEqual(tallyMonths(cmp.entries, 0, 2, '2026-04-05').due, 3, 'quý 1');
+  assert.equal(cmp.months[3].due, 0, 'tháng 4 chưa tới hạn (10/04)');
+  // Chưa có bản duyệt hợp lệ → không có lần nào
+  assert.equal(compareBaseline({ groups: [] }, now, '2026-04-05').tally.planned, 0);
 });

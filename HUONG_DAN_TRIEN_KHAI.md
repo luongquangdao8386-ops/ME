@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.17 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.18 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema`)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -15,6 +15,38 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Hai app cùng một mã; app tự chọn máy chủ theo địa chỉ trang. Một iPhone cài được cả hai biểu tượng, dữ liệu không lẫn nhau.
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
+
+**Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần V — Đưa d4.18 lên THỬ (`ME_MayChu_THU`)
+
+1. Trang THỬ đã tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.18**.
+2. **Sao lưu THỬ trước:** Tài khoản → Quản trị → **Sao lưu ngay** → PIN → chờ **Đã kiểm chứng**.
+3. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/lucid-lovelace-r60wfl/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+4. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+5. Ô chọn hàm → **`healthCheck`** → **Chạy** (Google hỏi quyền thì cho phép). Nhật ký: `CẢNH BÁO schema_version: 1.5.4 (1.5.5)` — đúng, chưa nâng.
+6. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.18` → **Triển khai** (giữ nguyên link).
+7. Ô chọn hàm → **`migrateSchema`** → **Chạy**. Nhật ký: `migrateSchema xong. Thêm: MaintenancePlans(plan_group_id); AnnualPlans. schema_version=1.5.5`. Chạy lại nhiều lần vẫn an toàn (lần sau: `Thêm: không có`).
+8. **`healthCheck`** → `schema_version: 1.5.5`, `server_version: 1.0.0-d4.18` — ĐẠT.
+9. App THỬ: Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại 1–2 lần) → **Tài khoản → Thông tin**: máy chủ **1.0.0-d4.18**.
+
+### Phần V2 — Thử trên THỬ
+
+Cần ít nhất **2 tài khoản cấp 3–4** (người lập và người duyệt khác nhau; người lập/gửi không tự duyệt được).
+
+1. **Thiết bị:** chọn **Loại** cho các máy (ví dụ 3 máy nén khí cùng loại "Máy nén khí").
+2. **Bảo trì → Kế hoạch cho cả loại:** chọn loại → các máy đã tick sẵn (máy Ngừng sử dụng không tick) → nhập tên việc, chu kỳ (ví dụ 3 tháng), **ngày bắt đầu**, **rải lịch cách 2 ngày** → mỗi máy hiện ngày mốc riêng → **Tạo N kế hoạch** → mở ra trang **Nhóm kế hoạch**.
+3. Trang nhóm: **Sửa cả nhóm** → đổi chu kỳ hoặc người làm → bỏ tick máy nào không muốn đổi → **Áp cho N máy**. Mở một kế hoạch trong nhóm: có dòng "Thuộc nhóm kế hoạch N máy · Mở nhóm"; nút **Sửa** ở đó chỉ sửa riêng máy đó.
+4. Thêm một máy mới cùng loại → mở lại trang nhóm: mục **Máy cùng loại chưa có trong nhóm** → tick → **Thêm vào nhóm**. Tab **Kế hoạch năm** cũng ghi "Máy chưa có kế hoạch bảo trì: <loại> N" (bấm để lập).
+5. **Kế hoạch năm** (người lập, ví dụ cấp 3): khung **Kế hoạch năm … — bản chốt và duyệt** → **Chốt kế hoạch năm** (bản Nháp lần 01) → **Xuất PDF** xem thử (A4 ngang, logo công ty, dòng đỏ "BẢN CHƯA DUYỆT", tổng hợp theo loại, chi tiết từng máy, khối Người lập/Người duyệt) → **Gửi duyệt**. Người lập không thấy nút Duyệt.
+6. Người duyệt (tài khoản khác, cấp 3–4): Trang chủ → **Chờ bạn xử lý: Kế hoạch năm chờ duyệt** → bấm → **Duyệt kế hoạch** → nhập PIN → có mã **KHN-<năm>-01**; PDF có tên người duyệt + ngày. (Thử cả **Trả lại** kèm lý do: người lập thấy lý do, sửa → **Cập nhật theo lịch hiện tại** → gửi lại.)
+7. Sau khi duyệt: đầu tab có **So với bản đã duyệt KHN-…** (kế hoạch theo bản duyệt, % hoàn thành/đúng hạn, bỏ sót, làm ngoài kế hoạch). **Xuất Excel** có thêm sheet **TH <năm>** (thực hiện theo tháng, quý, cả năm). Muốn đổi giữa năm: **Lập lần điều chỉnh 02** → ghi lý do khi gửi → duyệt xong bản 01 thành "Đã được thay".
+8. (Tùy chọn) Mã biểu mẫu in trên PDF: **Tài khoản → Quản trị → Trạng thái hệ thống → Cấu hình** → dòng `annual_plan_form_code` → ví dụ `BM-BT-01`.
+9. Từ **01/12** hằng năm, người có quyền lập thấy "Lập kế hoạch bảo trì năm sau" trong **Chờ bạn xử lý** tới khi bản năm sau được lập.
+
+## Phần W — Phát hành d4.18 lên THẬT (sau khi nói "phát hành THẬT")
+
+Giống Phần V nhưng ở **THẬT**, nên làm lúc ít người ghi phiếu: (1) Claude đưa bản đã thử lên `main` của `ME`; (2) app THẬT **Sao lưu ngay** → chờ Đã kiểm chứng; (3) link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → dán vào **`ME_MayChu_THAT`** → Lưu; (4) `healthCheck` (cho phép quyền nếu hỏi) → `CẢNH BÁO schema_version: 1.5.4 (1.5.5)`; (5) **Phiên bản mới** `THẬT d4.18` → Triển khai (giữ link); (6) **sau cùng** `migrateSchema` → `schema_version=1.5.5`; (7) `healthCheck` ĐẠT; (8) mọi người tắt hẳn app rồi mở lại → **Tài khoản**: app và máy chủ **1.0.0-d4.18**. Dữ liệu thật giữ nguyên; kế hoạch cũ không thuộc nhóm nào vẫn chạy như trước.
 
 **Bản d4.16–d4.17 (Bảo trì → tab Kế hoạch năm; d4.17: các tab màn hình xuống dòng, iPhone thấy đủ 4 tab) chỉ đổi app — không dán Code.gs:** trang THỬ `/ME-thu/` tự cập nhật; mở app → Ctrl+Shift+R (iPhone: tắt hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.17**. Thử: **Bảo trì → Kế hoạch năm** — bảng 12 tháng gom theo **Loại thiết bị** (Thiết bị → Loại; máy chưa chọn loại vào nhóm "Chưa phân loại"), mỗi máy một dòng cho từng kế hoạch bảo trì, hạn kiểm định và dịch vụ hợp đồng. Ký hiệu: ○ dự kiến · ● xanh xong đúng hạn · ● cam xong trễ · ◐ đang làm · ✕ quá hạn · ⊘ huỷ · ≈ ước tính theo giờ chạy (cần ≥ 2 lần ghi giờ chạy cách ≥ 7 ngày). % hoàn thành/đúng hạn chỉ tính lần đã tới hạn — chưa có lần nào thì ghi "—", không ghi 0 %. Nút **‹ ›** đổi năm, **Xuất Excel** (có logo công ty nếu đã tải lên). Kế hoạch lập giữa năm chỉ tính từ ngày lập. Ưng thì nói **"phát hành THẬT"**.
 
@@ -39,7 +71,7 @@ Bản này chỉ thêm **một cửa chỉ-đọc** (`feed.equipment`) để app
 Làm ở máy chủ **THỬ** trước (Checksheet THỬ nối M&E THỬ); khi phát hành thì làm lại ở máy chủ **THẬT** (Checksheet THẬT nối M&E THẬT).
 
 1. Mở dự án Apps Script `ME_MayChu_THU` (THẬT: `ME_MayChu_THAT`) → tệp **Code.gs** → Ctrl+A, Delete.
-2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME-thu/main/apps-script/Code.gs` (THẬT: `…/ME/main/…` sau khi Claude đẩy `main`) → Ctrl+A → Ctrl+C → dán vào Code.gs → **Lưu** (Ctrl+S).
+2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/lucid-lovelace-r60wfl/apps-script/Code.gs` (THẬT: `…/ME/main/…` sau khi Claude đẩy `main`) → Ctrl+A → Ctrl+C → dán vào Code.gs → **Lưu** (Ctrl+S).
 3. **Triển khai → Quản lý các bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → mô tả `d4.12` → **Triển khai**. Link `/exec` giữ nguyên.
 4. Chọn hàm **`adminCreateFeedKey`** → **Chạy** → **Nhật ký thực thi** hiện dòng "Đã tạo mã kết nối Checksheet: …" — chép **cả dãy ký tự** sau dấu hai chấm (dài khoảng 43 ký tự). Chạy lại lúc nào cũng in lại đúng mã đó.
 5. Chép **link `/exec`** của chính máy chủ này (Triển khai → Quản lý các bản triển khai → URL ứng dụng web).

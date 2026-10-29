@@ -7,7 +7,8 @@ import { isWide } from '../shell.js';
 import { recs, today, can } from '../data.js';
 import { navigate } from '../router.js';
 import { myQueue, overlayWorkOrder, localCreations } from '../work.js';
-import { yearModel, pct } from '../mtyear-model.js';
+import { yearModel, pct, tallyMonths } from '../mtyear-model.js';
+import { annualInfo, annualBoxHtml, baseKpiHtml, wireAnnual } from './mtannual.js';
 import { loadXlsx, aoaSheet, workbookFile } from '../xlsx.js';
 import { reportLogo, logoBytes, logoSize } from '../report-logo.js';
 import { shareFileNow, isTouchMobile } from '../media.js';
@@ -15,6 +16,10 @@ import { shareFileNow, isTouchMobile } from '../media.js';
 let year = null;
 let expanded = null;      // Set các loại đang mở; null = mặc định theo cỡ màn
 let lastFile = null;      // tệp Excel vừa dựng (iPhone bấm tiếp "Mở / Lưu" trong lần chạm)
+let lastInfo = null;      // kế hoạch năm (bản chốt) của năm đang xem — d4.18
+
+/** Mở tab ở năm cho trước (link "Chờ bạn xử lý" → #/maintenance?tab=year&year=2027) */
+export function setYear(y) { if (y >= 2000 && y <= 2100) { year = y; lastFile = null; } }
 
 const SYM = { planned: '○', done: '●', late: '●', open: '◐', overdue: '✕', missed: '✕', cancelled: '⊘' };
 const ST_ORDER = ['done', 'late', 'open', 'overdue', 'missed', 'cancelled', 'planned'];
@@ -159,6 +164,18 @@ function cardsHtml(m) {
   }).join('');
 }
 
+/** Loại có máy chưa có kế hoạch bảo trì (d4.18): link lập kế hoạch cho cả loại */
+async function missingHtml() {
+  if (!(await can('maintenance.plan.group'))) return '';
+  const { machinesWithoutPlan } = await import('./plangroup.js');
+  const miss = await machinesWithoutPlan();
+  if (!miss.size) return '';
+  const cats = new Map((await recs('LOOKUP')).filter((l) => l.group_key === 'EQUIPMENT_CATEGORY').map((l) => [l.value_id, l]));
+  const items = [...miss.entries()].sort((a, b) => (a[0] === '') - (b[0] === '') || nameText(cats.get(a[0])).localeCompare(nameText(cats.get(b[0])), 'vi'))
+    .map(([k, n]) => `<a href="#/maintenance/plans/group?cat=${esc(k || '__none')}">${k && cats.get(k) ? biName(cats.get(k)) : bi('yr.uncategorized')} <b>${fmtNumber(n)}</b></a>`);
+  return `<p class="yr-missing small">${bi('ap.missing_title')}: ${items.join(' · ')}</p>`;
+}
+
 /** Nội dung tab (gọi từ renderMaintenance) */
 export async function yearTab(wide) {
   if (!year) year = Number(today().slice(0, 4));
@@ -166,13 +183,18 @@ export async function yearTab(wide) {
   if (!expanded) expanded = new Set(wide && m.groups.reduce((n, g) => n + g.rows.length, 0) <= 60 ? m.groups.map((g) => g.key) : []);
   const allOpen = m.groups.length && m.groups.every((g) => expanded.has(g.key));
   const canPlan = await can('maintenance.plan.edit');
+  const info = await annualInfo(year, m);
+  lastInfo = info;
+  const missing = await missingHtml();
   const head = `<section class="card yr-head">
       <div class="yr-top"><button type="button" class="icon-btn" id="yr-prev" aria-label="‹">${ICON.back}</button>
         <h2>${bi('yr.title', { Y: year })}</h2><button type="button" class="icon-btn flip" id="yr-next" aria-label="›">${ICON.back}</button>
         <span class="row yr-tools">${m.groups.length ? `<button type="button" class="btn tiny" id="yr-toggle">${bi(allOpen ? 'yr.close_all' : 'yr.open_all')}</button>` : ''}
           ${m.groups.length ? `<button type="button" class="btn tiny" id="yr-xlsx">${ICON.download}<span>${bi('yr.export')}</span></button>
           <button type="button" class="btn tiny primary" id="yr-file" hidden>${bi('btn.open_save')}</button>` : ''}</span></div>
-      ${m.groups.length ? kpiHtml(m) : ''}
+      ${annualBoxHtml(info)}
+      ${m.groups.length ? baseKpiHtml(info) + kpiHtml(m) : ''}
+      ${missing}
       <p class="muted small">${bi('yr.note')}</p>${legendHtml()}</section>`;
   if (!m.groups.length) {
     return `${head}<div class="card empty-state">${ICON.calendar}<p class="muted">${bi('yr.empty', { Y: year })}</p>
@@ -185,6 +207,7 @@ export async function yearTab(wide) {
 export function wireYearTab(view, again) {
   const prev = $('#yr-prev', view), next = $('#yr-next', view);
   if (!prev) return;
+  wireAnnual(view, lastInfo, again, () => loadModel(year), cycleText);
   prev.addEventListener('click', () => { year -= 1; lastFile = null; again(); });
   next.addEventListener('click', () => { year += 1; lastFile = null; again(); });
   $$('[data-cat]', view).forEach((el) => el.addEventListener('click', (ev) => {
@@ -204,7 +227,7 @@ export function wireYearTab(view, again) {
   if (xl) xl.addEventListener('click', async () => {
     xl.disabled = true;
     try {
-      const file = await excelFile(await loadModel(year));
+      const file = await excelFile(await loadModel(year), lastInfo);
       if (isTouchMobile()) { lastFile = file; fileBtn.hidden = false; fileBtn.focus(); toast(bi('rpt.export_done', { F: file.name }), 'ok'); return; }
       shareFileNow(file);
       toast(bi('rpt.export_done', { F: file.name }), 'ok');
@@ -218,11 +241,38 @@ export function wireYearTab(view, again) {
 
 /* ---------------- Excel ---------------- */
 
+/**
+ * Sheet "Thực hiện" theo tháng / quý / cả năm: kế hoạch, đã tới hạn, xong, đúng hạn, bỏ sót, %. Có bản đã duyệt → tính theo bản duyệt
+ * (ghi mã bản), chưa có → theo lịch hiện tại. Không có lần tới hạn → % trống, không ghi 0 %.
+ */
+function execSheet(X, m, info) {
+  const base = info && info.approved && info.base ? info.base : null;
+  const t0 = m.today;
+  const rowsOf = (label, t) => [label, t.planned, t.due, t.done, t.onTime, t.missed, t.due ? pctText(pct(t.done, t.due)) : '', t.due ? pctText(pct(t.onTime, t.due)) : ''];
+  const liveRange = (a, b) => {
+    const t = { planned: 0, est: 0, extra: 0, due: 0, done: 0, onTime: 0, missed: 0 };
+    for (let i = a; i <= b; i++) for (const k of Object.keys(t)) t[k] += m.monthTally[i][k];
+    return t;
+  };
+  const range = (a, b) => (base ? tallyMonths(base.entries, a, b, t0) : liveRange(a, b));
+  const aoa = [[biText('yr.title', { Y: m.year }) + ' — ' + biText('ap.exec_title')],
+    [base ? biText('ap.base_title', { C: info.approved.annual_plan_code }) : biText('ap.exec_live')], [],
+    [biText('ap.exec_period'), biText('ap.kpi.base'), biText('yr.kpi.due'), biText('ap.exec_done'), biText('ap.exec_on_time'), biText('yr.kpi.missed'), biText('yr.col.done'), biText('yr.col.on_time')]];
+  for (let i = 0; i < 12; i++) aoa.push(rowsOf(`T${i + 1} · ${i + 1}月`, range(i, i)));
+  for (let q = 0; q < 4; q++) aoa.push(rowsOf(biText('ap.quarter', { Q: q + 1 }), range(q * 3, q * 3 + 2)));
+  aoa.push(rowsOf(biText('yr.col.year_sum'), range(0, 11)));
+  if (base) aoa.push([], [biText('ap.kpi.extra'), base.extra], [biText('ap.kpi.added'), base.added]);
+  aoa.push([], [biText('ap.exec_note')]);
+  const ws = aoaSheet(X, aoa);
+  ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+  return ws;
+}
+
 const cellText = (list) => list.map((e) => `${e.est ? '≈' : SYM[e.st]}${e.date.slice(8, 10)}${e.extra ? '+' : ''}`).join(' ');
 const aggText = (t) => [t.due ? `${t.done}/${t.due}` : '', t.planned - t.due > 0 ? `○${t.planned - t.due}` : '', t.est ? `≈${t.est}` : ''].filter(Boolean).join(' ');
 
 /** Tệp Excel kế hoạch năm: logo công ty (nếu có) ở góc, dòng loại + từng máy, ô tháng ghi ký hiệu + ngày, dòng % cuối, chú giải */
-async function excelFile(m) {
+async function excelFile(m, info) {
   const X = await loadXlsx();
   const logo = await reportLogo().catch(() => null);
   const months = Array.from({ length: 12 }, (_, i) => `T${i + 1} · ${i + 1}月`);
@@ -248,6 +298,7 @@ async function excelFile(m) {
   ws['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 26 }, { wch: 28 }, { wch: 22 }, ...months.map(() => ({ wch: 9 })), { wch: 10 }, { wch: 10 }, { wch: 10 }];
   const wb = X.utils.book_new();
   X.utils.book_append_sheet(wb, ws, `KH ${m.year}`);
+  X.utils.book_append_sheet(wb, execSheet(X, m, info), `TH ${m.year}`);
   const image = logo ? { sheet: 1, bytes: logoBytes(logo), mime: logo.mime, ...(await logoSize(logo, 60).then((z) => ({ wPx: z.w, hPx: z.h }))) } : null;
   return workbookFile(X, wb, `KeHoachBaoTri_${m.year}.xlsx`, image);
 }
