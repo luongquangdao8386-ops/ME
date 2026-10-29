@@ -222,14 +222,20 @@ test('lần ban hành 02: phải có lý do điều chỉnh; duyệt xong lần 
   ok(c3.write('annual_plan.save', { annual_plan_id: uuid(), year: 2028, snapshot: snapshot(ctx, 2028) }));
 });
 
-test('PDF kế hoạch năm: A4 ngang, tiêu đề hai thứ tiếng, dòng "chưa duyệt" ở bản nháp, mã biểu mẫu, tổng hợp theo loại, ô tháng ghi ngày, khối ký có tên + ngày', () => {
+test('PDF kế hoạch năm: phần 1 tổng quan (máy × việc, chấm theo tháng + ngày, dòng loại đếm việc, khối ký), phần 2 việc từng tháng (nội dung checklist, an toàn, người làm, thời gian, ô ký); in chỉ tổng quan / một tháng', () => {
   const ctx = setup();
-  const { env, c, c3, kt } = ctx;
-  const setForm = ok(c.call('settings.edit', { changes: { annual_plan_form_code: 'BM-BT-01' }, reason: 'thử' }, { operation_id: uuid(), reauth_token: c.reauth() }));
-  assert.ok(setForm);
+  const { env, c, c3, kt, eqs, tpl, ktId } = ctx;
+  ok(c.call('settings.edit', { changes: { annual_plan_form_code: 'BM-BT-01' }, reason: 'thử' }, { operation_id: uuid(), reauth_token: c.reauth() }));
+  // Kế hoạch thật có checklist + người làm + thời gian: bản chụp không ghi nội dung → máy chủ tra kế hoạch hiện tại
+  const realPlan = uuid();
+  ok(c.write('maintenance.plan.edit', { plan_id: realPlan, equipment_id: eqs[2], title_vi: 'Vệ sinh lọc gió', interval_type: 'MONTH', interval_value: 12, anchor_date: '2027-02-11', checklist_template_id: tpl, assignee_user_id: ktId, estimated_minutes: 45, safety_note_vi: 'Đeo khẩu trang' }));
+  const snap = snapshot(ctx, 2027);
+  Object.assign(snap.groups[0].rows[0], { steps: ['Kiểm tra dầu', 'Áp suất xả (6–8 bar)'], safety: 'Ngắt điện trước khi mở nắp', assignee: 'Kỹ thuật 1', minutes: 60 });
+  snap.groups[0].rows.push({ kind: 'PLAN', ref_id: realPlan, equipment_id: eqs[2], equipment_code: 'TB-0003', equipment_vi: 'Máy nén khí 03', title_vi: 'Vệ sinh lọc gió', code: 'KH-0001', cycle: 'Mỗi 12 tháng', dates: ['2027-02-11'] });
   const id = uuid();
-  const s = ok(c3.write('annual_plan.save', { annual_plan_id: id, year: 2027, snapshot: snapshot(ctx, 2027) }));
+  const s = ok(c3.write('annual_plan.save', { annual_plan_id: id, year: 2027, snapshot: snap }));
   const docOf = () => [...env.drive._docs.values()].pop();
+  const tablesOf = (d) => d.body.children.filter((x) => x.kind === 'table');
   const p1 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id }));
   assert.ok(Buffer.from(p1.data.content_b64, 'base64').toString('utf8').startsWith('%PDF'));
   assert.equal(p1.data.file_name, 'KHN-2027-01-draft.pdf');
@@ -239,35 +245,79 @@ test('PDF kế hoạch năm: A4 ngang, tiêu đề hai thứ tiếng, dòng "ch�
   assert.equal(t0.text, 'Kế hoạch bảo trì năm 2027');
   assert.equal(t1.text, '2027年度维护计划');
   assert.ok(t2.text.startsWith('BẢN CHƯA DUYỆT'), t2.text);
-  const tables = d.body.children.filter((x) => x.kind === 'table');
-  const meta = tables[0];
-  assert.ok(meta.rows[0].cells[1].getText().includes('BM-BT-01'), 'mã biểu mẫu');
-  const sum = tables.find((t) => t.rows[0].cells[0].getText().startsWith('Loại thiết bị'));
-  const last = sum.rows[sum.rows.length - 1];
-  assert.ok(last.cells[0].getText().startsWith('Tổng cộng'));
-  assert.equal(last.cells[sum.rows[0].cells.length - 1].getText(), '5 + ≈2');
-  const det = tables.find((t) => t.rows[0].cells[0].getText().startsWith('Mã'));
-  assert.equal(det.rows[1].cells[4].getText(), '05', 'T1 ngày 05');
-  assert.equal(det.rows[2].cells[6].getText(), '≈02', 'T3 ước tính');
-  const sign = tables[tables.length - 1];
+  let tables = tablesOf(d);
+  assert.ok(tables[0].rows[0].cells[1].getText().includes('BM-BT-01'), 'mã biểu mẫu');
+  // Tổng quan: dòng loại (đếm việc mỗi tháng, nền xám) → dòng máy × việc, ô tháng là ký hiệu + ngày
+  const ov = tables.find((t) => t.rows[0].cells[0].getText().startsWith('Thiết bị'));
+  assert.equal(ov.rows[0].cells.length, 15, 'Thiết bị, Công việc, T1–T12, Cả năm');
+  const cat = ov.rows[1];
+  assert.ok(cat.cells[0].getText().startsWith('Máy nén khí · 空压机') && cat.cells[0].getText().includes('3 máy'));
+  assert.equal(cat.cells[2].getText(), '1', 'T1: 1 việc');
+  assert.equal(cat.cells[0].st.BACKGROUND_COLOR, '#F1F5F9');
+  const r1 = ov.rows[2], r2 = ov.rows[3], r3 = ov.rows[4];
+  assert.ok(r1.cells[0].getText().startsWith('TB-0001'));
+  assert.ok(r1.cells[1].getText().startsWith('Bảo dưỡng 3 tháng') && r1.cells[1].getText().includes('KH-0001'));
+  assert.deepEqual([r1.cells[2].getText(), r1.cells[5].getText(), r1.cells[3].getText()], ['●05', '●05', ''], 'T1, T4 có chấm, T2 trống');
+  assert.equal(r1.cells[2].st.FOREGROUND_COLOR, '#17324F');
+  assert.equal(r2.cells[4].getText(), '◌02', 'ước tính theo giờ chạy');
+  assert.equal(r2.cells[4].st.FOREGROUND_COLOR, '#5B6875');
+  assert.equal(r3.cells[0].getText(), '', 'cùng máy: không nhắc lại tên máy');
+  assert.equal(r3.cells[6].getText(), '◆20', 'kiểm định T5');
+  const total = ov.rows[ov.rows.length - 1];
+  assert.ok(total.cells[0].getText().startsWith('Tổng cộng'));
+  assert.equal(total.cells[14].getText(), '6 + ≈2');
+  const sign = tables.find((t) => t.rows[0].cells[0].getText().startsWith('Người lập'));
   assert.equal(sign.rows[3].cells[0].getText(), 'U-C3', 'tên người lập');
   assert.equal(sign.rows[3].cells[1].getText(), '', 'chưa duyệt: trống');
+  // Việc từng tháng: mỗi tháng có việc một trang (8 tháng), cột nội dung lấy từ checklist
+  assert.equal(d.body.children.filter((x) => x.kind === 'pagebreak').length, 8);
+  const months = tables.filter((t) => t.rows[0].cells[0].getText().startsWith('Ngày'));
+  assert.equal(months.length, 8);
+  assert.deepEqual(Array.from(months[0].rows[0].cells, (x) => x.getText().split(' · ')[0]), ['Ngày', 'Thiết bị', 'Công việc', 'Nội dung chính', 'Người làm', 'Thời gian', 'Đã làm / Ký']);
+  const jan = Array.from(months[0].rows[1].cells, (x) => x.getText());
+  assert.equal(jan[0], '05/01');
+  assert.ok(jan[1].startsWith('TB-0001'));
+  assert.equal(jan[3], '1. Kiểm tra dầu\n2. Áp suất xả (6–8 bar)\n⚠ Ngắt điện trước khi mở nắp');
+  assert.deepEqual(jan.slice(4), ['Kỹ thuật 1', '60 phút · 60分钟', '☐']);
+  const feb = Array.from(months[1].rows[1].cells, (x) => x.getText());
+  assert.ok(feb[3].startsWith('1. Kiểm tra dầu') && feb[3].includes('⚠ Đeo khẩu trang'), 'tra checklist của kế hoạch hiện tại: ' + feb[3]);
+  assert.deepEqual(feb.slice(4, 6), ['U-KT', '45 phút · 45分钟']);
+  assert.equal(months[2].rows[1].cells[0].getText(), '≈02/03', 'ngày ước tính');
   assert.ok(d.footer.children[0].text.includes('Nháp'));
+  // Chỉ tổng quan: không có trang tháng
+  const p2 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'OVERVIEW' }));
+  assert.equal(p2.data.file_name, 'KHN-2027-01-draft_tong-quan.pdf');
+  d = docOf();
+  assert.equal(d.body.children.filter((x) => x.kind === 'pagebreak').length, 0);
+  assert.equal(tablesOf(d).filter((t) => t.rows[0].cells[0].getText().startsWith('Ngày')).length, 0);
+  // Một tháng: tiêu đề tháng, chỉ bảng việc của tháng, không bảng tổng quan
+  const p3 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'MONTH', month: 2 }));
+  assert.equal(p3.data.file_name, 'KHN-2027-01-draft_T02.pdf');
+  d = docOf();
+  assert.equal(d.body.children[0].text, 'Việc bảo trì tháng 2/2027');
+  tables = tablesOf(d);
+  assert.ok(!tables.some((t) => t.rows[0].cells[0].getText().startsWith('Thiết bị')));
+  assert.equal(tables.filter((t) => t.rows[0].cells[0].getText().startsWith('Ngày')).length, 1);
+  const empty = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'MONTH', month: 8 }));
+  assert.ok(empty);
+  assert.ok(docOf().body.children.some((x) => x.kind === 'p' && x.text.startsWith('Tháng này không có việc')));
+  assert.equal(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'MONTH', month: 13 }).errors[0].field, 'month');
+  assert.equal(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'X' }).errors[0].field, 'part');
   // Duyệt → tên người duyệt + mã trên chân trang, không còn dòng "chưa duyệt"
   ok(c3.write('annual_plan.submit', { annual_plan_id: id }, { expected_version: s.data.record_version }));
   ok(c.write('annual_plan.approve', { annual_plan_id: id, decision: 'APPROVE' }, { expected_version: s.data.record_version + 1, reauth_token: c.reauth() }));
-  const p2 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id }));
-  assert.equal(p2.data.file_name, 'KHN-2027-01.pdf');
+  const p4 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'OVERVIEW' }));
+  assert.equal(p4.data.file_name, 'KHN-2027-01_tong-quan.pdf');
   d = docOf();
   assert.ok(!d.body.children[2].text || !d.body.children[2].text.startsWith('BẢN CHƯA DUYỆT'));
-  const sign2 = d.body.children.filter((x) => x.kind === 'table').pop();
+  const sign2 = tablesOf(d).find((t) => t.rows[0].cells[0].getText().startsWith('Người lập'));
   assert.equal(sign2.rows[3].cells[1].getText(), 'Chủ hệ thống');
   assert.ok(sign2.rows[4].cells[1].getText().startsWith('Ngày'));
   assert.ok(d.footer.children[0].text.includes('KHN-2027-01'));
   assert.ok([...env.drive._docs.keys()].every((k) => env.drive._files.get(k)?.trashed === true), 'tệp Docs tạm vào thùng rác');
   // KT không có quyền xuất (IFON tắt mặc định)
   assert.equal(kt.call('annual_plan.pdf', { annual_plan_id: id }).code, 'FORBIDDEN');
-  assert.equal(env.rows('AuditLogs').filter((a) => a.action === 'annual_plan.pdf').length, 2);
+  assert.equal(env.rows('AuditLogs').filter((a) => a.action === 'annual_plan.pdf').length, 5);
 });
 
 test('dữ liệu chưa migrateSchema (1.5.4): lệnh kế hoạch nhóm/năm trả FEATURE_NOT_ENABLED, đồng bộ không gửi kế hoạch năm', () => {

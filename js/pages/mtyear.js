@@ -8,7 +8,7 @@ import { recs, today, can } from '../data.js';
 import { navigate } from '../router.js';
 import { myQueue, overlayWorkOrder, localCreations } from '../work.js';
 import { yearModel, pct, tallyMonths } from '../mtyear-model.js';
-import { annualInfo, annualBoxHtml, baseKpiHtml, wireAnnual } from './mtannual.js';
+import { annualInfo, annualBoxHtml, baseKpiHtml, wireAnnual, rowDetailer } from './mtannual.js';
 import { loadXlsx, aoaSheet, workbookFile } from '../xlsx.js';
 import { reportLogo, logoBytes, logoSize } from '../report-logo.js';
 import { shareFileNow, isTouchMobile } from '../media.js';
@@ -17,6 +17,7 @@ let year = null;
 let expanded = null;      // Set các loại đang mở; null = mặc định theo cỡ màn
 let lastFile = null;      // tệp Excel vừa dựng (iPhone bấm tiếp "Mở / Lưu" trong lần chạm)
 let lastInfo = null;      // kế hoạch năm (bản chốt) của năm đang xem — d4.18
+let monthOpen = null;     // tháng đang mở danh sách "Việc tháng N" (0–11) — d4.19
 
 /** Mở tab ở năm cho trước (link "Chờ bạn xử lý" → #/maintenance?tab=year&year=2027) */
 export function setYear(y) { if (y >= 2000 && y <= 2100) { year = y; lastFile = null; } }
@@ -125,7 +126,7 @@ const monthHead = (i) => `<span class="vi">T${i + 1}</span><span class="zh">${i 
 
 function tableHtml(m) {
   const cur = m.today.slice(0, 4) === String(m.year) ? Number(m.today.slice(5, 7)) - 1 : -1;
-  const th = Array.from({ length: 12 }, (_, i) => `<th class="ym${i === cur ? ' cur' : ''}">${monthHead(i)}</th>`).join('');
+  const th = Array.from({ length: 12 }, (_, i) => `<th class="ym${i === cur ? ' cur' : ''}${monthOpen === i ? ' sel' : ''}" data-month="${i}" title="${esc(biText('ap.month_view'))}">${monthHead(i)}</th>`).join('');
   const body = m.groups.map((g) => {
     const isOpen = expanded.has(g.key);
     const head = `<tr class="yg${isOpen ? ' open' : ''}" data-cat="${esc(g.key)}"><th class="yname"><button type="button" class="yg-btn" aria-expanded="${isOpen}">${ICON.chevron}<span>${catLabel(g)}</span><small class="muted">${bi('yr.machines', { N: g.machines })}</small></button></th>
@@ -195,12 +196,45 @@ export async function yearTab(wide) {
       ${annualBoxHtml(info)}
       ${m.groups.length ? baseKpiHtml(info) + kpiHtml(m) : ''}
       ${missing}
-      <p class="muted small">${bi('yr.note')}</p>${legendHtml()}</section>`;
+      <p class="muted small">${bi('yr.note')}</p>${legendHtml()}
+      ${m.groups.length ? monthChipsHtml(m) : ''}</section>`;
   if (!m.groups.length) {
     return `${head}<div class="card empty-state">${ICON.calendar}<p class="muted">${bi('yr.empty', { Y: year })}</p>
       ${canPlan ? `<a class="btn small" href="#/maintenance/plans/new">${ICON.plus}<span>${bi('mt.plan_new')}</span></a>` : ''}</div>`;
   }
-  return head + (wide ? `<section class="card yr-card">${tableHtml(m)}</section>` : cardsHtml(m));
+  const month = monthOpen !== null ? monthCardHtml(m, await rowDetailer()) : '';
+  return head + month + (wide ? `<section class="card yr-card">${tableHtml(m)}</section>` : cardsHtml(m));
+}
+
+/** Hàng chọn tháng: bấm để xem việc của tháng (nội dung checklist, người làm, thời gian) — d4.19 */
+function monthChipsHtml(m) {
+  const cur = m.today.slice(0, 4) === String(m.year) ? Number(m.today.slice(5, 7)) - 1 : -1;
+  const counts = m.monthTally.map((t) => t.planned + t.est + t.extra);
+  return `<div class="yr-months"><span class="muted small">${bi('ap.month_view')}:</span><span class="yr-mchips">${counts.map((n, i) =>
+    `<button type="button" class="chip yr-mchip${monthOpen === i ? ' on' : ''}${i === cur ? ' cur' : ''}" data-month="${i}" aria-pressed="${monthOpen === i}">T${i + 1}<small>${n || ''}</small></button>`).join('')}</span></div>`;
+}
+
+/** Danh sách "Việc tháng N/năm": ngày, ký hiệu trạng thái, máy, việc, các bước checklist, lưu ý an toàn, người làm, thời gian */
+function monthCardHtml(m, detail) {
+  const i = monthOpen;
+  const items = [];
+  for (const g of m.groups) for (const r of g.rows) for (const e of r.months[i]) items.push({ e, r });
+  items.sort((a, b) => a.e.date.localeCompare(b.e.date) || String(a.r.eq.equipment_code).localeCompare(String(b.r.eq.equipment_code)));
+  const list = items.map(({ e, r }) => {
+    const info = rowInfo(r);
+    const d = detail(r);
+    const href = e.ref && e.ref.work_order_id ? '/maintenance/wo/' + e.ref.work_order_id : info.href;
+    const meta = [d.assignee ? `${bi('mt.default_assignee')}: ${esc(d.assignee)}` : '', d.minutes !== null && d.minutes !== undefined ? `${bi('ap.col.time')}: ${bi('ap.minutes', { N: fmtNumber(d.minutes) })}` : ''].filter(Boolean).join(' · ');
+    return `<li class="yr-mi"><div class="yr-mtop"><span class="yr-mdate">${e.est ? '≈' : ''}${esc(fmtDate(e.date).slice(0, 5))}</span>${sym(e)}<span class="small">${bi(stKey(e.st))}${e.est ? ` (${bi('yr.est')})` : ''}</span></div>
+      <a class="yr-mlink" href="#${esc(href)}"><span class="code">${esc(r.eq.equipment_code)}</span> ${esc(nameText(r.eq))}</a>
+      <div class="yr-mwork"><b>${esc(info.title)}</b> <span class="muted small">${esc(info.sub)}</span></div>
+      ${d.steps.length ? `<ol class="yr-steps small">${d.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ol>` : ''}
+      ${d.safety ? `<p class="small t-amber-text">⚠ ${esc(d.safety)}</p>` : ''}
+      ${meta ? `<p class="muted small">${meta}</p>` : ''}</li>`;
+  }).join('');
+  return `<section class="card yr-month-card" id="yr-month"><div class="card-head"><h2>${bi('ap.month_list_title', { M: i + 1, Y: m.year })}</h2>
+    <span class="muted small">${bi('ap.month_count', { N: items.length })}</span><button type="button" class="btn tiny" id="yr-mclose"><span>${bi('ap.close')}</span></button></div>
+    ${items.length ? `<ul class="yr-mlist">${list}</ul>` : `<p class="muted">${bi('ap.no_work_month')}</p>`}</section>`;
 }
 
 /** Gắn sự kiện sau khi vẽ (again = vẽ lại cả màn Bảo trì) */
@@ -208,6 +242,14 @@ export function wireYearTab(view, again) {
   const prev = $('#yr-prev', view), next = $('#yr-next', view);
   if (!prev) return;
   wireAnnual(view, lastInfo, again, () => loadModel(year), cycleText);
+  $$('[data-month]', view).forEach((b) => b.addEventListener('click', () => {
+    const i = Number(b.dataset.month);
+    monthOpen = monthOpen === i ? null : i;
+    again().then(() => { const c = $('#yr-month', view); if (c) c.scrollIntoView({ block: 'start', behavior: 'smooth' }); }).catch(() => {});
+  }));
+  const mc = $('#yr-mclose', view);
+  if (mc) mc.addEventListener('click', () => { monthOpen = null; again(); });
+  $$('.yr-mlink', view).forEach((a) => a.addEventListener('click', (ev) => { ev.preventDefault(); navigate(a.getAttribute('href').slice(1)); }));
   prev.addEventListener('click', () => { year -= 1; lastFile = null; again(); });
   next.addEventListener('click', () => { year += 1; lastFile = null; again(); });
   $$('[data-cat]', view).forEach((el) => el.addEventListener('click', (ev) => {

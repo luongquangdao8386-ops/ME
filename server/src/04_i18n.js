@@ -112,7 +112,8 @@ var SUB_MSG = {
   ALREADY_IN_GROUP: ['Máy này đã có kế hoạch trong nhóm', '该设备在本组中已有计划'],
   ANNUAL_PLAN_OPEN: ['Năm này đang có một bản kế hoạch chưa duyệt — mở bản đó để sửa hoặc hủy', '该年度已有未审批的计划——请打开该计划修改或取消'],
   SNAPSHOT_INVALID: ['Dữ liệu kế hoạch năm không hợp lệ — mở lại app rồi thử lại', '年度计划数据无效——请重新打开应用再试'],
-  SNAPSHOT_EMPTY: ['Năm này chưa có việc nào để lập kế hoạch', '该年度没有可编入计划的工作']
+  SNAPSHOT_EMPTY: ['Năm này chưa có việc nào để lập kế hoạch', '该年度没有可编入计划的工作'],
+  ANNUAL_PDF_TOO_LARGE: ['Cả năm quá nhiều việc để in một lần — chọn In tổng quan hoặc In một tháng', '全年工作过多无法一次打印——请选择打印总览或单月']
 };
 
 function fmtMsg_(pair, vars) {

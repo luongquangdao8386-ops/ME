@@ -357,7 +357,7 @@ function makeDocumentApp(drive) {
   const HorizontalAlignment = enumOf('LEFT', 'CENTER', 'RIGHT', 'JUSTIFY');
   const VerticalAlignment = enumOf('BOTTOM', 'CENTER', 'TOP');
   const ParagraphHeading = enumOf('NORMAL', 'HEADING1', 'HEADING2', 'HEADING3', 'HEADING4', 'HEADING5', 'HEADING6', 'TITLE', 'SUBTITLE');
-  const ElementType = enumOf('BODY_SECTION', 'HEADER_SECTION', 'FOOTER_SECTION', 'PARAGRAPH', 'TABLE', 'TABLE_ROW', 'TABLE_CELL', 'TEXT', 'INLINE_IMAGE', 'HORIZONTAL_RULE');
+  const ElementType = enumOf('BODY_SECTION', 'HEADER_SECTION', 'FOOTER_SECTION', 'PARAGRAPH', 'TABLE', 'TABLE_ROW', 'TABLE_CELL', 'TEXT', 'INLINE_IMAGE', 'HORIZONTAL_RULE', 'PAGE_BREAK');
   const fail = (m) => { throw new Error('DocumentApp (giả lập): ' + m); };
   const num = (v, what, { int = false, min = 0 } = {}) => {
     if (typeof v !== 'number' || !isFinite(v) || v < min || (int && !Number.isInteger(v))) fail(what + ' không hợp lệ: ' + v);
@@ -499,7 +499,9 @@ function makeDocumentApp(drive) {
       Object.assign(s, {
         setMarginTop: m('MARGIN_TOP'), setMarginBottom: m('MARGIN_BOTTOM'), setMarginLeft: m('MARGIN_LEFT'), setMarginRight: m('MARGIN_RIGHT'),
         setPageWidth: m('PAGE_WIDTH'), setPageHeight: m('PAGE_HEIGHT'),
-        appendImage: (blob) => { const im = makeImage(blob); const p = makePara(''); p.images.push(im); s.children.push(p); return im; }
+        appendImage: (blob) => { const im = makeImage(blob); const p = makePara(''); p.images.push(im); s.children.push(p); return im; },
+        // Body.appendPageBreak() (có trong tài liệu Apps Script): ngắt trang
+        appendPageBreak: () => { const pb = { kind: 'pagebreak', st: {}, getType: () => ElementType.PAGE_BREAK, getText: () => '' }; s.children.push(pb); return pb; }
       });
     }
     return s;

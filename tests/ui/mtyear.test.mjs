@@ -111,6 +111,19 @@ test('web: Kế hoạch năm — bảng 12 tháng theo loại, ô phiếu bấm 
     assert.equal(await page.locator('tr.yr-row.yk-inspection td.ym').nth(11).locator('.ys').count(), 1);
     // Tháng hiện tại tô
     assert.equal(await page.locator('thead th.ym').nth(CUR).getAttribute('class'), 'ym cur');
+    // d4.19: bấm T1 → danh sách "Việc tháng 1" (máy, việc, trạng thái); bấm lại / Đóng thì thu
+    await page.click('.yr-mchip[data-month="0"]');
+    await page.waitForSelector('#yr-month .yr-mi');
+    const mtxt = await page.textContent('#yr-month');
+    assert.ok(mtxt.includes(`Việc tháng 1/${Y}`) && mtxt.includes('Máy nén khí 01') && mtxt.includes('Bảo dưỡng tháng') && mtxt.includes('Xong đúng hạn'), mtxt);
+    assert.equal(await page.locator('#yr-month .yr-mi').count(), 1);
+    await page.click('#yr-mclose');
+    await page.waitForFunction(() => !document.querySelector('#yr-month'));
+    await page.click('thead th.ym >> nth=11');
+    await page.waitForSelector('#yr-month');
+    assert.ok((await page.textContent('#yr-month')).includes('Kiểm định bình chịu áp lực'), 'tháng 12: kiểm định');
+    await page.click('#yr-mclose');
+    await page.waitForFunction(() => !document.querySelector('#yr-month'));
     // KPI có % hoàn thành (đã có lần tới hạn)
     const kpi = await page.textContent('.yr-kpis');
     assert.ok(kpi.includes('Dự kiến cả năm') && kpi.includes('全年计划') && /\d+%/.test(kpi), kpi);

@@ -245,7 +245,7 @@ export const idb = {
 /* ---------------- Gọi máy chủ (3.15) ---------------- */
 export const session = { token: null, epoch: null, user: null, settings: {}, reauth: null, kind: null };
 
-const LONG_ACTIONS = /^(import\.|doc\.upload|doc\.download|doc\.thumbs|sync\.bootstrap|report\.|export\.|poc\.)/;
+const LONG_ACTIONS = /^(import\.|doc\.upload|doc\.download|doc\.thumbs|sync\.bootstrap|report\.|export\.|poc\.|annual_plan\.|maintenance\.plan\.group)/;
 let running = 0;
 const waiters = [];
 async function slot() {

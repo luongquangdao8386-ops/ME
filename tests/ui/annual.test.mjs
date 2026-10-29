@@ -6,7 +6,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { openApp, SHOTS } from './harness.mjs';
-import { freshServer, ownerClient, userClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, makeClient, OWNER_CODE, OWNER_PIN, uuid } from '../helpers.mjs';
+
 
 const IPHONE = { viewport: { width: 390, height: 844 }, mobile: true };
 const WEB = { viewport: { width: 1440, height: 900 }, mobile: false };
@@ -46,8 +47,11 @@ function setup() {
   ok(c.write('lookup.edit', { value_id: cat, group_key: 'EQUIPMENT_CATEGORY', code: 'AIR_COMP', name_vi: 'Máy nén khí', name_zh: '空压机' }));
   const eqs = [uuid(), uuid()];
   eqs.forEach((e, i) => ok(c.write('equipment.create', { equipment_id: e, name_vi: `Máy nén khí 0${i + 1}`, category_id: cat })));
-  const plan = uuid(), wo = uuid();
-  ok(c.write('maintenance.plan.edit', { plan_id: plan, equipment_id: eqs[0], title_vi: 'Bảo dưỡng tháng', interval_type: 'MONTH', interval_value: 1, anchor_date: `${Y}-01-15` }));
+  const plan = uuid(), wo = uuid(), tpl = uuid();
+  ok(c.write('maintenance.checklist.edit', { template_id: tpl, template_name_vi: 'Bảo dưỡng máy nén', items: [
+    { label_vi: 'Kiểm tra dầu', result_type: 'PASS_FAIL', required: true }, { label_vi: 'Áp suất xả', result_type: 'NUMBER', unit: 'bar', min_value: 6, max_value: 8, required: true }] }));
+  ok(c.write('maintenance.plan.edit', { plan_id: plan, equipment_id: eqs[0], title_vi: 'Bảo dưỡng tháng', interval_type: 'MONTH', interval_value: 1, anchor_date: `${Y}-01-15`,
+    checklist_template_id: tpl, estimated_minutes: 60, safety_note_vi: 'Ngắt điện trước khi mở nắp' }));
   ok(c.write('maintenance.wo.create', { work_order_id: wo, equipment_id: eqs[0], title_vi: 'Bảo dưỡng tháng 1', due_date: `${Y}-01-15` }));
   env.g.dbReset_();
   const p = env.rows('MaintenancePlans')[0];
@@ -88,8 +92,21 @@ test('web: người lập chốt + gửi duyệt (không tự duyệt), Quản t
     assert.equal(await page.locator('#ap-approve').count(), 0, 'người lập không có nút Duyệt');
     assert.ok((await page.textContent('#ap-box')).includes('không tự duyệt'));
     // PDF bản chờ duyệt (máy tính tải thẳng)
-    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click('[data-ap-pdf]')]);
-    assert.equal(dl.suggestedFilename(), `KHN-${Y}-01-submitted.pdf`);
+    // Bản chụp có nội dung từng việc (bước checklist, an toàn, thời gian) cho phần "việc từng tháng"
+    const cl = makeClient(env);
+    cl.login('U-C3', C3_PIN);
+    const snapRow = ok(cl.call('annual_plan.view', { annual_plan_id: env.rows('AnnualPlans')[0].annual_plan_id })).data.snapshot.groups[0].rows[0];
+    assert.deepEqual(Array.from(snapRow.steps), ['Kiểm tra dầu · [zh-CN] Kiểm tra dầu', 'Áp suất xả · [zh-CN] Áp suất xả (6–8 bar)'], 'bước song ngữ + giới hạn đo');
+    assert.equal(snapRow.safety, 'Ngắt điện trước khi mở nắp');
+    assert.equal(snapRow.minutes, 60);
+    // PDF: hộp chọn in → Một tháng
+    await page.click('[data-ap-pdf]');
+    await page.waitForSelector('.modal .ap-pick');
+    assert.ok((await page.textContent('.modal')).includes('Chỉ tổng quan năm'));
+    await page.check('.modal input[value="MONTH"]');
+    await page.selectOption('#ap-month', '3');
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 20000 }), page.click('.modal-actions .btn.primary')]);
+    assert.equal(dl.suggestedFilename(), `KHN-${Y}-01-submitted_T03.pdf`);
     assert.ok(await noOverflow(page));
     await page.screenshot({ path: path.join(SHOTS, 'd418-web-annual-submitted.png'), fullPage: true });
     assert.deepEqual(a.consoleErrors, []);

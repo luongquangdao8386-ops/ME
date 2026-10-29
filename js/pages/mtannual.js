@@ -37,8 +37,47 @@ export async function annualInfo(year, model) {
   return { year, all, approved, open, perms, base, baseState };
 }
 
-/** Bản chụp gửi máy chủ: theo loại → dòng (máy × kế hoạch/kiểm định/dịch vụ) → ngày dự kiến + ngày ước tính */
-export function snapshotOf(m, cycleText) {
+/**
+ * Nội dung một dòng (d4.19) cho "việc từng tháng": bước checklist (mới nhất, kèm giới hạn đo), lưu ý an toàn, người làm, thời gian
+ * dự kiến của kế hoạch; kiểm định: hồ sơ cần có; dịch vụ HĐ: nội dung dịch vụ. Trả hàm (dòng mô hình năm) → {steps, safety, assignee, minutes}.
+ */
+export async function rowDetailer() {
+  const latest = new Map();
+  for (const it of await recs('CHECKLIST_ITEM')) {
+    if (it.archived_at) continue;
+    const cur = latest.get(it.template_id);
+    const rev = Number(it.revision);
+    if (!cur || rev > cur.rev) latest.set(it.template_id, { rev, items: [it] });
+    else if (rev === cur.rev) cur.items.push(it);
+  }
+  const two = (vi, zh) => [vi, zh].filter((x, i, a) => x && a.indexOf(x) === i).join(' · ');
+  const has = (v) => v !== '' && v !== null && v !== undefined;
+  const range = (it) => {
+    const u = it.unit ? ' ' + it.unit : '';
+    if (has(it.min_value) && has(it.max_value)) return ` (${it.min_value}–${it.max_value}${u})`;
+    if (has(it.min_value)) return ` (≥ ${it.min_value}${u})`;
+    if (has(it.max_value)) return ` (≤ ${it.max_value}${u})`;
+    return it.unit ? ` (${it.unit})` : '';
+  };
+  return (r) => {
+    if (r.kind === 'PLAN' || r.kind === 'HOURS') {
+      const p = r.plan;
+      const cl = p.checklist_template_id ? latest.get(p.checklist_template_id) : null;
+      const steps = cl ? cl.items.slice().sort((a, b) => Number(a.step_no) - Number(b.step_no)).map((it) => two(it.label_vi, it.label_zh) + range(it)) : [];
+      const minutes = has(p.estimated_minutes) ? Number(p.estimated_minutes) : null;
+      return { steps, safety: two(p.safety_note_vi, p.safety_note_zh), assignee: p.assignee_name || '', minutes };
+    }
+    if (r.kind === 'INSPECTION') {
+      const docs = r.type ? two(r.type.required_docs_vi, r.type.required_docs_zh) : '';
+      return { steps: docs ? [docs] : [], safety: '', assignee: '', minutes: null };
+    }
+    const sv = two(r.contractEquipment.service_vi, r.contractEquipment.service_zh);
+    return { steps: sv ? [sv] : [], safety: '', assignee: '', minutes: null };
+  };
+}
+
+/** Bản chụp gửi máy chủ: theo loại → dòng (máy × kế hoạch/kiểm định/dịch vụ) → ngày dự kiến + ngày ước tính + nội dung (d4.19) */
+export function snapshotOf(m, cycleText, detail) {
   const refOf = (r) => (r.kind === 'PLAN' || r.kind === 'HOURS' ? r.plan.plan_id : (r.kind === 'INSPECTION' ? r.requirement.requirement_id : r.contractEquipment.contract_equipment_id));
   const head = (r) => {
     if (r.kind === 'PLAN' || r.kind === 'HOURS') return { vi: r.plan.title_vi || '', zh: r.plan.title_zh || '', code: r.plan.plan_code || '', cycle: cycleText(r.plan) };
@@ -56,7 +95,8 @@ export function snapshotOf(m, cycleText) {
         return {
           kind: r.kind, ref_id: refOf(r), equipment_id: r.eq.equipment_id, equipment_code: r.eq.equipment_code || '', equipment_vi: r.eq.name_vi || '',
           equipment_zh: r.eq.name_zh || '', title_vi: h.vi, title_zh: h.zh, code: h.code, cycle: h.cycle,
-          dates: all.filter((e) => !e.est && !e.extra).map((e) => e.date), est: all.filter((e) => e.est).map((e) => e.date)
+          dates: all.filter((e) => !e.est && !e.extra).map((e) => e.date), est: all.filter((e) => e.est).map((e) => e.date),
+          ...(detail ? detail(r) : {})
         };
       })
     }))
@@ -163,7 +203,7 @@ export function wireAnnual(view, info, again, getModel, cycleText) {
     const m = await getModel();
     if (!m.groups.length) { toast(bi('ap.empty'), 'err'); return; }
     busy(btn, true);
-    const res = await writeOnline('annual_plan.save', { annual_plan_id: id, year, snapshot: snapshotOf(m, cycleText) }, { expected_version: ver });
+    const res = await writeOnline('annual_plan.save', { annual_plan_id: id, year, snapshot: snapshotOf(m, cycleText, await rowDetailer()) }, { expected_version: ver });
     busy(btn, false);
     await done(res, 'ap.saved');
   };
@@ -203,10 +243,22 @@ export function wireAnnual(view, info, again, getModel, cycleText) {
     const res = await writeOnline('annual_plan.cancel', { annual_plan_id: open.annual_plan_id, reason }, { expected_version: open.record_version });
     await done(res, 'ap.cancelled_ok');
   });
-  // PDF: máy tính tải thẳng; iPhone bước 2 "Mở / Lưu" trong lần chạm
+  // PDF: chọn in cả năm / chỉ tổng quan / một tháng; máy tính tải thẳng; iPhone bước 2 "Mở / Lưu" trong lần chạm
   $$('[data-ap-pdf]', view).forEach((b) => b.addEventListener('click', async () => {
+    const cur = today();
+    const m0 = Number(cur.slice(0, 4)) === year ? Number(cur.slice(5, 7)) : 1;
+    const pick = await dialog({
+      title: bi('ap.pdf_choose'),
+      body: `<div class="ap-pick">
+        <label class="check"><input type="radio" name="ap-part" value="ALL" checked><span>${bi('ap.pdf_all')}</span></label>
+        <label class="check"><input type="radio" name="ap-part" value="OVERVIEW"><span>${bi('ap.pdf_overview')}</span></label>
+        <label class="check"><input type="radio" name="ap-part" value="MONTH"><span>${bi('ap.pdf_month')}</span></label>
+        <select class="inp sel" id="ap-month" aria-label="${esc(biText('ap.pdf_month'))}">${Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}"${i + 1 === m0 ? ' selected' : ''}>T${i + 1} · ${i + 1}月</option>`).join('')}</select></div>`,
+      actions: [{ label: bi('btn.cancel'), value: null }, { label: bi('ap.pdf_make'), kind: 'primary', read: (w) => ({ part: $('input[name="ap-part"]:checked', w).value, month: Number($('#ap-month', w).value) }) }]
+    });
+    if (!pick) return;
     busy(b, true);
-    const r = await api('annual_plan.pdf', { annual_plan_id: b.dataset.apPdf }, { retry: true });
+    const r = await api('annual_plan.pdf', { annual_plan_id: b.dataset.apPdf, part: pick.part, month: pick.part === 'MONTH' ? pick.month : undefined }, { retry: true, timeoutMs: 90000 });
     busy(b, false);
     if (!r.ok) { toast(esc(resMsg(r)), 'err'); return; }
     const file = new File([b64ToBytes(r.data.content_b64)], r.data.file_name, { type: 'application/pdf' });
