@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.19 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.20 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -15,6 +15,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Hai app cùng một mã; app tự chọn máy chủ theo địa chỉ trang. Một iPhone cài được cả hai biểu tượng, dữ liệu không lẫn nhau.
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
+
+**Bản d4.20 (bấm Enter là xác nhận) chỉ đổi app — không dán Code.gs:** trong mọi hộp thoại (hỏi lại PIN khi duyệt/ký, nhập lý do, thêm link…) gõ xong bấm **Enter** = bấm nút chính (OK / Xác nhận / Duyệt / Lưu); hộp có nhiều ô thì Enter chuyển sang ô kế tiếp, tới ô cuối mới xác nhận; ô ghi chú nhiều dòng Enter vẫn xuống dòng; đang gõ tiếng Trung (bộ gõ còn khung chọn chữ) Enter chỉ chọn chữ; **Esc** = Hủy. Trang THỬ `/ME-thu/` tự cập nhật: Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.20** (máy chủ vẫn ghi bản đang chạy — bình thường). Bàn phím số của iPhone không có phím Enter, nên trên iPhone vẫn bấm OK như cũ. Chưa dán Code.gs d4.19 (Phần V/W) thì dán luôn bản Code.gs mới nhất — số bản đọc được sẽ là **1.0.0-d4.20**, các bước khác giữ nguyên. Ưng thì nói **"phát hành THẬT"**.
 
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 

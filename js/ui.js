@@ -207,6 +207,24 @@ export function dialog({ title, body = '', actions = [] }) {
       b.addEventListener('click', () => { const v = a.value !== undefined ? a.value : (a.read ? a.read(wrap) : true); wrap.remove(); resolve(v); });
       act.appendChild(b);
     });
+    // Bàn phím (d4.20): Enter trong ô nhập = bấm nút chính (OK, Lưu…); nhiều ô thì Enter sang ô kế tiếp, ô cuối mới xác nhận.
+    // Ô nhiều dòng (textarea) giữ Enter để xuống dòng; đang gõ bộ gõ tiếng Trung/Việt (isComposing) thì không xác nhận. Esc = Hủy.
+    wrap.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Escape') {
+        const cancel = actions.findIndex((a) => a.value === null);
+        if (cancel >= 0) { e.preventDefault(); act.children[cancel].click(); }
+        return;
+      }
+      if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      const typing = (el) => el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'file', 'hidden'].includes(el.type) && !el.disabled;
+      const fields = $$('input, select', wrap).filter((el) => !el.closest('[hidden]') && (el.tagName === 'SELECT' || typing(el)));
+      const i = fields.indexOf(e.target);
+      e.preventDefault();
+      if (typing(e.target) && i >= 0 && i < fields.length - 1) { fields[i + 1].focus(); return; }
+      const primary = $$('.modal-actions .btn.primary', wrap).pop();
+      if (primary && !primary.disabled) primary.click();
+    });
     document.body.appendChild(wrap);
     const first = $('input', wrap) || $('.btn', wrap);
     if (first) first.focus();
