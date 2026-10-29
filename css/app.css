@@ -515,6 +515,88 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
   .cal-more { font-size: 0.6875rem; color: var(--graphite); padding-left: 3px; }
 }
 
+/* d4.16 Bảo trì → Kế hoạch năm: ký hiệu trạng thái (luôn kèm chú giải + chữ khi rê/chạm), web bảng 12 tháng cột tên dính, iPhone thẻ theo loại */
+.ys { display: inline-block; min-width: 1.05em; text-align: center; font-style: normal; font-weight: 700; font-size: 0.9375rem; line-height: 1.1; color: var(--navy-2); }
+/* Vòng tròn vẽ bằng CSS (◐ thiếu trong một số phông máy tính/Android); chữ trong thẻ giữ để chép/đọc */
+.ys-planned, .ys-done, .ys-late, .ys-open { font-size: 0; min-width: 0; width: 11px; height: 11px; margin: 0 2px; border-radius: 50%; border: 2px solid currentColor; vertical-align: -1px; }
+.ys-done { color: var(--green); background: currentColor; }
+.ys-late { color: var(--amber); background: currentColor; }
+.ys-open { color: var(--navy); background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.ys-overdue, .ys-missed { color: var(--red); }
+.ys-cancelled { color: var(--muted); }
+.ys.est { color: var(--graphite); font-weight: 600; }
+.ys.extra { outline: 1.5px dotted var(--graphite); outline-offset: 1.5px; }
+.yr-top { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.yr-top h2 { margin: 0 2px; font-size: 1.0625rem; color: var(--navy); line-height: 1.25; min-width: 0; }
+.yr-top h2 .vi, .yr-top h2 .zh { display: block; }
+.yr-top h2 .sep { display: none; }
+.yr-top h2 .zh { font-size: 0.8125rem; font-weight: 600; color: var(--graphite); }
+.yr-tools { margin: 0 0 0 auto; gap: 6px; }
+.yr-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; margin: 10px 0 8px; }
+.yr-kpi { display: flex; flex-direction: column; justify-content: space-between; gap: 2px; background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.yr-kpi small { font-size: 0.75rem; color: var(--graphite); line-height: 1.25; }
+.yr-kpi small .vi, .yr-kpi small .zh { display: block; }
+.yr-kpi small .sep { display: none; }
+.yr-kpi strong { font-size: 1.25rem; color: var(--navy); font-variant-numeric: tabular-nums; }
+.yr-kpi.bad strong { color: var(--red); }
+.yr-head > p { margin: 6px 0 4px; }
+.yr-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.yr-legend > span { display: inline-flex; align-items: center; gap: 4px; }
+.ya { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--navy); white-space: nowrap; }
+.ya.ok { color: var(--green); }
+.ya.bad { color: var(--red); }
+.ya-p { color: var(--graphite); font-size: 0.75rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.yc { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1px; text-decoration: none; color: inherit; border-radius: 4px; padding: 1px 2px; }
+a.yc:hover, a.yc:focus-visible { background: #EAF2FB; }
+.yc small { font-size: 0.6875rem; color: var(--graphite); margin-right: 2px; font-variant-numeric: tabular-nums; }
+.ysub { display: block; font-size: 0.75rem; font-weight: 400; color: var(--graphite); margin-top: 2px; }
+.ysub .muted { font-size: inherit; }
+/* iPhone: thẻ loại, dải 12 ô tháng */
+.yg-card { padding: 10px 12px; }
+.yg-head { -webkit-appearance: none; appearance: none; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; width: 100%; padding: 2px 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; text-align: left; align-items: center; }
+.yg-name { font-weight: 700; color: var(--navy); }
+.yg-head > .muted { grid-column: 1; }
+.yg-head svg { grid-column: 2; grid-row: 1 / span 2; color: var(--graphite); transition: transform 0.15s; }
+.yg-card.open .yg-head svg { transform: rotate(90deg); }
+.ystrip { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2px; margin-top: 8px; }
+.ysc { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 0; min-height: 46px; padding: 2px 0 4px; border-radius: 6px; background: var(--bg); overflow: hidden; }
+.ysc.cur { background: #E4EDF8; box-shadow: inset 0 0 0 1px var(--navy-2); }
+.ysm { font-size: 0.625rem; line-height: 1.3; color: var(--graphite); font-variant-numeric: tabular-nums; }
+.ysc .ya, .ysc .ya-p { font-size: 0.6875rem; }
+.ysc .yc { padding: 0; }
+.yrow { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.yrow-label { display: block; text-decoration: none; color: inherit; font-weight: 600; font-size: 0.875rem; }
+.yrow-label .code, .yr-row .code { color: var(--navy); font-variant-numeric: tabular-nums; }
+/* Web: bảng — cột tên dính trái, đầu bảng dính trên, tháng hiện tại tô nhạt */
+.yr-card { padding: 0; overflow: hidden; }
+.yr-wrap { max-height: 72vh; }
+.yr-table { table-layout: fixed; min-width: 61rem; }
+.yr-table th.yname { width: 15rem; position: sticky; left: 0; z-index: 1; background: #fff; }
+.yr-table thead th { z-index: 2; }
+.yr-table thead th.yname { z-index: 3; background: #F2F5F8; }
+.yr-table .ym { width: 3.4rem; text-align: center; padding: 6px 2px; vertical-align: middle; }
+.yr-table .ysum { width: 6.5rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.yr-table td.ym.cur { background: #F3F7FC; }
+.yr-table thead th.ym.cur { background: #E4EDF8; color: var(--navy); }
+.yr-table tr.yg > * { background: #F2F5F8; border-top: 1px solid var(--line); cursor: pointer; }
+.yr-table tr.yg > td.ym.cur { background: #E7EEF7; }
+.yr-table tr.yg:hover > * { background: #EAF0F6; }
+.yg-btn { -webkit-appearance: none; appearance: none; border: 0; background: none; font: inherit; color: var(--navy); font-weight: 700; cursor: pointer; padding: 0;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; text-align: left; width: 100%; }
+.yg-btn svg { width: 16px; height: 16px; transition: transform 0.15s; }
+.yr-table tr.yg.open .yg-btn svg { transform: rotate(90deg); }
+.yg-btn small { font-weight: 400; font-size: 0.75rem; }
+.yr-table tr.yr-row .yname { font-weight: 400; }
+.yr-table tr.yr-row .yname a { color: var(--text); text-decoration: none; font-weight: 600; }
+.yr-table tr.yr-row .yname a:hover { text-decoration: underline; }
+.yr-table tr.yr-row:hover > * { background: #F7F9FB; }
+.yr-table tfoot .yfoot > * { background: #F7F9FB; font-weight: 700; font-size: 0.8125rem; color: var(--navy); }
+@media (min-width: 900px) {
+  .yr-top h2 { font-size: 1.25rem; }
+  .yr-kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+}
+
 /* QR */
 .qr-view { text-align: center; }
 .qr-big svg { width: min(70vw, 280px); height: auto; stroke: none; }

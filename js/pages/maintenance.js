@@ -16,6 +16,7 @@ import { reportLink, recordPdfBtn, wireRecordPdf } from '../report-link.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { workMatHtml, wireWorkMat, workMatData, localUsageIds } from './workmat.js';
 import { replaceDialog } from './partreplace.js';
+import { yearTab, wireYearTab } from './mtyear.js';
 import {
   myQueue, overlayWorkOrder, localCreations, woSubmitIssues, outOfRange, statusBadge, prioBadges, eqText, uid, level, PRIORITIES, SEVERITIES,
   queueWork, mergeExecPayload, workerPick, WO_OPEN, nextStepHtml, wireNextStep, issueListHtml, wireIssueList, woSelfPeople, pendingForMe
@@ -82,15 +83,16 @@ export async function renderMaintenance(view, ctx) {
   });
   const excelBtn = await excelLink('maintenance_plans');
   const rptBtn = await reportLink('RPT_MAINTENANCE');
-  const tabs = ['wo', 'plans', 'calendar'];
-  const tabLabel = { wo: 'tab.work_orders', plans: 'tab.plans', calendar: 'tab.calendar' };
+  const tabs = ['wo', 'plans', 'calendar', 'year'];
+  const tabLabel = { wo: 'tab.work_orders', plans: 'tab.plans', calendar: 'tab.calendar', year: 'tab.year' };
   let body = '';
   if (st.tab === 'wo') body = await woTab(wide);
   else if (st.tab === 'plans') body = await plansTab(wide, can_);
+  else if (st.tab === 'year') body = await yearTab(wide);
   else body = await calendarTab();
   setViewHtml(view, `<div class="chips tabs">${tabs.map((t) => `<button type="button" class="chip${st.tab === t ? ' on' : ''}" data-tab="${t}">${bi(tabLabel[t])}</button>`).join('')}</div>
     <div class="toolbar">
-      ${st.tab !== 'calendar' ? `<div class="search"><span>${ICON.search}</span><input id="mt-q" type="search" value="${esc(st.q)}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>` : ''}
+      ${st.tab !== 'calendar' && st.tab !== 'year' ? `<div class="search"><span>${ICON.search}</span><input id="mt-q" type="search" value="${esc(st.q)}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>` : ''}
       <div class="row tools">
         ${wide && can_.wo ? `<a class="btn small primary" href="#/maintenance/wo/new">${ICON.plus}<span>${bi('mt.wo_new')}</span></a>` : ''}
         ${wide && can_.plan ? `<a class="btn small" href="#/maintenance/plans/new">${ICON.calendar}<span>${bi('mt.plan_new')}</span></a>` : ''}
@@ -110,6 +112,7 @@ export async function renderMaintenance(view, ctx) {
   wireSearch(view, '#mt-q', (v) => { st.q = v; }, again);
   const hb = $('#mt-hours', view);
   if (hb) hb.addEventListener('click', async () => { if (await hoursDialog(null)) again(); });
+  if (st.tab === 'year') wireYearTab(view, again);
 }
 
 /** " · còn N h" / " · đã tới mốc" của kế hoạch theo giờ chạy (danh sách và trang kế hoạch dùng chung) */
@@ -280,7 +283,7 @@ export async function renderPlan(view, ctx) {
     ] : []
   });
   if (!p) { view.innerHTML = `<div class="card">${bi(navigator.onLine ? 'qr.unavailable' : 'sync.need_network')}</div>`; return; }
-  st.tab = 'plans';
+  if (st.tab !== 'year') st.tab = 'plans'; // mở từ Kế hoạch năm thì ‹ quay về Kế hoạch năm
   const e = await byId('EQUIPMENT', p.equipment_id);
   const cls = await checklistMap();
   const cl = p.checklist_template_id ? cls.get(p.checklist_template_id) : null;
@@ -607,7 +610,7 @@ export async function renderWorkOrder(view, ctx) {
     actions: server && server.qr_key ? [{ icon: 'qr', label: biText('btn.view_qr'), onClick: () => navigate(`/qr/WORK_ORDER/${server.work_order_id}`) }] : []
   });
   if (!base) { view.innerHTML = `<div class="card">${bi(navigator.onLine ? 'qr.unavailable' : 'sync.need_network')}</div>`; return; }
-  st.tab = 'wo';
+  if (st.tab !== 'year') st.tab = 'wo';
   const results0 = (await recs('WO_RESULT')).filter((r) => r.work_order_id === base.work_order_id).sort((a, b) => Number(a.step_no) - Number(b.step_no));
   const ov = overlayWorkOrder(base, results0, ops);
   // Thay đổi chưa lưu trên form (C2: rời màn tự lưu nháp form trên máy)
