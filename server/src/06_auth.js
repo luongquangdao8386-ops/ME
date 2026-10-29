@@ -618,7 +618,9 @@ var NAME_FIELDS_ = {
   assignee_user_id: 'assignee_name', reported_by: 'reported_by_name', requested_by: 'requested_by_name', recorded_by: 'recorded_by_name',
   confirmed_by: 'confirmed_by_name', reading_user_id: 'reading_user_name', actor_user_id: 'actor_name',
   // Đợt 3: người đọc được giao (đồng hồ), người tạo báo cáo, người xác minh tủ/lộ
-  assigned_user_id: 'assigned_name', generated_by: 'generated_by_name', verified_by: 'verified_by_name'
+  assigned_user_id: 'assigned_name', generated_by: 'generated_by_name', verified_by: 'verified_by_name',
+  // d4.18: người lập / trả lại kế hoạch năm
+  prepared_by: 'prepared_by_name', returned_by: 'returned_by_name'
 };
 
 /** Tên hiển thị của người phụ trách/người sửa gắn vào bản ghi gửi client */

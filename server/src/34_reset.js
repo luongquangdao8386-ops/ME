@@ -24,7 +24,7 @@ var RESET_LEASE_PROP_ = 'RESET_LEASE';
  */
 var RESET_GROUPS_ = [
   { key: 'catalog', tables: ['EquipmentParts', 'EquipmentSpecs', 'Equipment', 'Materials', 'InspectionTypes', 'Vendors', 'LookupValues', 'Locations'] },
-  { key: 'work', tables: ['WorkOrderResults', 'WorkOrders', 'MaintenancePlans', 'ChecklistTemplates', 'RepairTasks', 'Repairs',
+  { key: 'work', tables: ['AnnualPlans', 'WorkOrderResults', 'WorkOrders', 'MaintenancePlans', 'ChecklistTemplates', 'RepairTasks', 'Repairs',
     'MaterialRequestLines', 'MaterialRequests', 'MaterialUsageLines', 'OperatingReadings', 'EquipmentPartEvents'] },
   { key: 'utilities', tables: ['MeterReadings', 'MeterEvents', 'MeterSegments', 'Meters', 'UtilityTariffs', 'CircuitLoads', 'Circuits', 'Panels'] },
   { key: 'contracts', tables: ['ContractServices', 'ContractEquipment', 'Contracts', 'Inspections', 'InspectionRequirements'] },
@@ -39,9 +39,15 @@ var RESET_AUDIT_KEEP_RE_ = /^(auth|pin|session|user|permission|settings|notify\.
 
 function resetAuditKept_(a) { return RESET_AUDIT_KEEP_RE_.test(String(a.action || '')); }
 
+/** Bảng của nhóm đã có trong dữ liệu (đợt ≤ đợt đang chạy: dán Code.gs mới mà chưa migrateSchema thì bỏ bảng chưa tạo) */
+function resetTables_(g) {
+  var dot = releasedDot_();
+  return g.tables.filter(function (t) { return !SHEETS[t] || SHEETS[t].dot <= dot; });
+}
+
 function resetTableOrder_() {
   var out = [];
-  RESET_GROUPS_.forEach(function (g) { g.tables.forEach(function (t) { out.push({ table: t, group: g.key }); }); });
+  RESET_GROUPS_.forEach(function (g) { resetTables_(g).forEach(function (t) { out.push({ table: t, group: g.key }); }); });
   return out;
 }
 
@@ -69,7 +75,7 @@ function resetPlan_() {
   var groups = {};
   RESET_GROUPS_.forEach(function (g) {
     var n = 0;
-    g.tables.forEach(function (t) { n += resetTableCount_(t); });
+    resetTables_(g).forEach(function (t) { n += resetTableCount_(t); });
     groups[g.key] = n;
   });
   var fe = resetFileEntries_();
@@ -428,7 +434,7 @@ function resetVerify_(run) {
   if (prop_('DATASET_EPOCH') !== run.after_epoch) bad.push('DATASET_EPOCH');
   var owner = findOne_('Users', 'user_id', run.requested_by);
   if (!owner || !owner.active || !owner.is_system_owner || !hasFlag_(4, 'system', 'R')) bad.push('OWNER');
-  var missing = sheetsForDot_(RELEASED_DOT).filter(function (n2) { return !book_(sheetSchema_(n2).book).getSheetByName(n2); });
+  var missing = sheetsForDot_(releasedDot_()).filter(function (n2) { return !book_(sheetSchema_(n2).book).getSheetByName(n2); });
   if (missing.length) bad.push('SHEETS ' + missing.join(','));
   var t = now_().getTime();
   var live = readRows_('Sessions').filter(function (s) { return isSessionActive_(s, t) && s.dataset_epoch !== run.after_epoch; }).length;

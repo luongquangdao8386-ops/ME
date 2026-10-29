@@ -5,15 +5,16 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.17';
+var SERVER_VERSION = '1.0.0-d4.18';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.4';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4)
+var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
+                               // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 4;       // đợt đang phát hành
+var RELEASED_DOT = 5;       // đợt đang phát hành (5 = kế hoạch bảo trì năm theo nhóm + duyệt, ngoài đặc tả, người dùng yêu cầu 29/10/2026)
 
 /** schema_version của dữ liệu → đợt dữ liệu đã có đủ sheet (migrateSchema ghi schema_version) */
-var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4 };
+var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4, '1.5.5': 5 };
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */
@@ -79,7 +80,9 @@ var SETTINGS_DEFAULTS = [
   ['reading_self_edit_hours', 'INT', 24, true, 3, 'Thời gian tự sửa chỉ số của mình (giờ)', '本人修改读数时限（小时）'],
   // d4.11: logo công ty trên báo cáo/PDF/Excel (tệp riêng tư trong thư mục dữ liệu; sửa bằng report.logo.set, không sửa ở đây)
   ['report_logo_file_id', 'STRING', '', false, 3, 'Tệp logo trên báo cáo (Drive)', '报表标志文件（云端硬盘）'],
-  ['report_logo_rev', 'STRING', '', true, 3, 'Phiên bản logo trên báo cáo', '报表标志版本']
+  ['report_logo_rev', 'STRING', '', true, 3, 'Phiên bản logo trên báo cáo', '报表标志版本'],
+  // d4.18: mã biểu mẫu in ở đầu PDF kế hoạch bảo trì năm (vd BM-BT-01); trống thì không in
+  ['annual_plan_form_code', 'STRING', '', true, 5, 'Mã biểu mẫu trên PDF kế hoạch bảo trì năm (trống thì không in)', '年度维护计划PDF表单编号（留空则不打印）']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */
@@ -159,7 +162,9 @@ var ENTITY_TYPES = {
   CIRCUIT: { module: 'circuits', sheet: 'Circuits', key: 'circuit_id', code: 'circuit_code', qr: true },
   CIRCUIT_LOAD: { module: 'circuits', sheet: 'CircuitLoads', key: 'load_link_id', code: null, qr: false },
   REPORT_DEFINITION: { module: 'reports', sheet: 'ReportDefinitions', key: 'report_definition_id', code: 'code', qr: false },
-  REPORT_RUN: { module: 'reports', sheet: 'ReportRuns', key: 'report_run_id', code: 'report_run_code', qr: true }
+  REPORT_RUN: { module: 'reports', sheet: 'ReportRuns', key: 'report_run_id', code: 'report_run_code', qr: true },
+  // d4.18: kế hoạch bảo trì năm đã chốt (bản chụp JSON riêng tư trên Drive, Documents kind REPORT_FILE)
+  ANNUAL_PLAN: { module: 'maintenance', sheet: 'AnnualPlans', key: 'annual_plan_id', code: 'annual_plan_code', qr: false }
 };
 
 /** work_type của đề nghị/lượng dùng/sự kiện linh kiện → loại hồ sơ, module quyền (4.4.5) */

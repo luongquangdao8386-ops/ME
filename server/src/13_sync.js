@@ -40,7 +40,9 @@ var SYNC_ENTITIES_ = [
   { type: 'CIRCUIT', sheet: 'Circuits', action: 'circuit.view', module: 'circuits', qr: true, dot: 3 },
   { type: 'CIRCUIT_LOAD', sheet: 'CircuitLoads', action: 'circuit.view', module: 'circuits', dot: 3 },
   { type: 'REPORT_DEFINITION', sheet: 'ReportDefinitions', action: 'report.view', module: 'reports', dot: 3 },
-  { type: 'REPORT_RUN', sheet: 'ReportRuns', action: 'report.view', module: 'reports', qr: true, dot: 3 }
+  { type: 'REPORT_RUN', sheet: 'ReportRuns', action: 'report.view', module: 'reports', qr: true, dot: 3 },
+  // d4.18: kế hoạch năm (trạng thái, người lập/duyệt); bản chụp lịch tải riêng bằng annual_plan.view
+  { type: 'ANNUAL_PLAN', sheet: 'AnnualPlans', action: 'maintenance.view', module: 'maintenance', dot: 5 }
 ];
 
 /** Lần đọc hợp lệ mới nhất của mỗi đồng hồ (reading_id) — giữ trên máy kể cả khi cũ hơn cửa sổ đồng bộ */

@@ -8,7 +8,7 @@
  *  - ô: Y được · N không · OWN của mình · ASG được giao · MC module chính · IFON nếu bật ·
  *       NS được nhưng không tự duyệt · OWNER chỉ owner · REC theo hồ sơ · SPEC quy tắc riêng trong thao tác.
  *  - mạng: cache · net · offline · pin · public (không cần phiên) · session (chỉ cần phiên) · internal.
- *  - đợt: 1–4; H = hoãn/chờ chốt; POC = chỉ ở môi trường THỬ khi chạy PoC.
+ *  - đợt: 1–5 (5 = kế hoạch năm, d4.18); H = hoãn/chờ chốt; POC = chỉ ở môi trường THỬ khi chạy PoC.
  */
 var ACTION_TABLE_ = [
   // 4.4.1 Thiết bị
@@ -39,6 +39,15 @@ var ACTION_TABLE_ = [
   'maintenance.cancel|maintenance|E|N OWN N N N N Y Y|net|2|W',
   // Bổ sung Đợt 2: ghi giờ chạy cho kế hoạch theo giờ (1.4 §5.2 "cần nguồn đọc giờ chạy thực tế"; 4.4.3 không có dòng riêng)
   'maintenance.hours.record|maintenance|C|N Y N N N N Y Y|offline|2|W',
+  // d4.18 ("đợt" 5, ngoài đặc tả): kế hoạch cho cả nhóm máy cùng loại, sửa cả nhóm; kế hoạch năm lập – gửi – duyệt (không tự duyệt), PDF
+  'maintenance.plan.group|maintenance|C/E|N N N N N N Y Y|net|5|W',
+  'maintenance.plan.group_edit|maintenance|E|N N N N N N Y Y|net|5|W',
+  'annual_plan.save|maintenance|C/E|N N N N N N Y Y|net|5|W',
+  'annual_plan.submit|maintenance|E|N N N N N N Y Y|net|5|W',
+  'annual_plan.approve|maintenance|A|N N N N N N NS NS|pin|5|W',
+  'annual_plan.cancel|maintenance|E|N N N N N N Y Y|net|5|W',
+  'annual_plan.view|maintenance|V|Y Y Y Y Y Y Y Y|net|5|R',
+  'annual_plan.pdf|maintenance|X|IFON IFON IFON IFON IFON N Y Y|net|5|R',
   // 4.4.4 Sửa chữa
   'repair.view|repairs|V|Y Y Y Y Y Y Y Y|cache|2|R',
   'repair.report|repairs|C|N Y Y Y Y Y Y Y|offline|2|W',

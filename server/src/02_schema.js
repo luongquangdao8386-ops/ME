@@ -90,7 +90,7 @@ var SHEETS = {
   MaintenancePlans: { book: 'B', dot: 2, key: 'plan_id', c: true, i18n: true,
     cols: 'plan_id plan_code equipment_id title_vi title_zh interval_type interval_value anchor_date next_due_date ' +
       'operating_hours_target checklist_template_id assignee_user_id priority estimated_minutes active safety_note_vi safety_note_zh ' +
-      'last_work_order_id last_done_date last_done_hours' },
+      'last_work_order_id last_done_date last_done_hours plan_group_id' },
   ChecklistTemplates: { book: 'B', dot: 2, key: 'template_item_id', c: true, i18n: true,
     cols: 'template_item_id template_id revision step_no label_vi label_zh result_type unit min_value max_value required ' +
       'safety_note_vi safety_note_zh template_name_vi template_name_zh active' },
@@ -163,6 +163,12 @@ var SHEETS = {
     cols: 'reset_run_id requested_by requested_at before_epoch after_epoch scope_key file_mode plan_hash confirmation_nonce_hash ' +
       'confirmation_expires_at backup_ref backup_verified_at status phase cursor_json summary_counts_json completed_at error_code ' +
       'run_kind source_backup_ref plan_json recovery_session_id error_detail updated_at' },
+  // ---- d4.18 ("đợt" 5): Kế hoạch bảo trì năm — lần ban hành theo năm (nháp → chờ duyệt → đã duyệt; bản cũ → thay thế), bản chụp lịch
+  // dự kiến lúc chốt nằm trong tệp JSON riêng tư (file_document_id); mã KHN-<năm>-<lần> cấp khi duyệt.
+  AnnualPlans: { book: 'B', dot: 5, key: 'annual_plan_id', c: true, i18n: true,
+    cols: 'annual_plan_id annual_plan_code year revision status file_document_id prepared_by prepared_at submitted_by submitted_at ' +
+      'approved_by approved_at returned_by returned_at return_reason cancel_reason cancelled_at change_reason_vi change_reason_zh ' +
+      'planned_count row_count summary_json' },
   ResetFiles: { book: 'B', dot: 4, key: 'reset_file_id',
     cols: 'reset_file_id reset_run_id drive_file_id source_document_id managed_folder_id owned_by_app file_mode status processed_at ' +
       'error_code file_kind privacy_status' },
@@ -211,7 +217,9 @@ var TYPE_OVERRIDES_ = {
   cumulative_value: 'NUMBER', multiplier_at_reading: 'NUMBER', new_multiplier: 'NUMBER', old_multiplier: 'NUMBER',
   unit_price: 'NUMBER', tax_rate: 'NUMBER', effective_to: 'DATE', supply_voltage: 'NUMBER', rated_current: 'NUMBER',
   phases: 'INT', voltage: 'NUMBER', breaker_rating_a: 'NUMBER', cable_length_m: 'NUMBER', rated_load_kw: 'NUMBER',
-  builtin: 'BOOL', source_revision: 'INT', row_count: 'INT', reading_cycle_anchor_date: 'DATE'
+  builtin: 'BOOL', source_revision: 'INT', row_count: 'INT', reading_cycle_anchor_date: 'DATE',
+  // d4.18
+  year: 'INT', planned_count: 'INT'
 };
 
 /** Kiểu cột (3.1) suy theo tên. */

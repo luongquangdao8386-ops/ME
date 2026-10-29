@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
 import { freshServer, makeClient, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN } from '../helpers.mjs';
 
-test('setup tạo 53 sheet Đợt 1–4, Settings, SystemState, 60 dòng RolePermissions, 8 mẫu báo cáo tích hợp', () => {
+test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePermissions, 8 mẫu báo cáo tích hợp', () => {
   const env = freshServer();
   const g = env.g;
   const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
   const sec = env.ssApp.openById(env.props.getProperty('SECURITY_SPREADSHEET_ID'));
-  assert.equal(biz.getSheets().length, 48);
-  for (const n of ['ResetRuns', 'ResetFiles']) assert.ok(biz.getSheetByName(n), n);
+  assert.equal(biz.getSheets().length, 49);
+  for (const n of ['ResetRuns', 'ResetFiles', 'AnnualPlans']) assert.ok(biz.getSheetByName(n), n);
   assert.equal(sec.getSheets().length, 5);
   for (const n of ['Meters', 'MeterSegments', 'MeterReadings', 'MeterEvents', 'UtilityTariffs', 'Panels', 'Circuits', 'CircuitLoads', 'ReportDefinitions', 'ReportRuns']) assert.ok(biz.getSheetByName(n), n);
   const defs = env.rows('ReportDefinitions');
@@ -19,13 +19,13 @@ test('setup tạo 53 sheet Đợt 1–4, Settings, SystemState, 60 dòng RolePer
   assert.deepEqual(sec.getSheets().map((s) => s.getName()).sort(), ['AuthAttempts', 'RolePermissions', 'Sessions', 'UserScopes', 'Users']);
   assert.ok(biz.getSheetByName('Glossary'));
   assert.equal(biz.getSheetByName('Sheet1'), null);
-  assert.equal(g.SETTINGS_DEFAULTS.length, 53, '51 + 2 khóa logo báo cáo (d4.11)');
+  assert.equal(g.SETTINGS_DEFAULTS.length, 54, '51 + 2 khóa logo báo cáo (d4.11) + mã biểu mẫu kế hoạch năm (d4.18)');
   const settings = env.rows('Settings');
-  assert.equal(settings.length, 53, 'khóa của Đợt 1–3 + logo báo cáo');
+  assert.equal(settings.length, 54, 'khóa của Đợt 1–3 + logo báo cáo + mã biểu mẫu kế hoạch năm');
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
-  assert.equal(st.schema_version, '1.5.4');
+  assert.equal(st.schema_version, '1.5.5');
   assert.equal(st.perm_version, 1);
   assert.equal(st.dataset_epoch, env.props.getProperty('DATASET_EPOCH'));
   assert.match(env.props.getProperty('DATASET_EPOCH'), /^[0-9a-f-]{36}$/);
@@ -50,7 +50,7 @@ test('setup chạy lại không làm gì; migrateSchema chạy nhiều lần v�
   env.g.migrateSchema();
   env.g.migrateSchema();
   assert.equal(env.rows('RolePermissions').length, 60);
-  assert.equal(env.rows('Settings').length, 53);
+  assert.equal(env.rows('Settings').length, 54);
   assert.equal(env.rows('ReportDefinitions').length, 8, 'mẫu tích hợp không nạp trùng');
   const keys = env.rows('SystemState').map((r) => r.state_key);
   assert.equal(new Set(keys).size, keys.length, 'không trùng khóa SystemState');

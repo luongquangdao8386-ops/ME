@@ -105,7 +105,14 @@ var SUB_MSG = {
   LOAD_DUPLICATE: ['Phụ tải này đã có trong lộ', '该负载已在此回路中'],
   REPORT_TOO_LARGE: ['Báo cáo quá lớn để lưu; thu hẹp điều kiện lọc', '报表过大无法保存；请缩小筛选范围'],
   PDF_TOO_MANY_ROWS: ['Quá 500 dòng để xuất PDF; dùng Excel hoặc thu hẹp điều kiện lọc', '超过500行无法导出PDF；请使用Excel或缩小筛选范围'],
-  BUILTIN_FIXED: ['Mẫu tích hợp chỉ đổi cột hiển thị, cấp xem, biểu đồ', '内置模板只能修改显示列、可查看级别、图表']
+  BUILTIN_FIXED: ['Mẫu tích hợp chỉ đổi cột hiển thị, cấp xem, biểu đồ', '内置模板只能修改显示列、可查看级别、图表'],
+  // d4.18: kế hoạch theo nhóm, kế hoạch năm
+  GROUP_TOO_LARGE: ['Mỗi lần tối đa 100 máy', '每次最多100台设备'],
+  EQUIPMENT_DUPLICATE: ['Máy bị chọn hai lần', '设备重复选择'],
+  ALREADY_IN_GROUP: ['Máy này đã có kế hoạch trong nhóm', '该设备在本组中已有计划'],
+  ANNUAL_PLAN_OPEN: ['Năm này đang có một bản kế hoạch chưa duyệt — mở bản đó để sửa hoặc hủy', '该年度已有未审批的计划——请打开该计划修改或取消'],
+  SNAPSHOT_INVALID: ['Dữ liệu kế hoạch năm không hợp lệ — mở lại app rồi thử lại', '年度计划数据无效——请重新打开应用再试'],
+  SNAPSHOT_EMPTY: ['Năm này chưa có việc nào để lập kế hoạch', '该年度没有可编入计划的工作']
 };
 
 function fmtMsg_(pair, vars) {
