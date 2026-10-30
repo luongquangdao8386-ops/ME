@@ -156,6 +156,7 @@ function parseSettingInput_(def, v) {
   }
   if (type === 'BOOL') { if (typeof v !== 'boolean') throw bad(); return v; }
   if (type === 'ENUM') { if ((SETTINGS_ENUMS_[key] || []).indexOf(v) < 0) throw bad(); return v; }
+  if (type === 'JSON' && key === 'pdf_form_codes') return parseFormCodes_(v, bad);
   if (type === 'JSON') {
     var arr = typeof v === 'string' ? JSON.parse(v) : v;
     if (!Array.isArray(arr)) throw bad();
@@ -173,6 +174,26 @@ function parseSettingInput_(def, v) {
   if (key === 'default_currency' && !/^[A-Z]{3}$/.test(s)) throw bad();
   if (s.length > 500) throw bad();
   return s;
+}
+
+/**
+ * pdf_form_codes: {loại PDF: mã biểu mẫu}. Loại = chữ hoa, số, gạch dưới (WORK_ORDER, REPAIR, EQUIPMENT, ANNUAL_MONTH, mã mẫu báo cáo);
+ * mã ≤ 40 ký tự, không xuống dòng; mã trống bị bỏ; tối đa 80 loại.
+ */
+function parseFormCodes_(v, bad) {
+  var o = v;
+  if (typeof o === 'string') { try { o = JSON.parse(o || '{}'); } catch (e) { throw bad(); } }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw bad();
+  var out = {};
+  var keys = Object.keys(o);
+  if (keys.length > 80) throw bad();
+  keys.forEach(function (k) {
+    if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(k)) throw bad();
+    var c = trimStr_(o[k] === null || o[k] === undefined ? '' : String(o[k]));
+    if (c.length > 40 || /[\r\n]/.test(c)) throw bad();
+    if (c) out[k] = c;
+  });
+  return out;
 }
 
 /** settings.edit {changes: {key: value}, reason} — C4, PIN. Khóa chỉ đọc không sửa được */

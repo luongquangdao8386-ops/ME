@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.20 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.21 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema`)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,11 +16,59 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.21 (in từ app thay biểu mẫu ISO) cần dán Code.gs, không cần `migrateSchema`:** làm **Phần X** (THỬ) → thử theo **Phần X2** → ưng thì nói **"phát hành THẬT"** → **Phần Y** (THẬT). Bản này: phiếu bảo trì (thay BM-CĐ-03-03), phiếu sửa chữa (thay 04-01 + 04-02), **lý lịch thiết bị** (thay 02-02), lịch bảo trì tháng (thay 03-02), báo cáo Hợp đồng thêm cột dịch vụ + mẫu mới **Nhật ký dịch vụ nhà thầu** (thay 05-06), trang **Tài khoản → Quản trị → Mã biểu mẫu trên PDF** để in mã BM-CĐ-xx trên từng loại PDF.
+
 **Bản d4.20 (bấm Enter là xác nhận) chỉ đổi app — không dán Code.gs:** trong mọi hộp thoại (hỏi lại PIN khi duyệt/ký, nhập lý do, thêm link…) gõ xong bấm **Enter** = bấm nút chính (OK / Xác nhận / Duyệt / Lưu); hộp có nhiều ô thì Enter chuyển sang ô kế tiếp, tới ô cuối mới xác nhận; ô ghi chú nhiều dòng Enter vẫn xuống dòng; đang gõ tiếng Trung (bộ gõ còn khung chọn chữ) Enter chỉ chọn chữ; **Esc** = Hủy. Trang THỬ `/ME-thu/` tự cập nhật: Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.20** (máy chủ vẫn ghi bản đang chạy — bình thường). Bàn phím số của iPhone không có phím Enter, nên trên iPhone vẫn bấm OK như cũ. Chưa dán Code.gs d4.19 (Phần V/W) thì dán luôn bản Code.gs mới nhất — số bản đọc được sẽ là **1.0.0-d4.20**, các bước khác giữ nguyên. Ưng thì nói **"phát hành THẬT"**.
 
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 
 **Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần X — Đưa d4.21 lên THỬ (`ME_MayChu_THU`)
+
+1. Trang THỬ tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.21**.
+2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/bieu-iso-pdf/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+3. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+4. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.21` → **Triển khai** (giữ nguyên link).
+5. Không cần `migrateSchema`. Mẫu báo cáo mới **Nhật ký dịch vụ nhà thầu** tự thêm trong vòng 3 giờ (trigger nền). Muốn có ngay: ô chọn hàm → **`migrateSchema`** → **Chạy** (an toàn, chỉ thêm mẫu còn thiếu; nhật ký ghi `Thêm: không có`).
+6. App THỬ: Ctrl+Shift+R → **Tài khoản → Thông tin**: máy chủ **1.0.0-d4.21**.
+
+Chưa làm Phần V (d4.18) trên THỬ thì làm Phần V với mã này (có `migrateSchema`) — PDF lịch tháng cần kế hoạch năm của d4.18.
+
+### Phần X2 — Thử trên THỬ (máy tính, tài khoản Quản trị)
+
+1. **Tài khoản → Quản trị → Mã biểu mẫu trên PDF** → điền (để trống ô nào thì PDF đó không in mã):
+
+   | Loại PDF | Mã |
+   | --- | --- |
+   | Kế hoạch bảo trì năm (cả năm, tổng quan) | BM-CĐ-03-01 |
+   | Lịch bảo trì tháng (PDF một tháng) | BM-CĐ-03-02 |
+   | Phiếu bảo trì | BM-CĐ-03-03 |
+   | Phiếu sửa chữa | BM-CĐ-04-02 (phiếu gộp cả yêu cầu 04-01) |
+   | Lý lịch thiết bị | BM-CĐ-02-02 |
+   | Hồ sơ và linh kiện thiết bị `RPT_EQUIPMENT` | BM-CĐ-02-01 |
+   | Sự cố và sửa chữa `RPT_REPAIRS` | BM-CĐ-04-03 |
+   | Kiểm định `RPT_INSPECTIONS` | BM-CĐ-06-05 |
+   | Hợp đồng thuê ngoài `RPT_CONTRACTS` | BM-CĐ-05-06 |
+   | Nhật ký dịch vụ nhà thầu `RPT_CONTRACT_SERVICES` | BM-CĐ-05-06 |
+
+   → Lý do → **Lưu** → PIN. (Ở Trạng thái hệ thống, dòng "Mã biểu mẫu in trên PDF" có nút Sửa dẫn sang trang này.)
+2. **Phiếu bảo trì:** Bảo trì → mở một phiếu đã làm → **Xuất PDF**. Thấy: Kế hoạch bảo trì, Lưu ý an toàn, Dừng máy (từ → đến), Giờ chạy lúc làm, Thời gian công, Gửi nghiệm thu, Nghiệm thu; checklist có cột **Giới hạn**; bảng **Vật tư – phụ tùng sử dụng**; **Thay, lắp, tháo linh kiện** (nếu phiếu có thay); khối ký **Người thực hiện · Người nghiệm thu · Sản xuất xác nhận**; mã BM-CĐ-03-03 ở góc phải và chân trang.
+3. **Phiếu sửa chữa:** Sửa chữa → mở phiếu đã xong → **Xuất PDF**. Thấy: Người báo, Dừng máy, Người phụ trách, sáu mốc giờ, **Thời gian dừng máy**, **Từ báo đến bắt đầu sửa**, **Thời gian sửa**, Nguyên nhân gốc, Chạy thử, Nghiệm thu; bảng Việc con, Vật tư; khối ký Người sửa chữa · Người nghiệm thu · Sản xuất xác nhận.
+4. **Lý lịch thiết bị:** Thiết bị → mở máy → **Xuất PDF** (khổ ngang). Thấy: ô tóm tắt (số lần bảo trì, bảo trì gần nhất, số lần sửa chữa, tổng giờ dừng máy), **A. Thông tin chung**, Thông số, **Kiểm định – hiệu chuẩn**, **Linh kiện gắn máy**, **B. Lịch sử** (bảo trì, sửa chữa đã hoàn thành, kiểm định đã duyệt, dịch vụ nhà thầu đã làm, thay linh kiện — cũ đến mới, có phụ tùng thay, giờ dừng, giờ chạy, người làm, người xác nhận).
+5. **Lịch bảo trì tháng:** Bảo trì → tab **Kế hoạch năm** → khung bản chốt → **Xuất PDF** → **Một tháng** → chọn tháng có phiếu. Cột mới: **Phụ tùng – vật tư chuẩn bị** (lấy từ đề nghị vật tư của phiếu), **Dừng máy (từ–đến)**, **Số phiếu – Đã làm / Ký** (✓ ngày xong), **SX xác nhận** (☐ để ký tay), **Dời sang ngày, lý do** (phiếu đã đổi hạn ghi "→ ngày mới"; lý do ghi tay). Lần chưa có phiếu: các ô để trống để ghi tay khi họp với sản xuất.
+6. **Hợp đồng:** Báo cáo → **Hợp đồng thuê ngoài** → thêm cột Người phụ trách, Dịch vụ gần nhất, Hạn dịch vụ kế tiếp, Dịch vụ chưa nghiệm thu. Báo cáo → **Nhật ký dịch vụ nhà thầu** → chọn Từ–Đến (lọc được theo trạng thái) → Xuất PDF / Excel.
+7. iPhone: các nút Xuất PDF như cũ (bấm tiếp **Mở / Lưu**).
+
+Ưng thì nói **"phát hành THẬT"**.
+
+## Phần Y — Phát hành d4.21 lên THẬT (sau khi nói "phát hành THẬT")
+
+1. Claude đẩy bản đã thử lên `main` của ME. Chờ 2–3 phút → mở <https://luongquangdao8386-ops.github.io/ME/> → Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.21**.
+2. **Sao lưu ngay** trên THẬT (Tài khoản → Quản trị → Sao lưu ngay → PIN → Đã kiểm chứng).
+3. Link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → dán vào dự án **ME_MayChu_THAT** → **Lưu** → **Phiên bản mới** `THẬT d4.21` → Triển khai. Máy chủ THẬT chưa làm Phần W (d4.18) thì sau bước này chạy **`migrateSchema`** (Phần W bước 7–8); đã làm rồi thì chỉ cần chạy `migrateSchema` nếu muốn có ngay mẫu Nhật ký dịch vụ nhà thầu.
+4. Trên THẬT: **Tài khoản → Quản trị → Mã biểu mẫu trên PDF** → điền lại bảng mã ở Phần X2 bước 1 (mỗi máy chủ lưu riêng) → Lưu → PIN.
+5. Xuất thử một phiếu bảo trì, một phiếu sửa chữa, một lý lịch thiết bị để xem bản in thật.
 
 ## Phần V — Đưa d4.18 lên THỬ (`ME_MayChu_THU`)
 

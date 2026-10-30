@@ -18,12 +18,15 @@ import { chartPoints, chartStateKey } from './utilities.js';
 import { PERIOD_TYPES, UNIT, TONE, periodOf } from '../meters.js';
 
 const ICON_OF = { equipment: 'equipment', maintenance: 'maintenance', repairs: 'repairs', warehouse: 'warehouse', utilities: 'utilities', circuits: 'circuits', contracts: 'contracts', inspections: 'inspections' };
-const DS_MODULE = { EQUIPMENT: 'equipment', MAINTENANCE: 'maintenance', REPAIRS: 'repairs', MATERIALS: 'warehouse', UTILITIES: 'utilities', CIRCUITS: 'circuits', CONTRACTS: 'contracts', INSPECTIONS: 'inspections' };
+const DS_MODULE = { EQUIPMENT: 'equipment', MAINTENANCE: 'maintenance', REPAIRS: 'repairs', MATERIALS: 'warehouse', UTILITIES: 'utilities', CIRCUITS: 'circuits', CONTRACTS: 'contracts', CONTRACT_SERVICES: 'contracts', INSPECTIONS: 'inspections' };
 const STATUS_OPTS = {
   EQUIPMENT: ['equipment_status', ['RUNNING', 'STOPPED', 'UNDER_REPAIR', 'UNDER_MAINTENANCE', 'STANDBY', 'RETIRED']],
   MAINTENANCE: ['wo_status', ['DRAFT', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_ACCEPTANCE', 'COMPLETED', 'CANCELLED']],
-  REPAIRS: ['repair_status', ['REPORTED', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_ACCEPTANCE', 'COMPLETED', 'CANCELLED']]
+  REPAIRS: ['repair_status', ['REPORTED', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_ACCEPTANCE', 'COMPLETED', 'CANCELLED']],
+  CONTRACT_SERVICES: ['service_status', ['PLANNED', 'DONE', 'ACCEPTED']]
 };
+/** Mã biểu mẫu ISO của mẫu báo cáo (Quản trị → Mã biểu mẫu trên PDF; d4.21) */
+const formCodeOf = (d) => String(((session.settings || {}).pdf_form_codes || {})[(d.definition || {}).code] || '');
 const ROLES = [1, 2, 3, 4];
 const RF = { from: '', to: '', loc: '', group: '', active: '', sel: '' };
 /** Kết quả chạy gần nhất (giữ khi vẽ lại cùng màn: chọn ô, xuất tệp) */
@@ -120,7 +123,8 @@ async function paperHtml(d, { code = '', logoRev } = {}) {
   const sum = summaryRows(d);
   const cols = d.columns || [];
   const logo = await logoOf(logoRev !== undefined ? logoRev : d.logo_rev);
-  const right = [...(code ? [[biText('rpt.number'), code, true]] : []), [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']];
+  const fc = formCodeOf(d);
+  const right = [...(fc ? [[biText('ap.form_code'), fc, true]] : []), ...(code ? [[biText('rpt.number'), code, true]] : []), [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']];
   const kv = ([k, v, strong]) => `<div><span class="muted">${esc(k)}${v ? ':' : ''}</span> ${strong ? `<strong>${esc(v)}</strong>` : esc(v)}</div>`;
   const sign = (key, name) => `<div><strong>${bi(key)}</strong><span class="muted small">${bi('rpt.sign_hint')}</span><span class="sign-line"></span><span class="sign-name">${esc(name || '')}</span></div>`;
   return `<article class="paper" aria-label="${esc(biText('rpt.preview_paper'))}">
@@ -154,7 +158,7 @@ async function excelFile(d, code, fileName, logoRev) {
   const logo = await logoOf(logoRev);
   const top = logo ? [[''], [''], [''], ['']] : [];
   const sumWs = aoaSheet(X, [...top, [`${d.title_vi || ''} · ${d.title_zh || ''}`], [], [biText('rpt.summary'), ''], ...sum.map((s) => [s.label, s.val]),
-    [], [biText('rpt.number'), code || ''], [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']]);
+    [], ...(formCodeOf(d) ? [[biText('ap.form_code'), formCodeOf(d)]] : []), [biText('rpt.number'), code || ''], [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']]);
   sumWs['!cols'] = [{ wch: 48 }, { wch: 28 }];
   X.utils.book_append_sheet(wb, sumWs, biText('rpt.summary').slice(0, 31));
   const cols = d.columns || [];

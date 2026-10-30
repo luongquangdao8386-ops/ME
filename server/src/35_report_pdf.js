@@ -268,7 +268,7 @@ function pdfBars_(pd, title, items, color, lightColor) {
  * Độ rộng cột (pt) theo nội dung: ước lượng số ký tự (dòng dài nhất trong ô, lấy mức 90 % các dòng để một ô quá dài không chiếm hết),
  * cột số/ngày hẹp, cột chữ có trần; thiếu chỗ thì co theo tỷ lệ nhưng không nhỏ hơn 26 pt; thừa chỗ thì giãn cho kín khổ.
  */
-function pdfColWidths_(head, rows, types, avail, fixed0) {
+function pdfColWidths_(head, rows, types, avail, fixed0, caps) {
   var n = head.length;
   var longest = function (s) { return String(s || '').split('\n').reduce(function (m, x) { return Math.max(m, x.length); }, 0); };
   var ideal = [];
@@ -278,7 +278,7 @@ function pdfColWidths_(head, rows, types, avail, fixed0) {
     var p90 = lens.length ? lens[Math.min(lens.length - 1, Math.floor(lens.length * 0.9))] : 0;
     var hl = longest(head[c]);
     var ty = types[c] || 'text';
-    var cap = ty === 'num' || ty === 'money' || ty === 'date' ? 16 : (ty === 'time' ? 16 : (ty === 'code' ? 18 : 42));
+    var cap = (caps && caps[c]) || (ty === 'num' || ty === 'money' || ty === 'date' ? 16 : (ty === 'time' ? 16 : (ty === 'code' ? 18 : 42)));
     var chars = Math.min(cap, Math.max(p90, Math.min(hl, cap), ty === 'num' ? 4 : (ty === 'code' ? 7 : 6)));
     ideal.push(chars * 5 + 12); // ~5 pt mỗi ký tự ở cỡ 7–8, đệm ô 2 × 5 pt + 2
   }
@@ -303,6 +303,7 @@ function pdfColWidths_(head, rows, types, avail, fixed0) {
 /**
  * Bảng dữ liệu có định dạng: tiêu đề nền xám nhạt chữ đậm, viền mảnh, cột # (khi `numbered`), số/tiền căn phải, ngày căn giữa,
  * hàng xen kẽ (≤ 300 dòng). types[i]: num | money | date | time | code | text. cellColor(r, c) → màu chữ riêng của ô (vd Đạt/Không đạt).
+ * caps[i]: số ký tự tối đa để tính độ rộng cột (cột ghi tay hẹp lại, nhường chỗ cho cột nội dung).
  */
 function pdfTable_(pd, head, rows, types, opts) {
   opts = opts || {};
@@ -313,7 +314,7 @@ function pdfTable_(pd, head, rows, types, opts) {
   if (!data.length) data = [h.map(function (x, i) { return i === (numbered ? 1 : 0) ? (opts.empty || lab_('field.no_records')) : ''; })];
   var t = pd.body.appendTable([h].concat(data));
   t.setBorderWidth(1).setBorderColor(PDF_C_.line);
-  var widths = pdfColWidths_(h, data, ty, pd.width, numbered ? 24 : 0);
+  var widths = pdfColWidths_(h, data, ty, pd.width, numbered ? 24 : 0, opts.caps ? (numbered ? [null].concat(opts.caps) : opts.caps) : null);
   widths.forEach(function (w, i) { t.setColumnWidth(i, w); });
   var fs = opts.fontSize || (h.length > 9 ? 7 : 8);
   pdfText_(t, fs, PDF_C_.ink);
@@ -387,6 +388,38 @@ function pdfSign_(pd, preparedName) {
   return t;
 }
 
+/**
+ * Khối ký nhiều cột (phiếu bảo trì, phiếu sửa chữa): cols = [{label, name, date}] — nhãn đậm, dòng hướng dẫn ký, chỗ ký tay,
+ * tên và ngày lấy từ app (trống thì để ký tay).
+ */
+function pdfSignCols_(pd, cols) {
+  pdfPara_(pd.body.appendParagraph(''), { before: 14 });
+  var hint = lab_('rpt.sign_hint');
+  var t = pdfPlain_(pd.body.appendTable([
+    cols.map(function (c) { return c.label; }),
+    cols.map(function () { return hint; }),
+    cols.map(function () { return '\n\n\n'; }),
+    cols.map(function (c) { return c.name || ''; }),
+    cols.map(function (c) { return c.date ? lab_('ap.date') + ': ' + c.date : ''; })
+  ]));
+  var w = Math.floor(pd.width / cols.length);
+  cols.forEach(function (c, i) { t.setColumnWidth(i, i === cols.length - 1 ? pd.width - w * (cols.length - 1) : w); });
+  pdfText_(t, 9, PDF_C_.ink);
+  pdfText_(t.getRow(0), 9, PDF_C_.navy, true);
+  pdfText_(t.getRow(1), 7, PDF_C_.muted, false, true);
+  pdfText_(t.getRow(3), 9, PDF_C_.ink, true);
+  pdfText_(t.getRow(4), 8, PDF_C_.muted, false);
+  for (var r = 0; r < 5; r++) for (var c = 0; c < cols.length; c++) { pdfCellPad_(t.getRow(r).getCell(c), 1, 4); pdfCellAlign_(t.getRow(r).getCell(c), 'CENTER'); }
+  return t;
+}
+
+/** Mã biểu mẫu ISO của một loại PDF (Settings pdf_form_codes; d4.21); trống → không in */
+function pdfFormCode_(kind) {
+  var m = setting_('pdf_form_codes');
+  var v = m && typeof m === 'object' && !Array.isArray(m) ? m[kind] : '';
+  return v ? String(v) : '';
+}
+
 /* ---------------- PDF báo cáo (8 mẫu, bản đã lưu) ---------------- */
 
 function pdfColType_(c) {
@@ -436,13 +469,15 @@ function reportPdf_(data) {
   var cols = data.columns || [];
   var titleVi = data.title_vi || '', titleZh = data.title_zh || '';
   var gen = fmtTimeSrv_(data.generated_at);
-  var footer = [titleVi || titleZh, data.report_run_code ? lab_('rpt.number') + ': ' + data.report_run_code : '', lab_('rpt.generated_at') + ': ' + gen]
+  var formCode = pdfFormCode_((data.definition && data.definition.code) || '');
+  var footer = [titleVi || titleZh, formCode, data.report_run_code ? lab_('rpt.number') + ': ' + data.report_run_code : '', lab_('rpt.generated_at') + ': ' + gen]
     .filter(Boolean).join('   ·   ');
   var pd = pdfStart_({ wide: cols.length > 7, footer: footer });
   try {
     pdfTitle_(pd, titleVi, titleZh);
     var left = reportFilterLines_(data).map(function (x) { var i = x.indexOf(': '); return i > 0 ? [x.slice(0, i), x.slice(i + 2)] : [x, '']; });
     var right = [];
+    if (formCode) right.push([lab_('ap.form_code'), formCode]);
     if (data.report_run_code) right.push([lab_('rpt.number'), data.report_run_code]);
     right.push([lab_('rpt.generated_at'), gen]);
     right.push([lab_('rpt.prepared_by'), data.generated_by_name || '']);
@@ -470,24 +505,32 @@ function reportPdf_(data) {
 }
 
 /**
- * PDF hồ sơ/phiếu (export.pdf): title [vi, zh], kv [[nhãn, giá trị]], tables [{title, head, rows, types, cellColor}], costNote,
- * code (mã hồ sơ cho chân trang), preparedName.
+ * PDF hồ sơ/phiếu (export.pdf): title [vi, zh], kv [[nhãn, giá trị]], tables [{title, head, rows, types, cellColor, numbered, note}],
+ * costNote, code (mã hồ sơ cho chân trang), preparedName; d4.21: formCode (mã biểu mẫu ISO), wide (A4 ngang), tiles [{label, value}]
+ * trước bảng thông tin, kvTitle, notes [chữ], sign [{label, name, date}] thay khối Người lập / Người duyệt.
  */
 function entityPdf_(o) {
   var gen = fmtTimeSrv_(isoVN_(now_()));
-  var footer = [o.title[0] + (o.code ? ' ' + o.code : ''), lab_('rpt.generated_at') + ': ' + gen].join('   ·   ');
-  var pd = pdfStart_({ wide: false, footer: footer });
+  var footer = [o.title[0] + (o.code ? ' ' + o.code : ''), o.formCode || '', lab_('rpt.generated_at') + ': ' + gen].filter(Boolean).join('   ·   ');
+  var pd = pdfStart_({ wide: !!o.wide, footer: footer });
   try {
     pdfTitle_(pd, o.title[0], o.title[1]);
-    pdfMeta_(pd, o.code ? [[lab_('col.code'), o.code]] : [], [[lab_('rpt.generated_at'), gen], [lab_('rpt.prepared_by'), o.preparedName || '']]);
-    pdfHeading_(pd, lab_('rpt.info'), 10);
+    var right = [];
+    if (o.formCode) right.push([lab_('ap.form_code'), o.formCode]);
+    right.push([lab_('rpt.generated_at'), gen], [lab_('rpt.prepared_by'), o.preparedName || '']);
+    pdfMeta_(pd, o.code ? [[lab_('col.code'), o.code]] : [], right);
+    if (o.tiles && o.tiles.length) { pdfHeading_(pd, lab_('rpt.summary'), 10); pdfTiles_(pd, o.tiles); }
+    pdfHeading_(pd, o.kvTitle || lab_('rpt.info'), 10);
     pdfKv_(pd, o.kv);
     (o.tables || []).forEach(function (t) {
       pdfHeading_(pd, t.title, 12);
-      pdfTable_(pd, t.head, t.rows, t.types, { numbered: false, cellColor: t.cellColor, fontSize: 8 });
+      pdfTable_(pd, t.head, t.rows, t.types, { numbered: !!t.numbered, cellColor: t.cellColor, fontSize: t.fontSize || 8, empty: t.empty });
+      if (t.note) pdfNote_(pd, t.note);
     });
+    (o.notes || []).forEach(function (n) { pdfNote_(pd, n); });
     if (o.costNote) pdfNote_(pd, lab_('cost.hidden'));
-    pdfSign_(pd, o.preparedName || '');
+    if (o.sign) pdfSignCols_(pd, o.sign);
+    else pdfSign_(pd, o.preparedName || '');
   } catch (e) {
     try { DriveApp.getFileById(pd.doc.getId()).setTrashed(true); } catch (e2) { /* bỏ qua */ }
     throw e;

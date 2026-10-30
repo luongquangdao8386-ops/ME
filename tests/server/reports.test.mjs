@@ -35,7 +35,7 @@ const UF = { period_type: 'DAY_5', date: '2026-10-03' };
 test('8 mẫu tích hợp đồng bộ xuống app theo quyền xem; ĐN thấy mẫu Điện nước; tập dữ liệu không lộ cột giá cho người không có quyền giá', () => {
   const { c, dn } = setup();
   const defs = (cl) => (cl.call('sync.bootstrap', {}).data.records.REPORT_DEFINITION || []).map((d) => d.code).sort();
-  assert.equal(defs(c).length, 8);
+  assert.equal(defs(c).length, 9, '8 mẫu + nhật ký dịch vụ nhà thầu (d4.21)');
   assert.ok(defs(dn).includes('RPT_UTILITIES'));
   const info = ok(dn.call('report.view', { datasets: true })).data.datasets;
   assert.ok(info.UTILITIES.columns.some((x) => x.key === 'consumption'));
@@ -212,7 +212,7 @@ test('In/xuất PDF hồ sơ (export.pdf): thiết bị, phiếu sửa; không l
   ok(c.write('equipment.create', { equipment_id: e, name_vi: 'Máy nén khí', model: 'GA-37' }));
   const p = ok(c3.call('export.pdf', { entity_type: 'EQUIPMENT', entity_id: e })).data;
   const text = Buffer.from(p.content_b64, 'base64').toString('utf8');
-  assert.ok(text.startsWith('%PDF') && text.includes('Hồ sơ thiết bị') && text.includes('设备档案') && text.includes('GA-37'));
+  assert.ok(text.startsWith('%PDF') && text.includes('Lý lịch thiết bị') && text.includes('设备履历') && text.includes('GA-37'));
   assert.ok(!text.includes('[IMAGE]') && !text.includes('M&E'));
   assert.equal(p.file_name, 'TB-0001.pdf');
   const rid = uuid();

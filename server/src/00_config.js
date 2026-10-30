@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.20';
+var SERVER_VERSION = '1.0.0-d4.21';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
@@ -82,7 +82,10 @@ var SETTINGS_DEFAULTS = [
   ['report_logo_file_id', 'STRING', '', false, 3, 'Tệp logo trên báo cáo (Drive)', '报表标志文件（云端硬盘）'],
   ['report_logo_rev', 'STRING', '', true, 3, 'Phiên bản logo trên báo cáo', '报表标志版本'],
   // d4.18: mã biểu mẫu in ở đầu PDF kế hoạch bảo trì năm (vd BM-BT-01); trống thì không in
-  ['annual_plan_form_code', 'STRING', '', true, 5, 'Mã biểu mẫu trên PDF kế hoạch bảo trì năm (trống thì không in)', '年度维护计划PDF表单编号（留空则不打印）']
+  ['annual_plan_form_code', 'STRING', '', true, 5, 'Mã biểu mẫu trên PDF kế hoạch bảo trì năm (trống thì không in)', '年度维护计划PDF表单编号（留空则不打印）'],
+  // d4.21: mã biểu mẫu ISO in trên từng loại PDF ({loại PDF: mã}; loại = WORK_ORDER, REPAIR, EQUIPMENT, ANNUAL_MONTH hoặc mã mẫu báo cáo).
+  // Sửa ở Tài khoản → Quản trị → Mã biểu mẫu trên PDF; trống thì không in
+  ['pdf_form_codes', 'JSON', {}, true, 5, 'Mã biểu mẫu in trên PDF (theo loại PDF)', 'PDF表单编号（按PDF类型）']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */

@@ -273,12 +273,13 @@ test('PDF kế hoạch năm: phần 1 tổng quan (máy × việc, chấm theo t
   assert.equal(d.body.children.filter((x) => x.kind === 'pagebreak').length, 8);
   const months = tables.filter((t) => t.rows[0].cells[0].getText().startsWith('Ngày'));
   assert.equal(months.length, 8);
-  assert.deepEqual(Array.from(months[0].rows[0].cells, (x) => x.getText().split(' · ')[0]), ['Ngày', 'Thiết bị', 'Công việc', 'Nội dung chính', 'Người làm', 'Thời gian', 'Đã làm / Ký']);
+  assert.deepEqual(Array.from(months[0].rows[0].cells, (x) => x.getText().split(' · ')[0]), ['Ngày', 'Thiết bị', 'Công việc', 'Nội dung chính', 'Người làm', 'Thời gian',
+    'Phụ tùng – vật tư chuẩn bị', 'Dừng máy (từ–đến)', 'Số phiếu – Đã làm / Ký', 'SX xác nhận', 'Dời sang ngày, lý do'], 'd4.21: thêm cột của lịch bảo trì tháng');
   const jan = Array.from(months[0].rows[1].cells, (x) => x.getText());
   assert.equal(jan[0], '05/01');
   assert.ok(jan[1].startsWith('TB-0001'));
   assert.equal(jan[3], '1. Kiểm tra dầu\n2. Áp suất xả (6–8 bar)\n⚠ Ngắt điện trước khi mở nắp');
-  assert.deepEqual(jan.slice(4), ['Kỹ thuật 1', '60 phút · 60分钟', '☐']);
+  assert.deepEqual(jan.slice(4), ['Kỹ thuật 1', '60 phút · 60分钟', '', '', '☐', '☐', ''], 'chưa có phiếu: phụ tùng, dừng máy, dời lịch để ghi tay');
   const feb = Array.from(months[1].rows[1].cells, (x) => x.getText());
   assert.ok(feb[3].startsWith('1. Kiểm tra dầu') && feb[3].includes('⚠ Đeo khẩu trang'), 'tra checklist của kế hoạch hiện tại: ' + feb[3]);
   assert.deepEqual(feb.slice(4, 6), ['U-KT', '45 phút · 45分钟']);

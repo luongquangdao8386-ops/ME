@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { loadServer } from '../gas-mock.mjs';
 import { freshServer, makeClient, OWNER_CODE, OWNER_TEMP_PIN, OWNER_PIN } from '../helpers.mjs';
 
-test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePermissions, 8 mẫu báo cáo tích hợp', () => {
+test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePermissions, 9 mẫu báo cáo tích hợp (d4.21 thêm nhật ký dịch vụ nhà thầu)', () => {
   const env = freshServer();
   const g = env.g;
   const biz = env.ssApp.openById(env.props.getProperty('BUSINESS_SPREADSHEET_ID'));
@@ -13,15 +13,15 @@ test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePer
   assert.equal(sec.getSheets().length, 5);
   for (const n of ['Meters', 'MeterSegments', 'MeterReadings', 'MeterEvents', 'UtilityTariffs', 'Panels', 'Circuits', 'CircuitLoads', 'ReportDefinitions', 'ReportRuns']) assert.ok(biz.getSheetByName(n), n);
   const defs = env.rows('ReportDefinitions');
-  assert.deepEqual(defs.map((d) => d.code).sort(), ['RPT_CIRCUITS', 'RPT_CONTRACTS', 'RPT_EQUIPMENT', 'RPT_INSPECTIONS', 'RPT_MAINTENANCE', 'RPT_MATERIALS', 'RPT_REPAIRS', 'RPT_UTILITIES']);
+  assert.deepEqual(defs.map((d) => d.code).sort(), ['RPT_CIRCUITS', 'RPT_CONTRACTS', 'RPT_CONTRACT_SERVICES', 'RPT_EQUIPMENT', 'RPT_INSPECTIONS', 'RPT_MAINTENANCE', 'RPT_MATERIALS', 'RPT_REPAIRS', 'RPT_UTILITIES']);
   assert.ok(defs.every((d) => d.builtin === true && d.active === true && d.title_vi && d.title_zh));
   assert.equal(defs.find((d) => d.code === 'RPT_CIRCUITS').title_vi, 'Lộ điện và phụ tải', 'C1: không dùng chữ "mạch điện"');
   assert.deepEqual(sec.getSheets().map((s) => s.getName()).sort(), ['AuthAttempts', 'RolePermissions', 'Sessions', 'UserScopes', 'Users']);
   assert.ok(biz.getSheetByName('Glossary'));
   assert.equal(biz.getSheetByName('Sheet1'), null);
-  assert.equal(g.SETTINGS_DEFAULTS.length, 54, '51 + 2 khóa logo báo cáo (d4.11) + mã biểu mẫu kế hoạch năm (d4.18)');
+  assert.equal(g.SETTINGS_DEFAULTS.length, 55, '51 + 2 khóa logo báo cáo (d4.11) + mã biểu mẫu kế hoạch năm (d4.18) + mã biểu mẫu theo loại PDF (d4.21)');
   const settings = env.rows('Settings');
-  assert.equal(settings.length, 54, 'khóa của Đợt 1–3 + logo báo cáo + mã biểu mẫu kế hoạch năm');
+  assert.equal(settings.length, 55, 'khóa của Đợt 1–3 + logo báo cáo + mã biểu mẫu kế hoạch năm + mã biểu mẫu theo loại PDF');
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
@@ -50,8 +50,8 @@ test('setup chạy lại không làm gì; migrateSchema chạy nhiều lần v�
   env.g.migrateSchema();
   env.g.migrateSchema();
   assert.equal(env.rows('RolePermissions').length, 60);
-  assert.equal(env.rows('Settings').length, 54);
-  assert.equal(env.rows('ReportDefinitions').length, 8, 'mẫu tích hợp không nạp trùng');
+  assert.equal(env.rows('Settings').length, 55);
+  assert.equal(env.rows('ReportDefinitions').length, 9, 'mẫu tích hợp không nạp trùng (8 + nhật ký dịch vụ nhà thầu d4.21)');
   const keys = env.rows('SystemState').map((r) => r.state_key);
   assert.equal(new Set(keys).size, keys.length, 'không trùng khóa SystemState');
 });
@@ -222,7 +222,7 @@ test('nâng THẬT từ Đợt 2 lên Đợt 3: migrateSchema thêm 10 sheet, c�
   assert.equal(env.props.getProperty('DATASET_EPOCH'), epoch, 'nâng đợt không đổi epoch (nháp, tem giữ nguyên)');
   const keys = env.rows('Settings').map((x) => x.setting_key);
   assert.ok(keys.includes('meter_boundary_window_hours') && keys.includes('reading_self_edit_hours'));
-  assert.equal(env.rows('ReportDefinitions').length, 8);
+  assert.equal(env.rows('ReportDefinitions').length, 9);
   assert.equal(g.readState_().map.schema_version, '1.5.3');
 });
 
@@ -245,7 +245,7 @@ test('nâng THẬT thẳng từ Đợt 1 lên Đợt 3 (chưa phát hành Đợt
   for (const n of ['MaintenancePlans', 'WorkOrders', 'Repairs', 'OperatingReadings', 'Meters', 'MeterReadings', 'Panels', 'Circuits', 'ReportDefinitions', 'ReportRuns']) assert.ok(biz.getSheetByName(n), n);
   const keys = env.rows('Settings').map((x) => x.setting_key);
   for (const k of ['wo_generate_days_ahead', 'meter_boundary_window_hours', 'reading_self_edit_hours']) assert.ok(keys.includes(k), k);
-  assert.equal(env.rows('ReportDefinitions').length, 8);
+  assert.equal(env.rows('ReportDefinitions').length, 9);
   assert.equal(env.rows('Locations').length, 1);
   assert.equal(env.props.getProperty('DATASET_EPOCH'), epoch);
   assert.equal(g.readState_().map.schema_version, '1.5.3');
@@ -282,7 +282,7 @@ test('dán Code.gs Đợt 3 mà chưa chạy migrateSchema: app chạy như Đ�
   assert.equal(c.call('sync.changes', { cursor: 0 }).data.released_dot, 3);
   const b2 = c.call('sync.bootstrap', {});
   assert.ok(b2.data.permissions.actions.includes('utility.view'));
-  assert.equal(b2.data.records.REPORT_DEFINITION.length, 8);
+  assert.equal(b2.data.records.REPORT_DEFINITION.length, 9);
   assert.equal(c.call('utility.view', {}).code, 'OK');
 });
 

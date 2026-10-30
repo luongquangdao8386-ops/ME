@@ -6,6 +6,7 @@ import { reauth } from '../auth.js';
 import { boot, roleLevel, isOwner, can } from '../data.js';
 import { app, syncNow, updateSyncStatus } from '../app.js';
 import { navigate } from '../router.js';
+import { RELEASED_DOT } from '../shell.js';
 import { shareFileNow } from '../media.js';
 
 /**
@@ -71,6 +72,7 @@ export async function renderAccount(view, { shell }) {
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
   if (await can('report.logo.set')) admin.push(['admin.report_logo', '/admin/report-logo']);
+  if (RELEASED_DOT >= 3 && await can('settings.edit')) admin.push(['admin.form_codes', '/admin/form-codes']);
   // Đợt 4: chỉ owner có quyền xóa sạch (1.4 §21.1)
   if (isOwner() && await can('system.reset.status')) admin.push(['admin.system_data', '/admin/system-data']);
   view.innerHTML = `

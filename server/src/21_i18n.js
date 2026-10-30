@@ -124,6 +124,12 @@ function runBackgroundJobs() {
   var gen = 0;
   try { dbReset_(); gen = generateDueWorkOrders_(); } catch (e) { console.warn('generateDueWorkOrders_ ' + (e && e.message)); }
   if (gen) log_('runBackgroundJobs: sinh ' + gen + ' phiếu bảo trì.');
+  // d4.21: mẫu báo cáo tích hợp mới (vd nhật ký dịch vụ nhà thầu) tự có sau khi dán Code.gs, không bắt chạy lại migrateSchema
+  try {
+    var nRpt = 0;
+    if (releasedDot_() >= 3) withWriteLock_(function () { nRpt = seedReportDefinitions_(); });
+    if (nRpt) log_('runBackgroundJobs: thêm ' + nRpt + ' mẫu báo cáo.');
+  } catch (e) { console.warn('seedReportDefinitions_ ' + (e && e.message)); }
   if (!mtEnabled_()) { recordTriggerRun_('runBackgroundJobs', t0); return; }
   var done = 0;
   Object.keys(MT_SHEETS_).forEach(function (sheet) {

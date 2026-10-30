@@ -1,8 +1,8 @@
 // Quản trị (5.2): Người dùng và PIN tạm, Phân quyền, Sao lưu, Nhật ký thao tác, Trạng thái hệ thống — cần mạng
 import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, session, uuid, resMsg, APP_BASE_URL } from '../core.js';
 import { $, $$, h, ICON, dialog, toast } from '../ui.js';
-import { isWide } from '../shell.js';
-import { roleLevel, isOwner, mapOf, CODE } from '../data.js';
+import { isWide, RELEASED_DOT } from '../shell.js';
+import { roleLevel, isOwner, mapOf, CODE, recs } from '../data.js';
 import { textInput, selectInput, dateInput, wireForm, readField, showErrors, writeWithPin, busy, evBtn } from '../form.js';
 import { callWithPin } from './account.js';
 import { handleWriteError } from './equipment.js';
@@ -417,7 +417,8 @@ export async function renderStatus(view, { shell }) {
       <div class="table-wrap"><table class="tbl"><tbody>${checks}</tbody></table></div></section>
     <section class="card"><h2>${bi('adm.status.settings')}</h2>
       <div class="table-wrap"><table class="tbl settings"><tbody>${d.settings.map((s) => `<tr><td>${esc(s.description_vi)} · ${esc(s.description_zh)}<div class="muted small"><code>${esc(s.key)}</code></div></td>
-        <td>${settingValue(s)}</td><td>${s.readonly ? badge('adm.status.readonly') : `<button type="button" class="btn small" data-set="${esc(s.key)}">${ICON.edit}${bi('btn.edit')}</button>`}</td></tr>`).join('')}</tbody></table></div></section>`;
+        <td>${settingValue(s)}</td><td>${s.key === 'pdf_form_codes' ? `<a class="btn small" href="#/admin/form-codes">${ICON.edit}${bi('btn.edit')}</a>`
+          : s.readonly ? badge('adm.status.readonly') : `<button type="button" class="btn small" data-set="${esc(s.key)}">${ICON.edit}${bi('btn.edit')}</button>`}</td></tr>`).join('')}</tbody></table></div></section>`;
   $$('[data-set]', view).forEach((b) => b.addEventListener('click', async () => {
     const s = d.settings.find((x) => x.key === b.dataset.set);
     if (s && await editSetting(s)) renderStatus(view, { shell });
@@ -503,6 +504,62 @@ export async function renderReportLogo(view, { shell }) {
     if (!yes) return;
     const res = await writeWithPin('report.logo.set', { remove: true });
     if (res.ok) { await rememberReportLogo(null); toast(bi('logo.removed'), 'ok'); again(); return; }
+    if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
+  });
+}
+
+/* ====================== Mã biểu mẫu trên PDF (d4.21) ====================== */
+
+/** Loại PDF cố định: [khóa trong pdf_form_codes, nhãn, đợt]; '__annual' = Settings annual_plan_form_code (có từ d4.18) */
+const FORM_KINDS = [
+  ['__annual', 'fc.annual_plan', 5], ['ANNUAL_MONTH', 'fc.annual_month', 5], ['WORK_ORDER', 'fc.work_order', 3],
+  ['REPAIR', 'fc.repair', 3], ['EQUIPMENT', 'fc.equipment', 3]
+];
+
+/** Ghi lại cài đặt gửi xuống app sau khi sửa (bộ nhớ + bản bootstrap trên máy) */
+async function applyClientSettings(list) {
+  const map = {};
+  (list || []).filter((x) => x.client).forEach((x) => { map[x.key] = x.value; });
+  session.settings = { ...(session.settings || {}), ...map };
+  const { getMeta, setMeta } = await import('../sync.js');
+  const b = await getMeta('bootstrap');
+  if (b) { b.settings = { ...(b.settings || {}), ...map }; await setMeta('bootstrap', b); }
+}
+
+export async function renderFormCodes(view, { shell }) {
+  shell.setScreen({ title: 'admin.form_codes', back: '/account' });
+  if (offline(view)) return;
+  const st = session.settings || {};
+  const codes = st.pdf_form_codes && typeof st.pdf_form_codes === 'object' ? st.pdf_form_codes : null;
+  const defs = RELEASED_DOT >= 3 ? (await recs('REPORT_DEFINITION')).filter((d) => !d.archived_at)
+    .sort((a, b) => (a.builtin === b.builtin ? 0 : a.builtin ? -1 : 1) || String(a.code).localeCompare(String(b.code))) : [];
+  const rows = [
+    ...FORM_KINDS.filter((k) => RELEASED_DOT >= k[2]).map(([key, lab]) => [key, bi(lab), key === '__annual' ? st.annual_plan_form_code || '' : (codes || {})[key] || '']),
+    ...defs.map((d) => [d.code, `${esc(d.title_vi || d.code)}${d.title_zh && d.title_zh !== d.title_vi ? ` · <span lang="zh">${esc(d.title_zh)}</span>` : ''} <span class="muted small code">${esc(d.code)}</span>`, (codes || {})[d.code] || ''])
+  ];
+  view.innerHTML = `<section class="card"><h2>${bi('admin.form_codes')}</h2>
+      <p class="muted small">${bi('fc.help')}</p>
+      ${codes ? '' : `<p class="banner" id="fc-old">${bi('fc.server_old')}</p>`}
+      <div class="table-wrap"><table class="tbl fc-table"><thead><tr><th>${bi('fc.col.kind')}</th><th>${bi('ap.form_code')}</th></tr></thead>
+      <tbody>${rows.map(([key, label, val]) => `<tr><td>${label}</td><td><input class="inp" data-fc="${esc(key)}" value="${esc(val)}" maxlength="40" autocomplete="off" aria-label="${esc(biText('ap.form_code'))}" ${codes ? '' : 'disabled'}></td></tr>`).join('')}</tbody></table></div>
+      <label class="lbl" for="fc-reason">${bi('field.reason')}</label><input class="inp" id="fc-reason" maxlength="300">
+      <div class="row"><button type="button" class="btn primary" id="fc-save" ${codes ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.save')}</span></button></div></section>`;
+  const btn = $('#fc-save', view);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const map = {};
+    let annual = null;
+    $$('[data-fc]', view).forEach((el) => {
+      const v = el.value.trim().replace(/\s+/g, ' ');
+      if (el.dataset.fc === '__annual') annual = v;
+      else if (v) map[el.dataset.fc] = v;
+    });
+    const changes = { pdf_form_codes: map };
+    if (annual !== null) changes.annual_plan_form_code = annual;
+    busy(btn, true);
+    const res = await writeWithPin('settings.edit', { changes, reason: $('#fc-reason', view).value.trim() });
+    busy(btn, false);
+    if (res.ok) { await applyClientSettings(res.data.settings); toast(bi('form.saved'), 'ok'); renderFormCodes(view, { shell }); return; }
     if (res.code !== 'REAUTH_REQUIRED') await handleWriteError(res);
   });
 }

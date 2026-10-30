@@ -180,14 +180,16 @@ test('PDF phiếu bảo trì: bảng thông tin nhãn – giá trị, checklist 
   const tables = d.body.children.filter((x) => x.kind === 'table');
   const kv = tables.find((t) => t.rows[0].cells.length === 2 && t.rows[0].cells[0].st.BACKGROUND_COLOR === '#F1F5F9');
   assert.ok(kv, 'bảng nhãn – giá trị');
-  const cl = tables.find((t) => t.rows[0].cells[0].getText() === '#' && t.rows[0].cells.length === 5);
-  assert.ok(cl, 'bảng checklist');
-  const status = (i) => cl.rows[i].cells[3];
+  const cl = tables.find((t) => t.rows[0].cells[0].getText() === '#' && t.rows[0].cells.length === 6);
+  assert.ok(cl, 'bảng checklist (#, hạng mục, giới hạn, số đo, kết quả, ghi chú)');
+  assert.equal(cl.rows[2].cells[2].getText(), '6–8 bar', 'giới hạn của bước = tiêu chuẩn');
+  const status = (i) => cl.rows[i].cells[4];
   assert.equal(status(1).getText(), 'Không đạt · 不合格');
   assert.equal(status(1).st.FOREGROUND_COLOR, '#B42318');
   assert.equal(status(2).getText(), 'Đạt · 合格');
   assert.equal(status(2).st.FOREGROUND_COLOR, '#1E7B4A');
-  assert.equal(cl.rows[2].cells[2].children[0].st.HORIZONTAL_ALIGNMENT, 'RIGHT', 'số đo căn phải');
+  assert.equal(cl.rows[2].cells[3].getText(), '7 bar');
+  assert.equal(cl.rows[2].cells[3].children[0].st.HORIZONTAL_ALIGNMENT, 'RIGHT', 'số đo căn phải');
 });
 
 test('PDF Điện nước: biểu đồ điện theo kỳ bằng thanh màu cam; kỳ chưa có số ghi chữ, không vẽ thanh 0', () => {

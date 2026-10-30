@@ -15,7 +15,9 @@ function rc_(key, type, vi, zh, o) { var c = o || {}; c.key = key; c.type = type
 var RPT_BUILTIN_ = [
   ['RPT_EQUIPMENT', 'EQUIPMENT', 'equipment'], ['RPT_MAINTENANCE', 'MAINTENANCE', 'maintenance'], ['RPT_REPAIRS', 'REPAIRS', 'repairs'],
   ['RPT_MATERIALS', 'MATERIALS', 'warehouse'], ['RPT_UTILITIES', 'UTILITIES', 'utilities'], ['RPT_CIRCUITS', 'CIRCUITS', 'circuits'],
-  ['RPT_CONTRACTS', 'CONTRACTS', 'contracts'], ['RPT_INSPECTIONS', 'INSPECTIONS', 'inspections']
+  ['RPT_CONTRACTS', 'CONTRACTS', 'contracts'], ['RPT_INSPECTIONS', 'INSPECTIONS', 'inspections'],
+  // d4.21: nhật ký dịch vụ nhà thầu (thay sổ BM-CĐ-05-06 phần nhật ký thực hiện); máy chủ cũ nhận mẫu qua migrateSchema hoặc trigger 3 giờ
+  ['RPT_CONTRACT_SERVICES', 'CONTRACT_SERVICES', 'contracts']
 ];
 
 /* ---------------- Tra cứu dùng chung ---------------- */
@@ -319,14 +321,27 @@ var REPORT_DATASETS_ = {
       rc_('vendor', 'text', 'Nhà cung cấp', '供应商'), rc_('start_date', 'date', 'Bắt đầu', '开始日期'), rc_('end_date', 'date', 'Hết hạn', '到期日'),
       rc_('renewal_notice_date', 'date', 'Hạn báo gia hạn', '续约通知期限'), rc_('days_remaining', 'num', 'Còn (ngày)', '剩余天数'),
       rc_('due_state', 'enum', 'Trạng thái hạn', '期限状态', { enumKey: 'due_filter' }), rc_('equipment_count', 'num', 'Số thiết bị', '设备数'),
+      // d4.21 (sổ theo dõi HĐ bảo trì thuê ngoài): người phụ trách, lần dịch vụ gần nhất, hạn dịch vụ kế tiếp, dịch vụ chưa nghiệm thu
+      rc_('owner', 'text', 'Người phụ trách', '负责人'), rc_('last_service_at', 'date', 'Dịch vụ gần nhất', '最近一次服务'),
+      rc_('next_service_date', 'date', 'Hạn dịch vụ kế tiếp', '下次服务期限'), rc_('services_open', 'num', 'Dịch vụ chưa nghiệm thu', '未验收服务'),
       rc_('value', 'money', 'Giá trị', '金额', { cost: true, cur: 'currency' })
     ],
     build: function (ctx, f, L, cost) {
       var today = todayVN_();
       var vendors = {};
       readRows_('Vendors').forEach(function (v) { vendors[v.vendor_id] = v.vendor_code + ' · ' + v.name; });
-      var ce = {};
-      readRows_('ContractEquipment').forEach(function (x) { if (!x.archived_at) ce[x.contract_id] = (ce[x.contract_id] || 0) + 1; });
+      var ce = {}, nextSvc = {}, lastSvc = {}, openSvc = {};
+      readRows_('ContractEquipment').forEach(function (x) {
+        if (x.archived_at) return;
+        ce[x.contract_id] = (ce[x.contract_id] || 0) + 1;
+        if (isDateStr_(x.next_service_date) && (!nextSvc[x.contract_id] || x.next_service_date < nextSvc[x.contract_id])) nextSvc[x.contract_id] = x.next_service_date;
+      });
+      readRows_('ContractServices').forEach(function (x) {
+        if (x.archived_at) return;
+        var d = String(x.performed_at || '').slice(0, 10);
+        if (d && (!lastSvc[x.contract_id] || d > lastSvc[x.contract_id])) lastSvc[x.contract_id] = d;
+        if (x.status === 'DONE') openSvc[x.contract_id] = (openSvc[x.contract_id] || 0) + 1;
+      });
       var lead = Number(setting_('lead_days') || 40);
       var rows = readRows_('Contracts').filter(function (c) { return !c.archived_at && c.lifecycle_status === 'ACTIVE'; }).map(function (c) {
         var ref = contractRef_(c);
@@ -334,7 +349,9 @@ var REPORT_DATASETS_ = {
         var o = {
           contract_code: c.contract_code, revision: c.revision, title_vi: c.title_vi, title_zh: c.title_zh, vendor: vendors[c.vendor_id] || '',
           start_date: c.start_date || '', end_date: c.end_date || '', renewal_notice_date: c.renewal_notice_date || '',
-          days_remaining: d.days === null ? '' : d.days, due_state: d.state, equipment_count: ce[c.contract_id] || 0
+          days_remaining: d.days === null ? '' : d.days, due_state: d.state, equipment_count: ce[c.contract_id] || 0,
+          owner: rptUser_(L, c.owner_user_id), last_service_at: lastSvc[c.contract_id] || '', next_service_date: nextSvc[c.contract_id] || '',
+          services_open: openSvc[c.contract_id] || 0
         };
         if (cost) { o.value = c.value === null ? '' : c.value; o.currency = c.currency || ''; }
         return o;
@@ -348,6 +365,44 @@ var REPORT_DATASETS_ = {
         rows: rows,
         summary: [sumItem_('Hợp đồng còn hiệu lực', '有效合同', rows.length)].concat(Object.keys(by).map(function (k) { return sumItem_('', '', by[k], { enumKey: 'due_filter', enum: k }); })),
         chart: { type: 'BAR', series: ['OVERDUE', 'DUE_TODAY', 'DUE_SOON', 'NOT_DUE', 'MISSING'].filter(function (k) { return by[k]; }).map(function (k) { return { enumKey: 'due_filter', key: k, value: by[k] }; }) }
+      };
+    }
+  },
+  CONTRACT_SERVICES: {
+    module: 'contracts', view: 'contract.view', chart: 'BAR', filters: ['from', 'to', 'status'],
+    columns: [
+      rc_('service_date', 'date', 'Ngày thực hiện', '执行日期'), rc_('due_date', 'date', 'Hạn', '期限'), rc_('contract_code', 'code', 'Mã hợp đồng', '合同编号'),
+      rc_('vendor', 'text', 'Nhà thầu', '承包商'), rc_('equipment_code', 'code', 'Mã thiết bị', '设备编号'), rc_('equipment_name', 'text', 'Thiết bị', '设备'),
+      rc_('service', 'bi', 'Nội dung dịch vụ', '服务内容'), rc_('result', 'bi', 'Kết quả, tồn tại', '结果、存在问题'), rc_('vendor_contact', 'text', 'Người của nhà thầu', '承包商人员'),
+      rc_('status', 'enum', 'Trạng thái', '状态', { enumKey: 'service_status' }), rc_('accepted_by', 'text', 'Người nghiệm thu', '验收人'),
+      rc_('accepted_at', 'date', 'Ngày nghiệm thu', '验收日期'), rc_('cost', 'money', 'Chi phí', '费用', { cost: true, cur: 'currency' })
+    ],
+    build: function (ctx, f, L, cost) {
+      var today = todayVN_();
+      var vendors = {}, cons = {}, ces = {};
+      readRows_('Vendors').forEach(function (v) { vendors[v.vendor_id] = v.vendor_code + ' · ' + v.name; });
+      readRows_('Contracts').forEach(function (c) { cons[c.contract_id] = c; });
+      readRows_('ContractEquipment').forEach(function (x) { ces[x.contract_equipment_id] = x; });
+      var rows = readRows_('ContractServices').filter(function (s) {
+        return !s.archived_at && rptInRange_(s.performed_at || s.due_date, f) && (!f.status || s.status === f.status);
+      }).map(function (s) {
+        var c = cons[s.contract_id] || {}, ce = ces[s.contract_equipment_id] || {};
+        var o = {
+          service_date: String(s.performed_at || '').slice(0, 10), due_date: s.due_date || '', contract_code: c.contract_code || '', vendor: vendors[c.vendor_id] || '',
+          equipment_code: rptEq_(L, ce.equipment_id), equipment_name: rptEqName_(L, ce.equipment_id), service_vi: ce.service_vi || '', service_zh: ce.service_zh || '',
+          result_vi: s.result_vi || '', result_zh: s.result_zh || '', vendor_contact: s.vendor_contact || '', status: s.status || '',
+          accepted_by: rptUser_(L, s.accepted_by), accepted_at: String(s.accepted_at || '').slice(0, 10)
+        };
+        if (cost) { o.cost = s.cost === null || s.cost === undefined ? '' : s.cost; o.currency = s.currency || c.currency || ''; }
+        return o;
+      }).sort(function (a, b) { return String(a.service_date || a.due_date).localeCompare(String(b.service_date || b.due_date)) || String(a.contract_code).localeCompare(String(b.contract_code)); });
+      var by = countBy_(rows, 'status');
+      var late = rows.filter(function (r) { return r.status === 'PLANNED' && r.due_date && r.due_date < today; }).length;
+      return {
+        rows: rows,
+        summary: [sumItem_('Tổng lần dịch vụ', '服务总次数', rows.length),
+          sumItem_('Quá hạn chưa làm', '逾期未执行', late, { tone: late ? 'red' : '' })].concat(['PLANNED', 'DONE', 'ACCEPTED'].filter(function (k) { return by[k]; }).map(function (k) { return sumItem_('', '', by[k], { enumKey: 'service_status', enum: k }); })),
+        chart: { type: 'BAR', series: ['PLANNED', 'DONE', 'ACCEPTED'].filter(function (k) { return by[k]; }).map(function (k) { return { enumKey: 'service_status', key: k, value: by[k] }; }) }
       };
     }
   },
@@ -402,7 +457,7 @@ var REPORT_DATASETS_ = {
 
 /* ---------------- Mẫu báo cáo ---------------- */
 
-/** 8 mẫu tích hợp (5.3.9), nạp khi setup/migrateSchema; chỉ thêm mẫu còn thiếu */
+/** Mẫu tích hợp (5.3.9; d4.21 thêm nhật ký dịch vụ nhà thầu), nạp khi setup/migrateSchema và trigger nền; chỉ thêm mẫu còn thiếu */
 function seedReportDefinitions_() {
   if (RELEASED_DOT < 3) return 0;
   var have = {};
@@ -797,7 +852,8 @@ function reportFilterLines_(data) {
 }
 
 /**
- * export.pdf {entity_type: EQUIPMENT | WORK_ORDER | REPAIR, entity_id}: In/xuất PDF hồ sơ, phiếu (4.4.11; Đợt 3).
+ * export.pdf {entity_type: EQUIPMENT | WORK_ORDER | REPAIR, entity_id}: In/xuất PDF hồ sơ, phiếu (4.4.11; Đợt 3; d4.21 đủ nội dung
+ * lý lịch thiết bị, phiếu bảo trì, phiếu sửa chữa theo biểu mẫu ISO).
  * Theo quyền xem và quyền giá của module hồ sơ; logo công ty (nếu có) ở đầu trang, không logo app.
  */
 function exportPdf_(ctx) {
@@ -810,41 +866,10 @@ function exportPdf_(ctx) {
   if (!rec || rec.archived_at) throw apiError_('NOT_FOUND');
   var L = rptLook_();
   var cost = canViewCost_(ctx, et.module);
-  var kv = [], tables = [], title;
-  var bi2 = function (o, f) { return [o[f + '_vi'], o[f + '_zh']].filter(function (x, i, a) { return x && a.indexOf(x) === i; }).join(' / '); };
-  var add = function (key, val) { if (val !== '' && val !== null && val !== undefined) kv.push([lab_(key), String(val)]); };
-  if (p.entity_type === 'EQUIPMENT') {
-    title = ['Hồ sơ thiết bị', '设备档案'];
-    add('field.equipment_code', rec.equipment_code); add('field.name', bi2(rec, 'name')); add('field.location', rptLoc_(L, rec.location_id));
-    add('field.model', rec.model); add('field.serial', rec.serial); add('field.status', lab_('equipment_status.' + rec.status));
-    var specs = findAll_('EquipmentSpecs', 'equipment_id', rec.equipment_id).filter(function (s) { return !s.archived_at; })
-      .map(function (s) { return [bi2(s, 'label'), s.value_num !== null && s.value_num !== '' ? fmtNumSrv_(s.value_num) : (s.value_text || ''), s.unit || '']; });
-    if (specs.length) tables.push({ title: lab_('tab.specs'), head: [lab_('field.name'), lab_('field.spec_value'), lab_('field.unit')], rows: specs, types: ['text', 'text', 'code'] });
-  } else if (p.entity_type === 'WORK_ORDER') {
-    title = ['Phiếu bảo trì', '保养工单'];
-    add('col.code', rec.work_order_code); add('module.equipment', rptEq_(L, rec.equipment_id) + ' · ' + rptEqName_(L, rec.equipment_id));
-    add('mt.title', bi2(rec, 'title')); add('mt.due_date', fmtDateVN_(rec.due_date)); add('col.status', lab_('wo_status.' + rec.status));
-    add('wk.col.assignee', rptUser_(L, rec.assignee_user_id)); add('mt.start_at', fmtTimeSrv_(rec.start_at)); add('mt.end_at', fmtTimeSrv_(rec.end_at));
-    if (rec.overall_result) add('mt.overall_result', lab_('overall_result.' + rec.overall_result));
-    if (cost && (rec.labor_cost !== null || rec.other_cost !== null)) { add('cost.labor', fmtMoneySrv_(rec.labor_cost, rec.cost_currency)); add('cost.other', fmtMoneySrv_(rec.other_cost, rec.cost_currency)); }
-    var resRows = findAll_('WorkOrderResults', 'work_order_id', rec.work_order_id).filter(function (r) { return !r.archived_at; })
-      .sort(function (a, b) { return Number(a.step_no) - Number(b.step_no); });
-    var res = resRows.map(function (r) { return [String(r.step_no), bi2(r, 'label'), r.measured_value !== null && r.measured_value !== '' ? fmtNumSrv_(r.measured_value) + (r.unit ? ' ' + r.unit : '') : '', lab_('check_result.' + (r.result_status || 'PENDING')), bi2(r, 'note')]; });
-    // Kết quả Đạt / Không đạt tô màu chữ (kèm chữ, không chỉ dựa vào màu)
-    if (res.length) tables.push({ title: lab_('mt.checklist'), head: ['#', lab_('field.name'), lab_('mt.measured_value'), lab_('col.status'), lab_('field.note')], rows: res,
-      types: ['num', 'text', 'num', 'text', 'text'],
-      cellColor: function (i, c) { var st = resRows[i].result_status; return c === 3 ? (st === 'PASS' ? PDF_C_.good : (st === 'FAIL' ? PDF_C_.bad : null)) : null; } });
-  } else {
-    title = ['Phiếu sửa chữa', '维修单'];
-    add('col.code', rec.repair_code); add('module.equipment', rptEq_(L, rec.equipment_id) + ' · ' + rptEqName_(L, rec.equipment_id));
-    add('rp.symptom', bi2(rec, 'symptom')); add('rp.severity', lab_('severity.' + rec.severity)); add('col.status', lab_('repair_status.' + rec.status));
-    [['rp.ms.reported_at', 'reported_at'], ['rp.ms.assigned_at', 'assigned_at'], ['rp.ms.repair_start_at', 'repair_start_at'], ['rp.ms.repair_end_at', 'repair_end_at'], ['rp.ms.restored_at', 'restored_at'], ['rp.ms.approved_at', 'approved_at']]
-      .forEach(function (x) { add(x[0], fmtTimeSrv_(rec[x[1]])); });
-    add('rp.diagnosis', bi2(rec, 'diagnosis')); add('rp.action', bi2(rec, 'action'));
-    if (cost && (rec.labor_cost !== null || rec.outside_cost !== null)) { add('cost.labor', fmtMoneySrv_(rec.labor_cost, rec.cost_currency)); add('cost.outside', fmtMoneySrv_(rec.outside_cost, rec.cost_currency)); }
-  }
-  var bytes = entityPdf_({ title: title, code: rec[et.code] || '', kv: kv, tables: tables, costNote: !cost && p.entity_type !== 'EQUIPMENT',
-    preparedName: (userDirectory_()[ctx.user.user_id] || {}).display_name || '' });
+  // d4.21: nội dung theo biểu mẫu ISO (39_record_pdf): lý lịch thiết bị, phiếu bảo trì, phiếu sửa chữa
+  var o = p.entity_type === 'EQUIPMENT' ? recEquipmentPdf_(rec, L, ctx) : (p.entity_type === 'WORK_ORDER' ? recWorkOrderPdf_(rec, L, cost) : recRepairPdf_(rec, L, cost));
+  o.preparedName = (userDirectory_()[ctx.user.user_id] || {}).display_name || '';
+  var bytes = entityPdf_(o);
   withWriteLock_(function () {
     writeAudit_({ user_id: ctx.user.user_id, device_id: ctx.req.device_id, action: 'export.pdf', entity_type: p.entity_type, entity_id: p.entity_id, before_json: null, after_json: { bytes: bytes.length }, auth_basis: authBasis_(ctx) });
   });

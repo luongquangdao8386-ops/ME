@@ -138,7 +138,7 @@ test('Xóa sạch trọn đợt (giữ file): bảo trì → sao lưu kiểm ch�
   for (const t of ['Equipment', 'Materials', 'Locations', 'Vendors', 'LookupValues', 'Contracts', 'InspectionRequirements', 'Repairs', 'WorkOrders', 'Meters', 'Panels', 'QrRegistry', 'Documents', 'Alerts', 'NotificationLogs', 'ImportBatches', 'Operations', 'ReportRuns']) {
     assert.equal(env.rows(t).length, 0, t);
   }
-  assert.equal(env.rows('ReportDefinitions').length, 8);
+  assert.equal(env.rows('ReportDefinitions').length, 9);
   assert.equal(env.rows('Users').length, before.users);
   assert.equal(env.rows('RolePermissions').length, before.perms);
   assert.equal(env.rows('Settings').length, before.settings);

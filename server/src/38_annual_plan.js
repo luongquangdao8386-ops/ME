@@ -360,6 +360,50 @@ function annualDetailer_() {
   };
 }
 
+/**
+ * Phiếu bảo trì thật của từng lần trong lịch tháng (d4.21): ghép theo kế hoạch + ngày hạn, không có thì phiếu cùng tháng chưa ghép
+ * (phiếu đã đổi hạn → "Dời sang"). Trả hàm (entry) → {wo, parts (vật tư đề nghị), down (giờ dừng máy), moved}; lần chưa có phiếu → ô trống/☐.
+ */
+function annualActualer_() {
+  var cache = null, used = {};
+  var load = function () {
+    if (cache) return cache;
+    cache = { byPlan: {}, lines: {}, mats: {} };
+    readRows_('WorkOrders').forEach(function (w) { if (!w.archived_at && w.plan_id) (cache.byPlan[w.plan_id] = cache.byPlan[w.plan_id] || []).push(w); });
+    if (releasedDot_() >= 2) {
+      readRows_('MaterialRequestLines').forEach(function (l) {
+        if (l.archived_at || l.work_type !== 'WORK_ORDER' || l.status === 'CANCELLED' || l.status === 'REJECTED') return;
+        (cache.lines[l.work_id] = cache.lines[l.work_id] || []).push(l);
+      });
+      readRows_('Materials').forEach(function (m) { cache.mats[m.material_id] = m; });
+    }
+    return cache;
+  };
+  var hm = function (iso) { var t = parseTime_(iso); return t ? isoVN_(t).slice(11, 16) : ''; };
+  var dm = function (d) { return String(d).slice(8, 10) + '/' + String(d).slice(5, 7); };
+  return function (x) {
+    var out = { wo: '☐', parts: '', down: '', moved: '' };
+    var r = x.row;
+    if (r.kind !== 'PLAN' && r.kind !== 'HOURS') return out;
+    var list = load().byPlan[r.ref_id] || [];
+    var w = list.filter(function (o) { return !used[o.work_order_id] && o.due_date === x.date; })[0];
+    if (!w) w = list.filter(function (o) { return !used[o.work_order_id] && String(o.due_date).slice(0, 7) === x.date.slice(0, 7); })[0];
+    if (!w) return out;
+    used[w.work_order_id] = true;
+    var done = w.status === 'COMPLETED';
+    out.wo = w.work_order_code + '\n' + (done ? '✓ ' + dm(String(w.end_at || w.approved_at || w.due_date).slice(0, 10)) : (w.status === 'CANCELLED' ? lab_('wo_status.CANCELLED') : '☐'));
+    out.parts = (cache.lines[w.work_order_id] || []).map(function (l) {
+      var m = cache.mats[l.material_id] || {};
+      var q = l.approved_qty !== '' && l.approved_qty !== null && l.approved_qty !== undefined ? l.approved_qty : l.requested_qty;
+      return rptName_(m) + ' × ' + fmtNumSrv_(Number(q)) + (l.unit ? ' ' + l.unit : '');
+    }).join('\n');
+    if (w.downtime_start_at || w.downtime_end_at) out.down = (hm(w.downtime_start_at) || '…') + '–' + (hm(w.downtime_end_at) || '…');
+    if (!x.est && w.due_date && w.due_date !== x.date) out.moved = '→ ' + dm(w.due_date);
+    if (w.status === 'CANCELLED' && w.cancel_reason) out.moved = [out.moved, w.cancel_reason].filter(Boolean).join('\n');
+    return out;
+  };
+}
+
 /** Các lần trong tháng m (0–11) của cả năm: [{date, est, row}] xếp theo ngày, mã máy */
 function annualMonthEntries_(snap, m) {
   var mm = annualPad2_(m + 1), out = [];
@@ -413,7 +457,8 @@ function annualPdf_(rec, snap, opts) {
   var titleVi = tp[0].split('{Y}').join(year), titleZh = tp[1].split('{Y}').join(year);
   var gen = fmtTimeSrv_(isoVN_(now_()));
   var approved = rec.status === 'APPROVED' || rec.status === 'SUPERSEDED';
-  var formCode = String(setting_('annual_plan_form_code') || '');
+  // In một tháng = lịch bảo trì tháng (mã biểu mẫu riêng, d4.21); cả năm / tổng quan = mã kế hoạch năm
+  var formCode = part === 'MONTH' ? pdfFormCode_('ANNUAL_MONTH') : String(setting_('annual_plan_form_code') || '');
   var footer = [titleVi, approved ? lab_('ap.number') + ': ' + rec.annual_plan_code : lab_('ap.status.' + rec.status), formCode, lab_('rpt.generated_at') + ': ' + gen]
     .filter(Boolean).join('   ·   ');
   var groups = snap.groups || [];
@@ -492,6 +537,7 @@ function annualPdf_(rec, snap, opts) {
     /* ---- Phần 2: Việc từng tháng ---- */
     if (part !== 'OVERVIEW') {
       var detail = annualDetailer_();
+      var actual = annualActualer_();
       var months2 = part === 'MONTH' ? [opts.month - 1] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
       var first = part === 'MONTH';
       months2.forEach(function (mi) {
@@ -517,13 +563,18 @@ function annualPdf_(rec, snap, opts) {
           var content = steps.join('\n');
           var shown = content && content === prevContent ? '〃 ' + lab_('ap.same_above') : content;
           prevContent = content;
+          // d4.21 (lịch bảo trì tháng): phiếu bảo trì đã sinh → phụ tùng đề nghị, giờ dừng máy, số phiếu + ngày xong, ngày dời
+          var a = actual(x);
           return [(x.est ? '≈' : '') + x.date.slice(8, 10) + '/' + x.date.slice(5, 7), [r.equipment_code, annualBi_(r.equipment_vi, r.equipment_zh)].filter(Boolean).join('\n'),
-            work + (r.code ? '\n' + r.code : '') + (x.est ? '\n' + lab_('yr.est') : ''), shown, d.assignee || '', mins, '☐'];
+            work + (r.code ? '\n' + r.code : '') + (x.est ? '\n' + lab_('yr.est') : ''), shown, d.assignee || '', mins, a.parts, a.down, a.wo, '☐', a.moved];
         });
-        pdfTable_(pd, [lab_('ap.date'), lab_('yr.col.equipment'), lab_('yr.col.work'), lab_('ap.col.content'), lab_('ap.col.who'), lab_('ap.col.time'), lab_('ap.col.sign')],
-          mrows, ['date', 'text', 'text', 'text', 'text', 'text', 'date'], { fontSize: 7 });
+        pdfTable_(pd, [lab_('ap.date'), lab_('yr.col.equipment'), lab_('yr.col.work'), lab_('ap.col.content'), lab_('ap.col.who'), lab_('ap.col.time'),
+          lab_('ap.col.parts'), lab_('ap.col.downtime'), lab_('ap.col.wo_sign'), lab_('ap.col.prod_confirm'), lab_('ap.col.moved')],
+          mrows, ['date', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'text', 'date', 'text'],
+          { fontSize: 7, caps: [8, 16, 20, 42, 12, 10, 20, 11, 13, 8, 14] });
       });
       pdfNote_(pd, lab_('ap.month_note'));
+      pdfNote_(pd, lab_('ap.month_note_wo'));
     }
   } catch (e) {
     try { DriveApp.getFileById(pd.doc.getId()).setTrashed(true); } catch (e2) { /* bỏ qua */ }
