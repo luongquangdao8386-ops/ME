@@ -25,6 +25,8 @@ function seeded(empty = false) {
     env.g.writeCells_('InspectionRequirements', reqs[1].__row, { current_due_date: vnDate(-3), sync_revision: 99 });
   });
   ok(c.write('maintenance.wo.create', { work_order_id: uuid(), equipment_id: env.rows('Equipment')[0].equipment_id, title_vi: 'Vệ sinh lọc gió', due_date: vnDate(0) }));
+  // d4.31: phiếu BT quá hạn từ tuần trước (người dùng thấy ở Công việc hôm nay mà bảng Việc cần làm không có)
+  ok(c.write('maintenance.wo.create', { work_order_id: uuid(), equipment_id: env.rows('Equipment')[1].equipment_id, title_vi: 'Kiểm tra dầu tuần trước', due_date: vnDate(-8) }));
   return env;
 }
 async function login(page) {
@@ -57,21 +59,28 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
       const panel = await page.textContent('.hl-panel');
       assert.ok(panel.includes('Việc cần làm · 待办事项'));
       assert.ok(panel.includes('Quá 3 ngày · 逾期 3 天'), 'mục quá hạn có nhãn số ngày');
+      assert.ok(panel.includes('Kiểm tra dầu tuần trước') && panel.includes('Quá 8 ngày · 逾期 8 天'), 'phiếu BT quá hạn từ tuần trước có trong Quá hạn');
+      assert.ok(panel.indexOf('Kiểm tra dầu tuần trước') < panel.indexOf('Quá 3 ngày'), 'quá hạn lâu nhất đứng đầu');
       assert.ok(panel.includes('Hôm nay · 今天') && panel.includes('Vệ sinh lọc gió'), 'phiếu BT hôm nay trong danh sách tuần');
       assert.ok(!panel.includes('hl.'), 'không lộ khóa nhãn');
-      assert.deepEqual(await page.$$eval('.hl-stat .n', (ns) => ns.map((n) => n.textContent)).then((a) => a.slice(0, 2)), ['1', '1']);
+      assert.deepEqual(await page.$$eval('.hl-stat .n', (ns) => ns.map((n) => n.textContent)).then((a) => a.slice(0, 2)), ['2', '1'], 'Quá hạn 2 (kiểm định + phiếu BT tuần trước), Sắp tới hạn 1');
       assert.equal(await noOverflow(page), '', 'không tràn ngang');
       if (name === 'web') {
         const b = await page.evaluate(() => ['.hl-main', '.hl-panel'].map((s) => Math.round(document.querySelector(s).getBoundingClientRect().bottom)));
         assert.ok(Math.abs(b[0] - b[1]) <= 2, `đáy hai cột lệch ${b}`);
         assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.home .tile')).flexDirection), 'row', 'web: ô chức năng nằm ngang');
-        assert.ok((await page.textContent('.home-today')).includes('Công việc hôm nay · 今日工作'));
+        const today = await page.textContent('.home-today');
+        assert.ok(today.includes('Công việc hôm nay · 今日工作'));
+        // mọi mã quá hạn ở bảng dưới đều có trong bảng Việc cần làm
+        const overCodes = await page.$$eval('.home-today tr[data-href]', (trs) => trs.filter((tr) => tr.textContent.includes('Quá hạn')).map((tr) => tr.querySelector('td.code').textContent.trim()));
+        assert.ok(overCodes.length >= 2, JSON.stringify(overCodes));
+        for (const code of overCodes) assert.ok(panel.includes(code), `${code} quá hạn ở bảng dưới phải có ở bảng trên`);
       } else {
         assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.home .tile')).flexDirection), 'column');
       }
-      // bấm một dòng việc → mở đúng hồ sơ
+      // bấm dòng quá hạn đầu tiên → mở đúng phiếu
       await page.click('.hl-sec.over .hl-row');
-      await page.waitForFunction(() => location.hash.startsWith('#/inspections/'));
+      await page.waitForFunction(() => location.hash.startsWith('#/maintenance/wo/'), null, { timeout: 15000 }); // dòng đầu = phiếu BT quá hạn lâu nhất
       await page.screenshot({ path: path.join(SHOTS, `home-v3-${name}.png`), fullPage: true });
       assert.deepEqual(await page.evaluate(() => window.__meCsp), [], 'không vi phạm CSP');
       assert.deepEqual(app.consoleErrors, []);

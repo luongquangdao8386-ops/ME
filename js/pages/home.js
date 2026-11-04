@@ -150,8 +150,33 @@ async function homeData() {
   const all = (await deadlineItems()).filter((x) => x.due.state !== 'NOT_DUE' && x.due.state !== 'MISSING').sort(dueSort);
   for (const x of all) x.text = await deadlineText(x);
   const soon = all.filter((x) => x.due.state === 'DUE_SOON' || x.due.state === 'DUE_TODAY');
-  const over = all.filter((x) => x.due.state === 'OVERDUE');
+  // Quá hạn: cùng nguồn với bảng Công việc hôm nay (d4.31 — trước chỉ lấy phiếu BT của tuần này nên sót phiếu quá hạn từ tuần trước):
+  // kiểm định/hợp đồng quá hạn + phiếu bảo trì đang mở quá hạn (mọi ngày) + dịch vụ HĐ quá hạn chưa làm; quá hạn lâu nhất trước
+  const over = all.filter((x) => x.due.state === 'OVERDUE').concat(await overdueWork(t));
+  over.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   return { t, from, to, days, items, soon, over, tiles: await tileData() };
+}
+
+/** Phiếu bảo trì đang mở đã quá hạn (Đợt 2) và dịch vụ hợp đồng quá hạn chưa làm — dạng dòng của bảng Việc cần làm */
+async function overdueWork(t) {
+  const out = [];
+  const eqs = await mapOf('EQUIPMENT');
+  const eqText = (e) => (e ? `${e.equipment_code} ${nameText(e)}` : '');
+  if (dot2()) {
+    const { workItems } = await import('../work.js');
+    for (const x of (await workItems({ mine: false, kinds: ['WO'] })).filter((i) => i.group === 'OVERDUE')) {
+      out.push({ kind: 'WO', code: x.code, href: x.href, date: x.date, title: [nameText(x.rec, 'title'), eqText(x.eq || eqs.get(x.rec.equipment_id))].filter(Boolean).join(' — '),
+        due: { state: 'OVERDUE', days: daysBetween(t, x.date) } });
+    }
+  }
+  const contracts = await mapOf('CONTRACT');
+  for (const s of await recs('CONTRACT_SERVICE')) {
+    if (s.performed_at || !s.due_date || s.due_date >= t) continue;
+    const c = contracts.get(s.contract_id);
+    out.push({ kind: 'SERVICE', code: c ? c.contract_code : '', href: '/contracts/' + s.contract_id, date: s.due_date, title: c ? nameText(c, 'title') : '',
+      due: { state: 'OVERDUE', days: daysBetween(t, s.due_date) } });
+  }
+  return out;
 }
 
 /** 9 ô chức năng: {m, soon, tail} — số hồ sơ, phiếu đang mở, đồng hồ cần đọc, số lộ, số mẫu báo cáo */
@@ -220,8 +245,7 @@ function agendaHtml(d, { max = 12 } = {}) {
 /** Bảng Việc cần làm: ô số Quá hạn / Sắp tới hạn / Việc tuần này, dải 7 ngày có chấm, danh sách quá hạn → từng ngày → sắp tới hạn sau tuần này */
 function agendaPanelHtml(d) {
   const weekN = d.items.filter((x) => x.date >= d.t && !x.done).length;
-  const pastOpen = d.items.filter((x) => x.date < d.t && !x.done && x.kind === 'WO').map((x) => ({ ...x, due: { state: 'OVERDUE', days: daysBetween(d.t, x.date) } }));
-  const over = [...d.over, ...pastOpen];
+  const over = d.over;
   const later = d.soon.filter((x) => x.date > d.to);
   const strip = `<div class="hl-strip">${d.days.map((day) => {
     const list = d.items.filter((x) => x.date === day);
