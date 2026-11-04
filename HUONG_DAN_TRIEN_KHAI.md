@@ -16,6 +16,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.28 (xem thử 3 mẫu bố cục trang chủ) — chỉ đổi app, không cần dán Code.gs:** trên trang **THỬ** (<https://luongquangdao8386-ops.github.io/ME-thu/>), góc phải trên ảnh trang chủ có dải nút **Bố cục · 布局: Hiện tại · Mẫu 1 · Mẫu 2 · Mẫu 3** — bấm để đổi ngay, máy nhớ lựa chọn. **Mẫu 1** thanh chức năng ngang (9 ô một hàng nổi trên ảnh, dưới là Lịch tuần | Thời hạn cao bằng nhau); **Mẫu 2** hai cột cân đối (Lịch tuần + Thời hạn bên trái, 9 ô bên phải, đầu khung có màu, đáy hai cột bằng nhau); **Mẫu 3** ô chức năng to bên trái + bảng **Việc cần làm** bên phải (số Quá hạn / Sắp tới hạn / Việc tuần này, dải 7 ngày có chấm, danh sách việc). Trang THẬT chưa đổi, không có dải nút; khi chọn xong mẫu nào thì mẫu đó thành bố cục chính và dải nút được bỏ.
+
 **Bản d4.27 (Lưu trữ theo năm) — cần dán Code.gs, KHÔNG cần `migrateSchema`:**
 - **Tài khoản → Quản trị → Lưu trữ theo năm** (chỉ Quản trị). Chuyển dữ liệu phát sinh của **năm đã kết thúc** sang một tệp Google Sheets riêng `ME_LuuTru_<năm>` trong thư mục **Backups/LuuTru** để app không chậm dần: chỉ số đồng hồ (giữ lần đọc cuối năm mỗi đồng hồ để tính tiếp, giữ chỉ số Cần xem lại), dòng ảnh chỉ số (tệp ảnh vẫn ở Drive), nhật ký thao tác, thao tác đã xong, dòng nhập Excel của lô đã xong.
 - **Giữ nguyên:** thiết bị, đồng hồ, tủ/lộ, tem QR, danh mục, kế hoạch, checklist, hợp đồng, kiểm định, phiếu bảo trì/sửa chữa (lý lịch máy), báo cáo đã lưu.
