@@ -36,9 +36,9 @@ test('web: Từ ngày 01 → cuối tháng trước ở danh sách mẫu → bá
   try {
     await login(page);
     // Lịch tuần trang chủ: đồng hồ đọc mỗi ngày nhưng không còn mục "Chỉ số" (người dùng yêu cầu)
-    await page.waitForSelector('.home-week .day');
-    assert.equal(await page.locator('.week .day-item.k-reading').count(), 0, 'không mục Chỉ số trong lịch tuần');
-    assert.ok(!(await page.textContent('.home-week')).includes('Chỉ số'));
+    await page.waitForSelector('.hl-strip .hl-pill');
+    assert.equal(await page.locator('.hl-panel .ck-reading').count(), 0, 'không mục Chỉ số trong lịch tuần');
+    assert.ok(!(await page.textContent('.hl-panel')).includes('Chỉ số'));
     await go(page, '#/alerts/month');
     await page.waitForSelector('.cal-grid, .cal-day, [data-day]', { timeout: 15000 });
     assert.equal(await page.locator('.ck-reading').count(), 0, 'lịch tháng cũng không có mốc đọc chỉ số');
