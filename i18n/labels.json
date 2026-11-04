@@ -1047,6 +1047,7 @@
   "health.permissions_ceiling": ["Ô quyền vượt trần hoặc thiếu", "超出上限或缺失的权限项"],
   "health.documents_broken": ["Tài liệu không mở được", "无法打开的文件"],
   "health.spreadsheet_cells": ["Số ô bảng tính (giới hạn 5 triệu)", "表格单元格数（上限500万）"],
+  "health.checksheet_feed": ["Kết nối app Checksheet", "点检表应用连接"],
   "adm.perm.module": ["Module", "模块"],
 
   "excel.title": ["Nhập/xuất Excel", "Excel导入导出"],

@@ -16,6 +16,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.28 (tự sửa lẫn bản: hiện "arc.title · arc.title") — chỉ đổi app, không bắt buộc dán Code.gs:** ngay sau phát hành, máy có thể còn giữ tệp từ điển nhãn cũ trong khi màn hình đã mới → chữ hiện dạng mã (vd "arc.title · arc.title" ở Quản trị). Nay app thấy nhãn thiếu thì **tự tải lại bản mới một lần**. Gặp lại thì bấm **Ctrl+Shift+R** (iPhone: đóng hẳn app rồi mở lại). Thêm nhãn "Kết nối app Checksheet" ở Trạng thái hệ thống (trước hiện mã `health.checksheet_feed`).
+
 **Bản d4.27 (Lưu trữ theo năm) — cần dán Code.gs, KHÔNG cần `migrateSchema`:**
 - **Tài khoản → Quản trị → Lưu trữ theo năm** (chỉ Quản trị). Chuyển dữ liệu phát sinh của **năm đã kết thúc** sang một tệp Google Sheets riêng `ME_LuuTru_<năm>` trong thư mục **Backups/LuuTru** để app không chậm dần: chỉ số đồng hồ (giữ lần đọc cuối năm mỗi đồng hồ để tính tiếp, giữ chỉ số Cần xem lại), dòng ảnh chỉ số (tệp ảnh vẫn ở Drive), nhật ký thao tác, thao tác đã xong, dòng nhập Excel của lô đã xong.
 - **Giữ nguyên:** thiết bị, đồng hồ, tủ/lộ, tem QR, danh mục, kế hoạch, checklist, hợp đồng, kiểm định, phiếu bảo trì/sửa chữa (lý lịch máy), báo cáo đã lưu.

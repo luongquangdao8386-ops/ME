@@ -75,7 +75,7 @@ export async function openApp({ env = freshServer(), viewport = { width: 390, he
   await context.addInitScript((exec) => { try { localStorage.setItem('me.exec_url', exec); } catch (e) { /* bỏ qua */ } }, EXEC);
   const page = await context.newPage();
   const consoleErrors = [];
-  page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' || (m.type() === 'warning' && m.text().startsWith('Thiếu nhãn'))) consoleErrors.push(m.text()); });
   page.on('pageerror', (e) => consoleErrors.push(String(e)));
   await page.goto(base);
   return {

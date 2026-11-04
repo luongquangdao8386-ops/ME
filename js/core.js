@@ -114,7 +114,27 @@ export const L = DICT;
 
 function pairOf(keyOrPair) {
   if (Array.isArray(keyOrPair)) return keyOrPair;
-  return L[keyOrPair] || [keyOrPair, keyOrPair];
+  const p = L[keyOrPair];
+  if (!p && typeof keyOrPair === 'string' && /^[a-z][a-z0-9_]*\.[A-Za-z0-9_.]+$/.test(keyOrPair)) missingLabel(keyOrPair);
+  return p || [keyOrPair, keyOrPair];
+}
+
+/**
+ * Nhãn không có trong từ điển (d4.28): gần như luôn là lẫn bản ngay sau phát hành — dict.js cũ (CDN GitHub Pages / bộ nhớ đệm còn trả
+ * tệp cũ) mà màn hình đã mới → hiện "arc.title · arc.title". Tự tải lại bản mới một lần mỗi phiên trình duyệt (cờ sessionStorage
+ * theo khóa, không lặp vô hạn), sau khi màn vẽ xong.
+ */
+let missingDone = false;
+function missingLabel(key) {
+  console.warn('Thiếu nhãn ' + key);
+  if (missingDone) return;
+  missingDone = true;
+  try {
+    const flag = NS + '.label_reload';
+    if (sessionStorage.getItem(flag) === key) return;
+    sessionStorage.setItem(flag, key);
+  } catch (e) { return; }
+  setTimeout(() => { import('./ui.js').then((m) => m.reloadFresh()).catch(() => {}); }, 600);
 }
 function fill(s, vars) {
   if (!vars) return s;
