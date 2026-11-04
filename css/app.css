@@ -1201,6 +1201,15 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 .dd-tbl thead th .vi, .dd-tbl thead th .zh { display: block; }
 .dd-tbl tr.sun td:first-child { color: #8A95A3; }
 .dd-tbl tr.peak td:last-child { font-weight: 700; color: var(--navy); }
+/* d4.26: cân bằng đồng hồ tổng – nhánh — chênh lệch vượt ngưỡng chữ đỏ; ô Thất thoát viền màu theo kết luận */
+.bal-tbl td { vertical-align: middle; }
+.bal-tbl tr.bal-over .bal-loss, .bal-tbl tr.bal-under .bal-loss, .dd-tbl tr.bal-bad .bal-loss { color: var(--red); font-weight: 700; }
+.paper-tile.tone-red { box-shadow: inset 3px 0 0 var(--red); }
+.paper-tile.tone-red .pt-value { color: var(--red); }
+.paper-tile.tone-green { box-shadow: inset 3px 0 0 var(--green); }
+.bal-share { margin-top: 8px; }
+.bal-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; margin-top: 10px; padding: 8px 10px; background: #F1F5F9; border-radius: 6px; font-size: 0.875rem; }
+.bal-line .row { margin: 0; }
 /* Quản trị → Logo trên báo cáo: ảnh lớn + mẫu đầu trang PDF (logo cao 56 px trên nền giấy) */
 /* d4.21: Mã biểu mẫu trên PDF — mã mẫu báo cáo dài xuống dòng, cột ô nhập đủ rộng */
 .fc-table .code { overflow-wrap: anywhere; }

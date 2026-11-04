@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.25';
+var SERVER_VERSION = '1.0.0-d4.26';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
@@ -85,7 +85,9 @@ var SETTINGS_DEFAULTS = [
   ['annual_plan_form_code', 'STRING', '', true, 5, 'Mã biểu mẫu trên PDF kế hoạch bảo trì năm (trống thì không in)', '年度维护计划PDF表单编号（留空则不打印）'],
   // d4.21: mã biểu mẫu ISO in trên từng loại PDF ({loại PDF: mã}; loại = WORK_ORDER, REPAIR, EQUIPMENT, ANNUAL_MONTH hoặc mã mẫu báo cáo).
   // Sửa ở Tài khoản → Quản trị → Mã biểu mẫu trên PDF; trống thì không in
-  ['pdf_form_codes', 'JSON', {}, true, 5, 'Mã biểu mẫu in trên PDF (theo loại PDF)', 'PDF表单编号（按PDF类型）']
+  ['pdf_form_codes', 'JSON', {}, true, 5, 'Mã biểu mẫu in trên PDF (theo loại PDF)', 'PDF表单编号（按PDF类型）'],
+  // d4.26: ngưỡng thất thoát đồng hồ tổng – nhánh (%): chung theo loại + riêng từng đồng hồ tổng; sửa bằng meter.tolerance.set, không sửa ở đây
+  ['meter_loss_tolerance', 'JSON', { ELECTRICITY: 3, WATER: 5, meters: {} }, true, 3, 'Ngưỡng thất thoát đồng hồ tổng – nhánh (%)', '总表与分表损耗允许范围（%）']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */

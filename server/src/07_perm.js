@@ -71,6 +71,8 @@ var ACTION_TABLE_ = [
   // 4.4.6 Điện nước
   'utility.view|utilities|V|Y Y Y Y Y Y Y Y|cache|3|R',
   'meter.edit|utilities|C/E|N N N N N N Y Y|net|3|W',
+  // d4.26: ngưỡng thất thoát tổng – nhánh (chung theo loại: chỉ cấp 4, kiểm trong thao tác; riêng từng đồng hồ tổng: C3/C4)
+  'meter.tolerance.set|utilities|E|N N N N N N Y Y|pin|3|W',
   'reading.create|utilities|C|N N Y N N N Y Y|offline|3|W',
   'reading.editOwn|utilities|E|N N OWN N N N Y Y|net|3|W',
   'reading.editOthers|utilities|E|N N N N N N Y Y|net|3|W',

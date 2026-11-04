@@ -890,6 +890,14 @@ function utilitySummary_(ctx, f, opts) {
   // Theo ngày (báo cáo): kỳ từ 2 ngày tới 2 tháng
   var nDays = dayNum_(b) - dayNum_(a) + 1;
   if (opts.daily && nDays >= 2 && nDays <= UT_DAILY_MAX_DAYS_) out.daily = utilityDaily_(d, meters, top, a, b, W, nowMs);
+  // d4.26: cân bằng tổng – nhánh (báo cáo); lọc đúng một đồng hồ có nhánh → thêm cân bằng từng ngày (tham khảo)
+  if (opts.balance) {
+    var cfg = lossTolCfg_();
+    out.balance = meterBalance_(d, meters, a, b, W, nowMs, cfg);
+    if (opts.daily && f.meter_ids && f.meter_ids.length === 1 && meters.length === 1 && nDays >= 2 && nDays <= UT_DAILY_MAX_DAYS_) {
+      out.balance_daily = meterBalanceDaily_(d, meters[0], a, b, W, nowMs, cfg);
+    }
+  }
   if (opts.chart !== false) {
     var line = [];
     if (type !== 'CUSTOM') {
@@ -951,6 +959,7 @@ function utilitySummaryCached_(ctx, f) {
 function utilityView_(ctx) {
   var p = ctx.req.payload || {};
   if (p.summary) return utilitySummaryCached_(ctx, p.summary || {});
+  if (p.balance_alerts) return meterBalanceAlerts_(ctx);
   var qm = qrMap_();
   if (p.meter_id) {
     var m = meterOrThrow_(p.meter_id);

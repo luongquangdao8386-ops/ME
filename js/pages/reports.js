@@ -38,9 +38,15 @@ const lastOfMonth = (iso) => addDays(addDays(iso.slice(0, 8) + '01', 32).slice(0
 /** Khoảng [from, to] là một tháng (từ ngày 1 tới cuối tháng, hoặc tới hôm nay của tháng này) → báo cáo tháng */
 const isMonthRange = (a, b) => !!(a && b && a.slice(8) === '01' && a.slice(0, 7) === b.slice(0, 7) && (b === lastOfMonth(a) || b === today()));
 
+/** Bộ lọc của mẫu; mẫu Điện nước tạo trước d4.26 thêm ô Đồng hồ (máy chủ đã nhận meter_id) */
+const schemaOf = (def) => {
+  const s = def.filter_schema || [];
+  return def.dataset === 'UTILITIES' && !s.includes('meter_id') ? [...s, 'meter_id'] : s;
+};
+
 function defaultsFor(def, q) {
   const f = {};
-  const schema = def.filter_schema || [];
+  const schema = schemaOf(def);
   const g = (k) => (q && q.get(k)) || '';
   if (schema.includes('from')) { f.from = g('from') || RF.from || monthStart(); f.to = g('to') || RF.to || today(); }
   if (schema.includes('location_id') && (g('location_id') || RF.loc)) f.location_id = g('location_id') || RF.loc;
@@ -55,7 +61,7 @@ function defaultsFor(def, q) {
       delete f.from; delete f.to;
     }
   }
-  ['status', 'severity', 'utility_type', 'panel_id', 'due'].forEach((k) => { if (schema.includes(k) && g(k)) f[k] = g(k); });
+  ['status', 'severity', 'utility_type', 'panel_id', 'meter_id', 'due'].forEach((k) => { if (schema.includes(k) && g(k)) f[k] = g(k); });
   return f;
 }
 
@@ -103,6 +109,7 @@ async function filterLines(d) {
   if (f.status && STATUS_OPTS[d.definition.dataset]) out.push([biText('col.status'), biText(STATUS_OPTS[d.definition.dataset][0] + '.' + f.status)]);
   if (f.severity) out.push([biText('rp.severity'), biText('severity.' + f.severity)]);
   if (f.utility_type) out.push([biText('col.type'), biText('utility_type.' + f.utility_type)]);
+  if (f.meter_id) { const m = d.meter || await byId('METER', f.meter_id); out.push([biText('ut.meters'), m ? `${m.meter_code}${m.name_vi ? ' · ' + m.name_vi : ''}` : f.meter_id]); }
   if (f.due) out.push([biText('excel.due'), biText('excel.due.' + f.due)]);
   if (f.window_hours) out.push([biText('ut.window_note', { W: f.window_hours }), '']);
   return out;
@@ -208,6 +215,54 @@ function dailyTablesHtml(d, t) {
   return `<div class="dd-split${split ? ' two' : ''}">${table(0, half)}${split ? table(half, n) : ''}</div>`;
 }
 
+/* ---------- Cân bằng đồng hồ tổng – nhánh (d4.26) ---------- */
+
+const pctText = (p) => (p === null || p === undefined ? '' : `${fmtNumber(p, 2)}\u00A0%`);
+const lossText = (loss, p) => (loss === null || loss === undefined ? '—' : `${fmtNumber(loss)}${p === null || p === undefined ? '' : ` (${pctText(p)})`}`);
+const balRows = (d, t) => (d.balance || []).filter((r) => r.utility_type === t);
+/** Cân bằng từng ngày khi báo cáo lọc đúng một đồng hồ tổng */
+const balDaily = (d, t) => { const b = balRows(d, t); return d.balance_daily && b.length === 1 && b[0].meter_id === d.balance_daily.meter_id ? d.balance_daily : null; };
+
+/** Bảng Cân bằng: một dòng mỗi đồng hồ có nhánh (thụt theo cấp), chênh lệch (%), ngưỡng, kết luận */
+function balanceTableHtml(rows, unit) {
+  if (!rows.length) return '';
+  return `<h3>${bi('bal.title')}</h3><div class="table-wrap"><table class="tbl paper-tbl bal-tbl"><thead><tr><th>${bi('bal.col.main')}</th><th class="num">${bi('bal.col.total')} (${esc(unit)})</th>
+    <th class="num">${bi('bal.col.children')}</th><th class="num">${bi('bal.col.loss')}</th><th class="num">${bi('bal.col.tol')}</th><th>${bi('bal.col.result')}</th></tr></thead>
+    <tbody>${rows.map((r) => `<tr class="bal-${esc(String(r.status).toLowerCase())}" data-meter="${esc(r.meter_id)}">
+      <td style="padding-left:${8 + r.level * 14}px">${r.level ? '↳ ' : ''}<span class="code">${esc(r.meter_code)}</span> ${esc(r.name_vi || '')}<div class="muted small">${bi('bal.n_children', { N: r.children_n })}</div></td>
+      <td class="num">${r.consumption === null ? '—' : fmtNumber(r.consumption)}</td><td class="num">${r.children_sum === null ? '—' : fmtNumber(r.children_sum)}</td>
+      <td class="num bal-loss">${lossText(r.loss, r.pct)}</td>
+      <td class="num">${fmtNumber(r.tol, 1)}\u00A0%${r.tol_custom ? `<div class="muted small">${bi('bal.custom')}</div>` : ''}</td>
+      <td>${badge('balance_status.' + r.status)}${r.status === 'MISSING' && r.missing.length ? `<div class="muted small">${bi('bal.missing', { C: r.missing.slice(0, 4).join(', ') + (r.missing.length > 4 ? '…' : '') })}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+/** Phân bổ theo nhánh của một đồng hồ tổng: 10 nhánh dùng nhiều nhất, còn lại gộp, cộng phần thất thoát */
+function balanceShareHtml(r, t) {
+  if (!r || !(r.consumption > 0) || r.status === 'MISSING' || r.status === 'OPEN') return '';
+  const pc = (v) => ` (${fmtNumber(Math.round((v / r.consumption) * 1000) / 10, 1)}\u00A0%)`;
+  const list = r.children.filter((x) => x.consumption !== null).sort((a, b) => b.consumption - a.consumption);
+  const items = list.slice(0, 10).map((x) => ({ label: `${x.meter_code}${x.name_vi ? ' · ' + x.name_vi : ''}${pc(x.consumption)}`, value: x.consumption }));
+  if (list.length > 10) { const rest = list.slice(10).reduce((a, x) => a + x.consumption, 0); items.push({ label: biText('bal.others', { N: list.length - 10 }) + pc(rest), value: rest }); }
+  if (r.loss > 0) items.push({ label: biText('bal.loss') + pc(r.loss), value: r.loss });
+  return `<div class="bal-share">${barListHtml({ title: `${bi('bal.share')} · <span class="code">${esc(r.meter_code)}</span>`, unit: UNIT[t], tone: TONE[t], items })}</div>`;
+}
+
+/** Cân bằng theo ngày (tham khảo): Ngày | Tổng | Cộng nhánh | Chênh lệch (%) — hai nửa như bảng theo ngày; ngày vượt ngưỡng chữ đỏ */
+function balanceDailyHtml(bd, unit) {
+  const cell = (v, st) => (v !== null && v !== undefined ? fmtNumber(v) : (st === 'future' ? '' : (st === 'open' ? '…' : '—')));
+  const n = bd.days.length;
+  const split = n > 10;
+  const half = split ? Math.ceil(n / 2) : n;
+  const table = (a, b) => `<table class="tbl paper-tbl dd-tbl bal-dd"><thead><tr><th>${bi('field.date')}</th><th class="num">${bi('bal.col.total')} (${esc(unit)})</th><th class="num">${bi('bal.col.children')}</th><th class="num">${bi('bal.col.loss')}</th></tr></thead>
+    <tbody>${bd.days.slice(a, b).map((day, k) => {
+      const i = a + k;
+      const bad = bd.st[i] === 'over' || bd.st[i] === 'under';
+      return `<tr class="${weekday(day) === 7 ? 'sun' : ''}${bad ? ' bal-bad' : ''}"><td>${esc(dayLabel(day))} <span class="muted small">${esc(wdText(day))}</span></td>
+        <td class="num">${cell(bd.v[i], bd.st[i])}</td><td class="num">${cell(bd.c[i], bd.st[i])}</td><td class="num bal-loss">${bd.loss[i] === null ? cell(null, bd.st[i]) : lossText(bd.loss[i], bd.pct[i])}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  return `<h3>${bi('bal.daily_title')} <span class="muted small">${esc(unit)}</span></h3><div class="dd-split${split ? ' two' : ''}">${table(0, half)}${split ? table(half, n) : ''}</div>`;
+}
+
 /** Chi tiết đồng hồ của một loại, gọn: số + giờ đọc chung một ô, tiêu thụ kèm đơn vị; bỏ cột Loại (trang đã theo loại) */
 function meterTableHtml(d, t) {
   const cols = (d.columns || []).filter((c) => !['utility_type', 'unit', 'opening_at', 'closing_at'].includes(c.key));
@@ -243,11 +298,18 @@ function utilTiles(d, t) {
     const pv = (line[line.length - 2].totals || {})[t];
     if (pv && pv.ok && !pv.partial && !pv.open) tiles.push({ label: biText('rpt.prev_period'), value: `${fmtNumber(pv.consumption)}\u00A0${unit}` });
   }
+  // d4.26: một đồng hồ tổng trong báo cáo → ô Thất thoát (số + %, kết luận so với ngưỡng)
+  const bal = balRows(d, t);
+  if (bal.length === 1) {
+    const b = bal[0];
+    tiles.push(b.loss === null ? { label: biText('bal.tile'), value: biText('balance_status.' + b.status), tone: 'grey' }
+      : { label: biText('bal.tile'), value: `${fmtNumber(b.loss)}\u00A0${unit} · ${pctText(b.pct)}`, note: `${biText('balance_status.' + b.status)} (${biText('bal.col.tol')} ${fmtNumber(b.tol, 1)}\u00A0%)`, tone: b.status === 'OK' ? 'green' : 'red' });
+  }
   own.filter((s) => s.raw.money).forEach((s) => tiles.push({ label: biText('ut.cost'), value: s.main }));
   return tiles;
 }
 
-const tilesHtml = (tiles) => (tiles.length ? `<div class="paper-tiles">${tiles.map((s) => `<div class="paper-tile"><div class="pt-label">${esc(s.label)}</div><div class="pt-value">${esc(s.value)}</div>${s.note ? `<div class="pt-note">${esc(s.note)}</div>` : ''}</div>`).join('')}</div>` : '');
+const tilesHtml = (tiles) => (tiles.length ? `<div class="paper-tiles">${tiles.map((s) => `<div class="paper-tile${s.tone ? ' tone-' + s.tone : ''}"><div class="pt-label">${esc(s.label)}</div><div class="pt-value">${esc(s.value)}</div>${s.note ? `<div class="pt-note">${esc(s.note)}</div>` : ''}</div>`).join('')}</div>` : '');
 
 /**
  * Dải đầu gọn (d4.22, giống PDF): khung viền mảnh [logo công ty | tiêu đề hai dòng (+ dòng phụ) | mã biểu mẫu, số, thời gian lập]
@@ -283,12 +345,15 @@ async function paperHtml(d, { code = '', logoRev } = {}) {
   if (types.length) {
     return `<div class="paper-set">${types.map((t) => {
       const st = dailyStats(d.daily, t);
-      const notes = ['rpt.note.utility_rule', ...(d.daily ? ['rpt.note.daily'] : []), ...(st && d.daily.totals[t].st.includes('partial') ? ['rpt.note.partial_day'] : [])];
+      const bal = balRows(d, t), bd = balDaily(d, t);
+      const notes = ['rpt.note.utility_rule', ...(d.daily ? ['rpt.note.daily'] : []), ...(st && d.daily.totals[t].st.includes('partial') ? ['rpt.note.partial_day'] : []), ...(bal.length ? ['bal.note'] : [])];
       return `<article class="paper paper-a4" data-type="${t}" aria-label="${esc(biText('rpt.preview_paper') + ' — ' + biText('utility_type.' + t))}">
         ${paperHead(d, { logo, code, lines, sub: bi('utility_type.' + t) })}
         ${tilesHtml(utilTiles(d, t))}
         ${utilChartHtml(d, t)}
-        ${d.daily && d.daily.totals && d.daily.totals[t] ? `<h3>${bi('rpt.by_day')} <span class="muted small">${esc(UNIT[t])}</span></h3>${dailyTablesHtml(d, t)}` : ''}
+        ${balanceTableHtml(bal, UNIT[t])}
+        ${bd ? balanceShareHtml(bal[0], t) + balanceDailyHtml(bd, UNIT[t])
+    : (d.daily && d.daily.totals && d.daily.totals[t] ? `<h3>${bi('rpt.by_day')} <span class="muted small">${esc(UNIT[t])}</span></h3>${dailyTablesHtml(d, t)}` : '')}
         <h3>${bi('rpt.meters_detail')}</h3>${meterTableHtml(d, t)}
         <p class="paper-notes muted small">${notes.map((n) => bi(n)).join(' · ')}${wNote ? `<br>${esc(wNote)}` : ''}${d.cost_hidden ? `<br>${bi('cost.hidden')}` : ''}</p>
         ${signHtml(d)}
@@ -376,6 +441,15 @@ async function excelFile(d, code, fileName, logoRev) {
     });
     const drows = d.daily.days.map((_, i) => getters.map((g) => g(i)));
     X.utils.book_append_sheet(wb, buildSheet(X, dk, dl, dt, drows), biText('rpt.by_day').slice(0, 31));
+  }
+  // Cân bằng tổng – nhánh (d4.26): mỗi dòng một đồng hồ có nhánh
+  if (d.balance && d.balance.length) {
+    const sp = (k) => { const x = biText(k).split(' · '); return [x[0], x[1] || '']; };
+    const bk = ['meter_code', 'name', 'level', 'consumption', 'children_n', 'children_sum', 'loss', 'pct', 'tol', 'status', 'missing'];
+    const bl = [sp('bal.col.main'), sp('ut.meters'), ['Cấp', '层级'], sp('bal.col.total'), ['Số nhánh', '分表数'], sp('bal.col.children'), sp('bal.loss'), ['%', '%'], ['Ngưỡng (%)', '允许范围（%）'], sp('bal.col.result'), ['Thiếu số', '缺数']];
+    const bt = ['code', 'text', 'num', 'num', 'num', 'num', 'num', 'num', 'num', 'text', 'text'];
+    const brows = d.balance.map((r) => [r.meter_code, [r.name_vi, r.name_zh].filter(Boolean).join(' · '), r.level, r.consumption ?? '', r.children_n, r.children_sum ?? '', r.loss ?? '', r.pct ?? '', r.tol, biText('balance_status.' + r.status), (r.missing || []).join(', ')]);
+    X.utils.book_append_sheet(wb, buildSheet(X, bk, bl, bt, brows), 'Cân bằng · 平衡');
   }
   const lines = await filterLines(d);
   X.utils.book_append_sheet(wb, aoaSheet(X, [
@@ -541,10 +615,13 @@ export async function renderReportRun(view, ctx) {
   if (!def) { view.innerHTML = `<div class="card">${bi('err.not_found')}</div>`; return; }
   shell.setScreen({ title: [def.title_vi || def.code, def.title_zh || ''], back: '/reports' });
   const f = defaultsFor(def, query);
-  const schema = def.filter_schema || [];
+  const schema = schemaOf(def);
   const locOpts = [...(await mapOf('LOCATION')).values()].filter((l) => l.active !== false).sort((a, b) => String(a.location_code).localeCompare(String(b.location_code)))
     .map((l) => [l.location_id, `${esc(l.location_code)} · ${esc(nameText(l))}`]);
   const panelOpts = schema.includes('panel_id') ? (await recs('PANEL')).filter((p) => !p.archived_at).sort((a, b) => String(a.panel_code).localeCompare(String(b.panel_code))).map((p) => [p.panel_id, `${esc(p.panel_code)} · ${esc(nameText(p))}`]) : [];
+  // d4.26: lọc một đồng hồ (đồng hồ nhánh có dấu ↳); theo loại đang chọn
+  const meterOpts = schema.includes('meter_id') ? (await recs('METER')).filter((m) => !m.archived_at && (!f.utility_type || m.utility_type === f.utility_type))
+    .sort((a, b) => String(a.meter_code).localeCompare(String(b.meter_code))).map((m) => [m.meter_id, `${m.parent_meter_id ? '↳ ' : ''}${esc(m.meter_code)} · ${esc(nameText(m))}`]) : [];
   const st = STATUS_OPTS[def.dataset];
   const fields = `<section class="card rp-filters"><div class="form-grid rf-grid">
     ${schema.includes('period_type') ? `<div class="fld wide"><div class="ut-flabel">${bi('rpt.period')}</div><div class="segs">${PERIOD_TYPES.map((k) => `<button type="button" class="seg${f.period_type === k ? ' on' : ''}" data-pt="${k}">${bi('period.' + k)}</button>`).join('')}</div></div>
@@ -553,6 +630,7 @@ export async function renderReportRun(view, ctx) {
     ${schema.includes('location_id') ? selectInput('location_id', 'rpt.area', locOpts, f.location_id || '', { empty: 'due_filter.ALL' }) : ''}
     ${schema.includes('panel_id') ? selectInput('panel_id', 'ci.panel', panelOpts, f.panel_id || '', { empty: 'due_filter.ALL' }) : ''}
     ${schema.includes('utility_type') ? selectInput('utility_type', 'col.type', [['ELECTRICITY', bi('utility_type.ELECTRICITY')], ['WATER', bi('utility_type.WATER')]], f.utility_type || '', { empty: 'due_filter.ALL' }) : ''}
+    ${schema.includes('meter_id') ? selectInput('meter_id', 'ut.meters', meterOpts, f.meter_id || '', { empty: 'bal.filter_all' }) : ''}
     ${schema.includes('status') && st ? selectInput('status', 'col.status', st[1].map((s) => [s, bi(st[0] + '.' + s)]), f.status || '', { empty: 'due_filter.ALL' }) : ''}
     ${schema.includes('severity') ? selectInput('severity', 'rp.severity', ['HIGH', 'MEDIUM', 'LOW'].map((s) => [s, bi('severity.' + s)]), f.severity || '', { empty: 'due_filter.ALL' }) : ''}
     ${schema.includes('due') ? selectInput('due', 'excel.due', ['ALL', 'DUE40', 'OVERDUE'].map((s) => [s, bi('excel.due.' + s)]), f.due || 'ALL', { empty: '' }) : ''}
@@ -615,7 +693,7 @@ function wireRun(view, ctx, def, f) {
   if (ap) ap.addEventListener('click', () => {
     const patch = {};
     for (const k of ['from', 'to', 'date']) { const v = readField(view, k); if (v === null) { toast(bi('field.invalid'), 'err'); return; } if (v !== undefined) patch[k] = v; }
-    for (const k of ['location_id', 'panel_id', 'utility_type', 'status', 'severity', 'due']) { const v = readField(view, k); if (v !== undefined) patch[k] = v; }
+    for (const k of ['location_id', 'panel_id', 'utility_type', 'meter_id', 'status', 'severity', 'due']) { const v = readField(view, k); if (v !== undefined) patch[k] = v; }
     if (patch.from && patch.to && patch.from > patch.to) { const t = patch.from; patch.from = patch.to; patch.to = t; }
     if (patch.from) RF.from = patch.from;
     if (patch.to) RF.to = patch.to;

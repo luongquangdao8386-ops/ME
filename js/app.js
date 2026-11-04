@@ -227,6 +227,7 @@ function registerRoutes() {
   route('/utilities/meters/:id/event', soonOr(3, lazy('./pages/utilities.js', 'renderEventForm')), { nav: 'utilities' });
   route('/utilities/read/:id', soonOr(3, lazy('./pages/utilities.js', 'renderReadingForm')), { nav: 'utilities' });
   route('/utilities/tariffs', soonOr(3, lazy('./pages/utilities.js', 'renderTariffs')), { nav: 'utilities' });
+  route('/utilities/loss', soonOr(3, lazy('./meter-balance.js', 'renderLossTolerance')), { nav: 'utilities' });
   route('/utilities/tariffs/new', soonOr(3, lazy('./pages/utilities.js', 'renderTariffForm')), { nav: 'utilities' });
   route('/utilities/tariffs/:id', soonOr(3, lazy('./pages/utilities.js', 'renderTariffForm')), { nav: 'utilities' });
   route('/circuits', soonOr(3, lazy('./pages/circuits.js', 'renderCircuitList')), { nav: 'circuits' });
@@ -345,6 +346,14 @@ function refreshAfterSend(r) {
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('.view')) return;
   refresh();
 }
+
+// d4.26: mục Chờ bạn xử lý lấy thêm từ máy chủ (thất thoát điện nước) → cập nhật số trên nút Công việc, vẽ lại trang chủ / Công việc
+window.addEventListener('me:pending-changed', () => {
+  updateSyncStatus().catch(() => {});
+  const path = currentPath();
+  const a = document.activeElement;
+  if ((path === '/' || path === '/work') && !document.querySelector('.modal') && !(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) refresh();
+});
 
 window.addEventListener('online', async () => {
   app.offline = false;

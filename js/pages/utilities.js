@@ -19,6 +19,7 @@ import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { myQueue, workerPick } from '../work.js';
 import { columnChartHtml, wireCharts } from '../chart.js';
+import { kidsOf, meterTolHtml, wireMeterTol } from '../meter-balance.js';
 import {
   UTILITY_TYPES, UNIT, TONE, PERIOD_TYPES, READ_CYCLES, periodOf, prevPeriod, nextPeriod, periodsBack, readingDue, lastValidBefore, useOf,
   windowHours, nextBoundary, nowMs
@@ -407,6 +408,8 @@ export async function renderMeter(view, ctx) {
   const asc = reads.slice().reverse();
   const loc = m.location_id ? await byId('LOCATION', m.location_id) : null;
   const parent = m.parent_meter_id ? ld.meters.find((x) => x.meter_id === m.parent_meter_id) : null;
+  // d4.26: đồng hồ tổng có nhánh → dòng ngưỡng thất thoát + nút Sửa ngưỡng, báo cáo cân bằng
+  const balHtml = await meterTolHtml(m, kidsOf(ld.meters).get(m.meter_id));
   const mult = curMultiplier(m, segs);
   const due = m.active === false ? null : readingDue(m, asc);
   const last = lastValidBefore(asc);
@@ -438,6 +441,7 @@ export async function renderMeter(view, ctx) {
         ${p.edit ? `<a class="btn small" href="#/utilities/meters/${esc(m.meter_id)}/edit" ${navigator.onLine ? '' : 'aria-disabled="true"'}>${ICON.edit}<span>${bi('btn.edit')}</span></a>` : ''}
         ${p.event && m.active !== false && !pending ? `<a class="btn small" href="#/utilities/meters/${esc(m.meter_id)}/event">${bi('ut.event_btn')}</a>` : ''}
       </div>
+      ${balHtml}
       ${pending ? `<div class="banner warn ut-pending"><strong>${bi('ut.event_pending')}</strong>: ${bi('meter_event.' + pending.event_type)} · ${esc(fmtDateTime(pending.event_at))}
         · ${bi('ut.closing_value')}: ${fmtNumber(pending.closing_value)}${pending.event_type !== 'MULTIPLIER_CHANGE' ? ` · ${bi('ut.opening_value')}: ${fmtNumber(pending.opening_value)}` : ` · ${bi('ut.new_multiplier')}: ${fmtNumber(pending.new_multiplier)}`}
         ${pending.created_by_name ? ` · ${esc(pending.created_by_name)}` : ''}
@@ -459,6 +463,7 @@ export async function renderMeter(view, ctx) {
     <section class="card tab-body">${tab === 'readings' ? readingsHtml(reads, photosOf, canEditRead, m, editHours, !!full)
       : tab === 'segments' ? segmentsHtml(segs, m) : eventsHtml(events)}</section>`;
   const again = () => renderMeter(view, { ...ctx, fresh: true });
+  wireMeterTol(view, m, again);
   $$('[data-tab]', view).forEach((b) => b.addEventListener('click', () => { meterTab.set(m.meter_id, b.dataset.tab); renderMeter(view, ctx); }));
   $$('[data-ev-ok],[data-ev-no]', view).forEach((b) => b.addEventListener('click', async () => {
     const ok = !!b.dataset.evOk;

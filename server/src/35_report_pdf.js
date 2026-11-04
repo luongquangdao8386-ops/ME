@@ -581,6 +581,17 @@ function utilDailyTable_(pd, daily, ut) {
   }
   var st = utilDailyStats_(daily, ut);
   var nc = head.length;
+  return pdfDayGrid_(pd, days, head, types, rowOf, function (i) {
+    return st && st.maxDay && days[i] === st.maxDay ? [[nc - 1, PDF_C_.navy, true]] : [];
+  });
+}
+
+/**
+ * Lưới theo ngày dùng chung (bảng theo ngày, cân bằng theo ngày): kẻ khung mọi ô, cột Ngày nền nhạt, hàng chẵn xen kẽ, chủ nhật chữ ngày nhạt,
+ * giờ đọc sau số chữ nhạt nhỏ; bảng ≤ 4 cột chia hai nửa cạnh nhau. mark(i) → [[cột, màu, đậm]] tô riêng ô của ngày i.
+ */
+function pdfDayGrid_(pd, days, head, types, rowOf, mark) {
+  var nc = head.length;
   var split = nc <= 4 && days.length > 10;
   var half = split ? Math.ceil(days.length / 2) : days.length;
   var blank = head.map(function () { return ''; });
@@ -597,7 +608,7 @@ function utilDailyTable_(pd, daily, ut) {
   var t = pd.body.appendTable(cells);
   t.setBorderWidth(1).setBorderColor(PDF_C_.grid);
   var wHalf = split ? Math.floor(pd.width / 2) : pd.width;
-  var wDay = Math.round(wHalf * (nc <= 2 ? 0.5 : 0.36));
+  var wDay = Math.round(wHalf * (nc <= 2 ? 0.5 : (nc >= 4 ? 0.3 : 0.36)));
   var wNum = Math.floor((wHalf - wDay) / (nc - 1));
   var widths = [wDay];
   for (var k = 1; k < nc; k++) widths.push(wNum);
@@ -637,14 +648,65 @@ function utilDailyTable_(pd, daily, ut) {
         txt.setFontSize(a, b, 7);
       }
     }
-    // Ngày lớn nhất (đủ số): tô đậm ô tổng; ngày chủ nhật: chữ ngày màu nhạt
+    // Chủ nhật: chữ ngày màu nhạt; ô được đánh dấu (ngày cao nhất, vượt ngưỡng…): màu/đậm riêng
     [[dayAt[r - 1][0], 0], [dayAt[r - 1][1], split ? nc : -1]].forEach(function (x) {
       if (x[0] < 0 || x[1] < 0) return;
       if (/ CN /.test(cells[r][x[1]])) pdfText_(row.getCell(x[1]), fs, PDF_C_.muted);
-      if (st && st.maxDay && days[x[0]] === st.maxDay) pdfText_(row.getCell(x[1] + nc - 1), fs, PDF_C_.navy, true);
+      (mark ? mark(x[0]) || [] : []).forEach(function (mk) { pdfText_(row.getCell(x[1] + mk[0]), fs, mk[1], !!mk[2]); });
     });
   }
   return t;
+}
+
+/** "200 (2 %)" — chênh lệch kèm tỷ lệ; trống khi không tính được */
+function balLossText_(loss, pct) {
+  if (loss === null || loss === undefined) return '';
+  return fmtNumSrv_(loss) + (pct === null || pct === undefined ? '' : ' (' + fmtNumSrv_(pct, 2) + ' %)');
+}
+
+/** Màu chữ theo kết luận cân bằng */
+function balColor_(st) {
+  return st === 'OK' ? PDF_C_.good : (st === 'OVER' || st === 'UNDER' ? PDF_C_.bad : PDF_C_.muted);
+}
+
+/** Bảng Cân bằng đồng hồ tổng – nhánh của một loại (một dòng mỗi đồng hồ có nhánh, thụt theo cấp) */
+function utilBalanceTable_(pd, rows, unit) {
+  var head = [lab_('bal.col.main'), lab_('bal.col.total') + ' (' + unit + ')', lab_('bal.col.children'), lab_('bal.col.loss'), lab_('bal.col.tol'), lab_('bal.col.result')];
+  var data = rows.map(function (r) {
+    var name = new Array(r.level * 2 + 1).join(' ') + (r.level ? '↳ ' : '') + r.meter_code + (r.name_vi ? ' · ' + r.name_vi : '') + '\n' + lab_('bal.n_children', { N: r.children_n });
+    var res = lab_('balance_status.' + r.status) + (r.status === 'MISSING' && r.missing.length ? '\n' + lab_('bal.missing', { C: r.missing.slice(0, 4).join(', ') + (r.missing.length > 4 ? '…' : '') }) : '');
+    return [name, r.consumption === null ? '—' : fmtNumSrv_(r.consumption), r.children_sum === null ? '—' : fmtNumSrv_(r.children_sum),
+      r.loss === null ? '—' : balLossText_(r.loss, r.pct), fmtNumSrv_(r.tol, 1) + ' %' + (r.tol_custom ? '\n' + lab_('bal.custom') : ''), res];
+  });
+  return pdfTable_(pd, head, data, ['text', 'num', 'num', 'num', 'num', 'text'], {
+    fontSize: 7, caps: [34, 12, 12, 16, 10, 22],
+    cellColor: function (i, c) { return c === 5 ? balColor_(rows[i].status) : (c === 3 && (rows[i].status === 'OVER' || rows[i].status === 'UNDER') ? PDF_C_.bad : null); }
+  });
+}
+
+/** Phân bổ theo nhánh (lọc một đồng hồ tổng): 10 nhánh dùng nhiều nhất, còn lại gộp, cộng phần thất thoát */
+function utilBalanceShare_(pd, row, ut) {
+  if (!row || !(row.consumption > 0) || row.status === 'MISSING' || row.status === 'OPEN') return;
+  var unit = row.unit;
+  var list = row.children.filter(function (x) { return x.consumption !== null; }).sort(function (a, b) { return b.consumption - a.consumption; });
+  var pct = function (v) { return fmtNumSrv_(Math.round(v / row.consumption * 1000) / 10, 1) + ' %'; };
+  var items = list.slice(0, 10).map(function (x) { return { label: x.meter_code + (x.name_vi ? ' · ' + x.name_vi : ''), value: x.consumption, text: fmtNumSrv_(x.consumption) + ' ' + unit + ' · ' + pct(x.consumption) }; });
+  if (list.length > 10) {
+    var rest = 0;
+    list.slice(10).forEach(function (x) { rest += x.consumption; });
+    items.push({ label: lab_('bal.others', { N: list.length - 10 }), value: rest, text: fmtNumSrv_(rest) + ' ' + unit + ' · ' + pct(rest) });
+  }
+  if (row.loss > 0) items.push({ label: lab_('bal.loss'), value: row.loss, light: true, text: fmtNumSrv_(row.loss) + ' ' + unit + ' · ' + pct(row.loss) });
+  pdfBars_(pd, lab_('bal.share') + ' · ' + row.meter_code, items, ut === 'WATER' ? PDF_C_.water : PDF_C_.elec, PDF_C_.bad);
+}
+
+/** Cân bằng theo ngày của đồng hồ tổng đang lọc: Ngày | Tổng | Cộng nhánh | Chênh lệch (%) — ngày vượt ngưỡng chữ đỏ (tham khảo) */
+function utilBalanceDaily_(pd, bd, unit) {
+  var cell = function (v, st) { return v !== null && v !== undefined ? fmtNumSrv_(v) : (st === 'future' ? '' : (st === 'open' ? '…' : '—')); };
+  var head = [pdfHl_('field.date'), pdfHl_('bal.col.total') + ' (' + unit + ')', pdfHl_('bal.col.children'), pdfHl_('bal.col.loss')];
+  return pdfDayGrid_(pd, bd.days, head, ['text', 'num', 'num', 'num'], function (i) {
+    return [utilDayLabel_(bd.days[i]), cell(bd.v[i], bd.st[i]), cell(bd.c[i], bd.st[i]), bd.loss[i] === null ? cell(null, bd.st[i]) : balLossText_(bd.loss[i], bd.pct[i])];
+  }, function (i) { return bd.st[i] === 'over' || bd.st[i] === 'under' ? [[3, PDF_C_.bad, true]] : []; });
 }
 
 /** Bảng chi tiết đồng hồ của một loại, gọn cho khổ dọc: gộp số + giờ đọc, tiêu thụ + đơn vị; bỏ cột Loại (trang đã theo loại) */
@@ -696,6 +758,14 @@ function reportUtilSection_(pd, data, ut, head, chartBlob) {
     var pv = (line[line.length - 2].totals || {})[ut];
     if (pv && pv.ok && !pv.partial && !pv.open) more.push({ label: lab_('rpt.prev_period'), value: fmtNumSrv_(pv.consumption) + ' ' + unit });
   }
+  // d4.26: cân bằng tổng – nhánh của loại này; một đồng hồ tổng → ô Thất thoát
+  var bal = (data.balance || []).filter(function (r) { return r.utility_type === ut; });
+  var bd = data.balance_daily && bal.length === 1 && bal[0].meter_id === data.balance_daily.meter_id ? data.balance_daily : null;
+  if (bal.length === 1) {
+    var b0 = bal[0];
+    more.push({ label: lab_('bal.tile'), value: b0.loss === null ? lab_('balance_status.' + b0.status) : fmtNumSrv_(b0.loss) + ' ' + unit + ' · ' + fmtNumSrv_(b0.pct, 2) + ' %',
+      note: b0.loss === null ? '' : lab_('balance_status.' + b0.status) + ' (' + lab_('bal.col.tol') + ' ' + fmtNumSrv_(b0.tol, 1) + ' %)' });
+  }
   pdfTiles_(pd, cons.concat(more).concat(cost));
   if (chartBlob) {
     try { pdfChartImage_(pd, chartBlob); } catch (e) { chartBlob = null; }
@@ -709,7 +779,16 @@ function reportUtilSection_(pd, data, ut, head, chartBlob) {
       return { label: label, value: x.consumption, light: part, text: fmtNumSrv_(x.consumption) + ' ' + unit + (part ? ' (' + lab_(x.open ? 'utility_status.OPEN_PERIOD' : 'ut.partial') + ')' : '') };
     }), ut === 'WATER' ? PDF_C_.water : PDF_C_.elec, ut === 'WATER' ? PDF_C_.waterLight : PDF_C_.elecLight);
   }
-  if (data.daily && data.daily.totals && data.daily.totals[ut]) {
+  if (bal.length) {
+    pdfHeading_(pd, lab_('bal.title'), 6);
+    utilBalanceTable_(pd, bal, unit);
+  }
+  if (bd) {
+    // Lọc đúng một đồng hồ tổng: phân bổ theo nhánh + cân bằng từng ngày (thay bảng theo ngày một đồng hồ)
+    utilBalanceShare_(pd, bal[0], ut);
+    pdfHeading_(pd, lab_('bal.daily_title') + '  ·  ' + unit, 6);
+    utilBalanceDaily_(pd, bd, unit);
+  } else if (data.daily && data.daily.totals && data.daily.totals[ut]) {
     pdfHeading_(pd, lab_('rpt.by_day') + '  ·  ' + unit, 6);
     utilDailyTable_(pd, data.daily, ut);
   }
@@ -718,6 +797,7 @@ function reportUtilSection_(pd, data, ut, head, chartBlob) {
   var notes = ['rpt.note.utility_rule'];
   if (data.daily) notes.push('rpt.note.daily');
   if (st && data.daily.totals[ut].st.indexOf('partial') >= 0) notes.push('rpt.note.partial_day');
+  if (bal.length) notes.push('bal.note');
   pdfNote_(pd, notes.map(function (n) { return lab_(n); }).join('  ·  '));
   if (data.filters && data.filters.window_hours) pdfNote_(pd, lab_('ut.window_note', { W: data.filters.window_hours }));
   if (data.cost_hidden) pdfNote_(pd, lab_('cost.hidden'));

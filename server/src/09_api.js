@@ -130,6 +130,7 @@ var HANDLERS_ = {
   // Đợt 3: Điện nước, Lộ điện, Báo cáo
   'utility.view': function (ctx) { return utilityView_(ctx); },
   'meter.edit': function (ctx) { return meterEdit_(ctx); },
+  'meter.tolerance.set': function (ctx) { return meterToleranceSet_(ctx); },
   'reading.create': function (ctx) { return readingCreate_(ctx); },
   'reading.editOwn': function (ctx) { return readingEditOwn_(ctx); },
   'reading.editOthers': function (ctx) { return readingEditOthers_(ctx); },

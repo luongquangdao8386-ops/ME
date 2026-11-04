@@ -233,7 +233,7 @@ var REPORT_DATASETS_ = {
     }
   },
   UTILITIES: {
-    module: 'utilities', view: 'utility.view', chart: 'LINE', filters: ['period_type', 'date', 'from', 'to', 'location_id', 'utility_type'], dot: 3,
+    module: 'utilities', view: 'utility.view', chart: 'LINE', filters: ['period_type', 'date', 'from', 'to', 'location_id', 'utility_type', 'meter_id'], dot: 3,
     columns: [
       rc_('meter_code', 'code', 'Mã đồng hồ', '表号'), rc_('name', 'bi', 'Đồng hồ', '计量表'),
       rc_('utility_type', 'enum', 'Loại', '类型', { enumKey: 'utility_type' }), rc_('location', 'text', 'Khu vực', '区域'),
@@ -244,7 +244,11 @@ var REPORT_DATASETS_ = {
       rc_('cost', 'money', 'Chi phí', '费用', { cost: true, cur: 'currency' })
     ],
     build: function (ctx, f, L, cost) {
-      var s = utilitySummary_(ctx, f, { cost: cost && can_(ctx, 'tariff.view', { module: 'utilities' }), daily: true });
+      // d4.26: lọc một đồng hồ (meter_id) + cân bằng tổng – nhánh
+      var sf = {};
+      Object.keys(f).forEach(function (k) { sf[k] = f[k]; });
+      if (f.meter_id) sf.meter_ids = [f.meter_id];
+      var s = utilitySummary_(ctx, sf, { cost: cost && can_(ctx, 'tariff.view', { module: 'utilities' }), daily: true, balance: true });
       var rows = s.rows.filter(function (r) { return r.status !== 'NO_READING'; }).map(function (r) {
         var o = {
           meter_code: r.meter_code, name_vi: r.name_vi, name_zh: r.name_zh, utility_type: r.utility_type, location: rptLoc_(L, r.location_id),
@@ -270,6 +274,12 @@ var REPORT_DATASETS_ = {
         notes: ['rpt.note.utility_rule'].concat(Object.keys(s.totals).some(function (k) { return s.totals[k].partial; }) ? ['ut.partial'] : []),
         period: { period_type: s.period_type, period_start: s.period_start, period_end: s.period_end, window_hours: s.window_hours },
         daily: s.daily || null,
+        balance: s.balance || [],
+        balance_daily: s.balance_daily || null,
+        meter: f.meter_id ? (function () {
+          var m = findOne_('Meters', 'meter_id', f.meter_id);
+          return m ? { meter_id: m.meter_id, meter_code: m.meter_code, name_vi: m.name_vi || '', name_zh: m.name_zh || '', utility_type: m.utility_type } : null;
+        })() : null,
         cost_visible: s.cost_visible
       };
     }
@@ -537,7 +547,7 @@ function reportFilters_(ds, f) {
     var v = f[k];
     if (v === undefined || v === null || v === '') return;
     if (k === 'from' || k === 'to' || k === 'date') { if (!isDateStr_(v)) errs.push(fieldError_('filters.' + k, 'INVALID_DATE')); else out[k] = v; return; }
-    if (k === 'location_id' || k === 'panel_id') { if (!isUuidV4_(v)) errs.push(fieldError_('filters.' + k, 'ID_INVALID')); else out[k] = v; return; }
+    if (k === 'location_id' || k === 'panel_id' || k === 'meter_id') { if (!isUuidV4_(v)) errs.push(fieldError_('filters.' + k, 'ID_INVALID')); else out[k] = v; return; }
     if (k === 'period_type') { if (PERIOD_TYPES_.indexOf(v) < 0) errs.push(fieldError_('filters.' + k, 'INVALID_VALUE')); else out[k] = v; return; }
     if (k === 'utility_type') { if (UTILITY_TYPES_.indexOf(v) < 0) errs.push(fieldError_('filters.' + k, 'INVALID_VALUE')); else out[k] = v; return; }
     if (k === 'due') { if (['ALL', 'DUE40', 'OVERDUE'].indexOf(v) < 0) errs.push(fieldError_('filters.' + k, 'INVALID_VALUE')); else out[k] = v; return; }
@@ -585,6 +595,7 @@ function reportCompute_(ctx, def, filters) {
     chart: chartType === 'NONE' ? null : (res.chart || null),
     notes: res.notes || [], period: res.period || null, filters: f,
     daily: res.daily || null,
+    balance: res.balance || null, balance_daily: res.balance_daily || null, meter: res.meter || null,
     generated_at: isoVN_(now_()), generated_by_name: (userDirectory_()[ctx.user.user_id] || {}).display_name || '',
     source_revision: Number(stateGet_(st, 'sync_revision', 0)),
     cost_visible: !!cost, cost_hidden: !cost && ds.columns.some(function (c) { return c.cost; }),
@@ -853,6 +864,7 @@ function reportFilterLines_(data) {
   if (f.location_id) { var l = findOne_('Locations', 'location_id', f.location_id); if (l) lines.push(lab_('field.location') + ': ' + l.location_code + ' · ' + (l.name_vi || l.name_zh)); }
   if (f.status) lines.push(lab_('col.status') + ': ' + f.status);
   if (f.utility_type) lines.push(lab_('utility_type.' + f.utility_type));
+  if (f.meter_id && data.meter) lines.push(lab_('ut.meters') + ': ' + data.meter.meter_code + (data.meter.name_vi ? ' · ' + data.meter.name_vi : ''));
   if (f.window_hours) lines.push(lab_('ut.window_note', { W: f.window_hours }));
   return lines;
 }
