@@ -58,13 +58,13 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
         assert.equal(side.actIcon, 'rgb(23, 50, 79)', 'ô biểu tượng mục đang mở = navy');
         assert.equal(side.otherIcon, 'rgb(255, 255, 255)');
       }
-      // d4.30 bố cục Mẫu 3: khung ô chức năng (biểu tượng trong ô màu z3) + bảng Việc cần làm (ô số, dải 7 ngày, hôm nay nền z1)
+      // d4.30 bố cục Mẫu 3: khung ô chức năng (biểu tượng trong ô màu z3 — d4.32 xanh logo PAISHING #0054A7) + bảng Việc cần làm (ô số, dải 7 ngày, hôm nay nền z1)
       const zones = await page.evaluate(() => {
         const bg = (sel) => getComputedStyle(document.querySelector(sel)).backgroundColor;
-        return { mods: !!document.querySelector('.hl-mods .grid9'), panel: !!document.querySelector('.hl-side .hl-panel'), icon: bg('.home .tile-ic'),
+        return { mods: !!document.querySelector('.hl-mods .grid9'), panel: !!document.querySelector('.hl-side .hl-panel'), icon: bg('.home .tile-ic'), iconFg: getComputedStyle(document.querySelector('.home .tile-ic')).color,
           today: bg('.hl-pill.today'), pills: document.querySelectorAll('.hl-strip .hl-pill').length, stats: document.querySelectorAll('.hl-stats .hl-stat').length };
       });
-      assert.deepEqual(zones, { mods: true, panel: true, icon: 'rgb(220, 238, 242)', today: 'rgb(47, 109, 181)', pills: 7, stats: 3 });
+      assert.deepEqual(zones, { mods: true, panel: true, icon: 'rgb(224, 235, 247)', iconFg: 'rgb(0, 84, 167)', today: 'rgb(47, 109, 181)', pills: 7, stats: 3 });
       assert.ok((await page.textContent('.hl-panel')).includes('Việc cần làm · 待办事项'));
       assert.ok(await noOverflow(page));
       await page.screenshot({ path: path.join(SHOTS, `home-${name}.png`) });

@@ -15,11 +15,12 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --label-offset: 0mm;
-  /* d4.24 Phối màu "Xanh biển" (người dùng chọn kiểu 1 trong 3): menu trái (--side-*) + 3 khu trang chủ: Lịch tuần (z1 xanh dương) · Thời hạn (z2 hổ phách) · ô chức năng (z3 xanh ngọc) */
+  /* d4.24 Phối màu "Xanh biển" (người dùng chọn kiểu 1 trong 3): menu trái (--side-*) + 3 khu trang chủ: Lịch tuần (z1 xanh dương) · Thời hạn (z2 hổ phách) · ô chức năng (z3 xanh PAISHING từ d4.32) */
   --side-bg: #EBF1F7; --side-line: #D3DDE8; --side-hover: #DEE8F2; --side-title: #23466B; --side-act: #17324F;
   --z1: #2F6DB5; --z1-bg: #F2F7FD; --z1-line: #D5E3F3;
   --z2: #C27C12; --z2-bg: #FFF9EB; --z2-line: #F0E0B8;
-  --z3: #1D7486; --z3-bg: #EEF6F8; --z3-line: #CFE5EA; --z3-chip: #DCEEF2;
+  /* d4.32 ô chức năng trang chủ (z3) đổi sang xanh logo PAISHING #0054A7 (người dùng yêu cầu) */
+  --z3: #0054A7; --z3-bg: #EEF4FB; --z3-line: #C9DBF0; --z3-chip: #E0EBF7;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -1323,11 +1324,11 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 /* Ô chức năng: ô biểu tượng màu khu z3, tên Việt đậm, Trung nhạt, số liệu dạng nhãn */
 .home .grid9 { margin: 0; gap: 8px; }
 .home .tile { gap: 6px; border: 1px solid #E3EAF1; border-radius: 14px; background: #fff; min-height: 112px; }
-.home .tile:not(.dim):hover { border-color: var(--z3); box-shadow: 0 6px 16px rgba(29,116,134,0.12); }
+.home .tile:not(.dim):hover { border-color: var(--z3); box-shadow: 0 6px 16px rgba(0,84,167,0.12); }
 .home .tile svg { width: 24px; height: 24px; }
 .home .tile-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--z3-chip); color: var(--z3); display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .home .tile-txt { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-.home .tile-count { display: inline-block; font-size: 0.6875rem; font-weight: 600; color: var(--z3); background: #E6F2F4; border-radius: 999px; padding: 1px 8px; }
+.home .tile-count { display: inline-block; font-size: 0.6875rem; font-weight: 600; color: var(--z3); background: #E8F0FA; border-radius: 999px; padding: 1px 8px; }
 .home .tile.dim { opacity: 0.55; }
 
 /* Dòng việc: vạch màu theo loại, loại + mã, nội dung một dòng + nhãn hạn */
