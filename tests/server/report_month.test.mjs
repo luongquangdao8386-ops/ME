@@ -124,15 +124,26 @@ test('PDF báo cáo tháng Điện nước: mỗi loại một trang (dải đ�
     assert.equal(img.h, Math.round(img.w * 250 / 900));
     // Bảng theo ngày hai nửa cạnh nhau (16 dòng + tiêu đề): Nước một đồng hồ → Ngày | Chỉ số đầu ngày | Tiêu thụ;
     // Điện hai đồng hồ → Ngày | MSB1 | MSB1-A | Tổng
-    const nCols = i ? 7 : 9, half = (nCols - 1) / 2;
+    // d4.25: kẻ khung mọi ô (không còn cột trống giữa hai nửa — Docs kẻ viền cả bảng), cột Ngày nền nhạt, giờ đọc chữ nhạt
+    const nCols = i ? 6 : 8, half = nCols / 2;
     const dd = tables.find((t) => t.rows[0].cells.length === nCols && t.rows[0].cells[0].getText().startsWith('Ngày'));
     assert.ok(dd, 'bảng theo ngày hai nửa');
     assert.equal(dd.rows.length, 17);
-    assert.equal(dd.rows[0].cells[half].getText(), '', 'cột cách giữa hai nửa');
+    assert.ok(dd.st.BORDER_WIDTH >= 1 && dd.st.BORDER_COLOR === '#AFBCCC', 'kẻ khung từng ô');
+    assert.ok(dd.rows[0].cells[half].getText().startsWith('Ngày'), 'nửa phải bắt đầu ngay bằng cột Ngày');
     assert.ok(dd.rows[1].cells[0].getText().startsWith('01/10 T5 周四'));
-    assert.ok(dd.rows[1].cells[half + 1].getText().startsWith('17/10'));
-    assert.equal(dd.rows[16].cells[half + 1].getText(), '', 'nửa phải ít hơn một ngày');
-    if (i) assert.equal(dd.rows[1].cells[1].getText(), '1\u202F000  08:10', 'chỉ số đầu ngày kèm giờ đọc');
+    assert.ok(dd.rows[1].cells[half].getText().startsWith('17/10'));
+    assert.equal(dd.rows[16].cells[half].getText(), '', 'nửa phải ít hơn một ngày');
+    [1, 2, 16].forEach((r) => [0, half].forEach((x) => assert.equal(dd.rows[r].cells[x].st.BACKGROUND_COLOR, '#F1F5F9', 'cột Ngày nền nhạt')));
+    assert.equal(dd.rows[2].cells[1].st.BACKGROUND_COLOR, '#F7F9FC', 'hàng chẵn nền xen kẽ');
+    assert.equal(dd.rows[1].cells[1].st.BACKGROUND_COLOR, undefined);
+    assert.ok(dd.rows.slice(1).every((r) => r.cells.every((x) => x.st.PADDING_TOP === 1.5)), 'hàng cao hơn (đệm 1,5 pt)');
+    if (i) {
+      const c1 = dd.rows[1].cells[1], p1 = c1.children[0];
+      assert.equal(c1.getText(), '1\u202F000  08:10', 'chỉ số đầu ngày kèm giờ đọc');
+      assert.deepEqual(p1.runs.map((x) => [x.start, x.end, x.FOREGROUND_COLOR || x.FONT_SIZE]), [[7, 11, '#5B6875'], [7, 11, 7]], 'giờ đọc chữ nhạt, nhỏ hơn');
+      assert.equal(p1.getText().slice(7), '08:10');
+    }
     // Chi tiết đồng hồ: cột #, có mã đồng hồ
     const mt = tables.find((t) => t.rows[0].cells[0].getText() === '#');
     assert.ok(mt.rows.some((r) => r.cells[1].getText() === (i ? 'NT' : 'MSB1')));
@@ -141,7 +152,7 @@ test('PDF báo cáo tháng Điện nước: mỗi loại một trang (dải đ�
   });
   // Trang Điện: hai đồng hồ (MSB1 + nhánh) → bảng theo ngày từng đồng hồ + Tổng; 11/10 và 12/10 ghi —; ngày cao nhất đậm
   const el = sections[0].filter((x) => x.kind === 'table');
-  const dd2 = el.find((t) => t.rows[0].cells[0].getText().startsWith('Ngày') && t.rows[0].cells.length === 9);
+  const dd2 = el.find((t) => t.rows[0].cells[0].getText().startsWith('Ngày') && t.rows[0].cells.length === 8);
   assert.ok(dd2, 'Ngày | MSB1 | MSB1-A ↳ | Tổng, hai nửa');
   assert.equal(dd2.rows[0].cells[2].getText(), 'MSB1-A ↳', 'đồng hồ nhánh có dấu ↳');
   assert.equal(dd2.rows[11].cells[3].getText(), '—', '11/10 tổng không có số');

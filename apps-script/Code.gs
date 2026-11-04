@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d4.24
+ * M&E · 机电管理 — Code.gs 1.0.0-d4.25
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.24';
+var SERVER_VERSION = '1.0.0-d4.25';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
@@ -15303,7 +15303,7 @@ function systemResetResume_(ctx) {
 
 var REPORT_LOGO_MAX_BYTES_ = 1048576;
 var PDF_C_ = {
-  navy: '#17324F', ink: '#1F2933', muted: '#5B6875', line: '#C9D3DF', head: '#E6ECF3', zebra: '#F7F9FC', tile: '#F1F5F9', white: '#FFFFFF',
+  navy: '#17324F', ink: '#1F2933', muted: '#5B6875', line: '#C9D3DF', head: '#E6ECF3', zebra: '#F7F9FC', tile: '#F1F5F9', white: '#FFFFFF', grid: '#AFBCCC',
   good: '#1E7B4A', bad: '#B42318', bar: '#2A78D6', elec: '#EB6834', water: '#2A78D6', elecLight: '#F6C1AA', waterLight: '#AFCBEF'
 };
 var PDF_STYLE_BUDGET_MS_ = 12000;
@@ -15846,6 +15846,8 @@ function utilDayCell_(v, st) {
 /**
  * Bảng theo ngày của một loại: một đồng hồ → [Ngày | Chỉ số đầu ngày (giờ đọc) | Tiêu thụ]; 2–4 đồng hồ → [Ngày | từng đồng hồ | Tổng];
  * nhiều hơn → [Ngày | Tổng]. Bảng ≤ 4 cột chia hai nửa đặt cạnh nhau (ngày 1–16 | 17–31) cho vừa một trang A4. Ngày lớn nhất in đậm.
+ * d4.25 (người dùng: nhìn dễ lẫn sang ngày khác): kẻ khung mọi ô, cột Ngày nền nhạt (cũng là chỗ ngăn hai nửa — Docs không kẻ viền
+ * riêng từng ô nên bỏ cột trống giữa hai nửa), giờ đọc chữ nhạt nhỏ hơn để tách khỏi chỉ số, hàng cao hơn một chút (đệm 1,5 pt — vẫn vừa một trang A4).
  */
 function utilDailyTable_(pd, daily, ut) {
   var tot = daily.totals[ut];
@@ -15874,53 +15876,61 @@ function utilDailyTable_(pd, daily, ut) {
   var split = nc <= 4 && days.length > 10;
   var half = split ? Math.ceil(days.length / 2) : days.length;
   var blank = head.map(function () { return ''; });
-  var cells = [split ? head.concat(['']).concat(head) : head];
+  var cells = [split ? head.concat(head) : head];
   var dayAt = [];
   for (var i = 0; i < half; i++) {
     var left = rowOf(i);
     if (split) {
       var j = i + half;
-      cells.push(left.concat(['']).concat(j < days.length ? rowOf(j) : blank));
+      cells.push(left.concat(j < days.length ? rowOf(j) : blank));
       dayAt.push([i, j < days.length ? j : -1]);
     } else { cells.push(left); dayAt.push([i, -1]); }
   }
   var t = pd.body.appendTable(cells);
-  t.setBorderWidth(0);
-  var gap = split ? 14 : 0;
-  var wHalf = split ? Math.floor((pd.width - gap) / 2) : pd.width;
+  t.setBorderWidth(1).setBorderColor(PDF_C_.grid);
+  var wHalf = split ? Math.floor(pd.width / 2) : pd.width;
   var wDay = Math.round(wHalf * (nc <= 2 ? 0.5 : 0.36));
   var wNum = Math.floor((wHalf - wDay) / (nc - 1));
   var widths = [wDay];
   for (var k = 1; k < nc; k++) widths.push(wNum);
-  if (split) widths = widths.concat([gap]).concat(widths.slice());
+  if (split) widths = widths.concat(widths.slice());
   widths.forEach(function (w, x) { t.setColumnWidth(x, w); });
   var fs = 8;
   pdfText_(t, fs, PDF_C_.ink);
   var ncol = widths.length;
-  var isGap = function (c) { return split && c === nc; };
-  var numCol = function (c) { var cc = split && c > nc ? c - nc - 1 : c; return types[cc] === 'num'; };
+  var colOf = function (c) { return split && c >= nc ? c - nc : c; };
   var hr = t.getRow(0);
   pdfText_(hr, 7, PDF_C_.navy, true);
   for (var c = 0; c < ncol; c++) {
     var hc = hr.getCell(c);
     pdfCellPad_(hc, 2, 4);
-    if (isGap(c)) continue;
     hc.setBackgroundColor(PDF_C_.head);
     hc.setVerticalAlignment(DocumentApp.VerticalAlignment.CENTER);
-    if (numCol(c)) pdfCellAlign_(hc, 'RIGHT');
+    if (types[colOf(c)] === 'num') pdfCellAlign_(hc, 'RIGHT');
   }
+  var timeRe = /  (\d\d:\d\d)$/;
   for (var r = 1; r < cells.length; r++) {
     if (!pdfTimeLeft_(pd)) break;
     var row = t.getRow(r);
     for (var c2 = 0; c2 < ncol; c2++) {
       var cell = row.getCell(c2);
-      pdfCellPad_(cell, 1, 4);
-      if (isGap(c2)) continue;
-      if (r % 2 === 0) cell.setBackgroundColor(PDF_C_.zebra);
-      if (numCol(c2)) pdfCellAlign_(cell, 'RIGHT');
+      var cc = colOf(c2);
+      pdfCellPad_(cell, 1.5, 4);
+      if (cc === 0) cell.setBackgroundColor(PDF_C_.tile);
+      else if (r % 2 === 0) cell.setBackgroundColor(PDF_C_.zebra);
+      if (types[cc] !== 'num') continue;
+      pdfCellAlign_(cell, 'RIGHT');
+      // Giờ đọc sau chỉ số ("1 993 818  13:36"): chữ nhạt, nhỏ hơn
+      var tm = timeRe.exec(cells[r][c2]);
+      if (tm) {
+        var txt = cell.getChild(0).asParagraph().editAsText();
+        var a = cells[r][c2].length - tm[1].length, b = cells[r][c2].length - 1;
+        txt.setForegroundColor(a, b, PDF_C_.muted);
+        txt.setFontSize(a, b, 7);
+      }
     }
     // Ngày lớn nhất (đủ số): tô đậm ô tổng; ngày chủ nhật: chữ ngày màu nhạt
-    [[dayAt[r - 1][0], 0], [dayAt[r - 1][1], split ? nc + 1 : -1]].forEach(function (x) {
+    [[dayAt[r - 1][0], 0], [dayAt[r - 1][1], split ? nc : -1]].forEach(function (x) {
       if (x[0] < 0 || x[1] < 0) return;
       if (/ CN /.test(cells[r][x[1]])) pdfText_(row.getCell(x[1]), fs, PDF_C_.muted);
       if (st && st.maxDay && days[x[0]] === st.maxDay) pdfText_(row.getCell(x[1] + nc - 1), fs, PDF_C_.navy, true);

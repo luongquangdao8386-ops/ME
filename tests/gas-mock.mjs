@@ -370,16 +370,24 @@ function makeDocumentApp(drive) {
     Object.keys(o).forEach((k) => { if (!(k in Attribute)) fail('thuộc tính lạ ' + k); });
     Object.assign(el.st, o); return el;
   };
-  // Chữ của một phần tử (đoạn, ô, hàng, bảng, phần): định dạng ghi vào phần tử
+  // Chữ của một phần tử (đoạn, ô, hàng, bảng, phần). Định dạng cả phần tử (1 tham số) ghi vào owner.st; theo khoảng chữ (start, endInclusive, giá trị) ghi vào owner.runs
   function makeText(owner) {
+    const put = (a, key, v) => {
+      if (a.length !== 3) { owner.st[key] = v; return; }
+      const [s, e] = a, len = owner.getText().length;
+      if (!Number.isInteger(s) || !Number.isInteger(e) || s < 0 || e < s || e >= len) fail('khoảng chữ không hợp lệ ' + s + '–' + e + ' (dài ' + len + ')');
+      (owner.runs || (owner.runs = [])).push({ start: s, end: e, [key]: v });
+    };
+    const val = (a) => (a.length === 3 ? a[2] : a[0]);
+    const bool = (a, what) => { const v = val(a); if (typeof v !== 'boolean') fail(what + ' cần boolean'); return v; };
     const t = {
       getType: () => ElementType.TEXT,
       getText: () => owner.getText(),
-      setFontSize: (...a) => { owner.st.FONT_SIZE = num(a.length === 3 ? a[2] : a[0], 'cỡ chữ', { int: true, min: 1 }); return t; },
-      setBold: (...a) => { const v = a.length === 3 ? a[2] : a[0]; if (typeof v !== 'boolean') fail('setBold cần boolean'); owner.st.BOLD = v; return t; },
-      setItalic: (...a) => { const v = a.length === 3 ? a[2] : a[0]; if (typeof v !== 'boolean') fail('setItalic cần boolean'); owner.st.ITALIC = v; return t; },
-      setForegroundColor: (...a) => { owner.st.FOREGROUND_COLOR = color(a.length === 3 ? a[2] : a[0]); return t; },
-      setBackgroundColor: (...a) => { owner.st.TEXT_BG = color(a.length === 3 ? a[2] : a[0]); return t; },
+      setFontSize: (...a) => { put(a, 'FONT_SIZE', num(val(a), 'cỡ chữ', { int: true, min: 1 })); return t; },
+      setBold: (...a) => { put(a, 'BOLD', bool(a, 'setBold')); return t; },
+      setItalic: (...a) => { put(a, 'ITALIC', bool(a, 'setItalic')); return t; },
+      setForegroundColor: (...a) => { put(a, 'FOREGROUND_COLOR', color(val(a))); return t; },
+      setBackgroundColor: (...a) => { put(a, 'TEXT_BG', color(val(a))); return t; },
       setAttributes: (o) => { attrs(owner, o); return t; }
     };
     return t;

@@ -74,7 +74,13 @@ test('web: Từ ngày 01 → cuối tháng trước ở danh sách mẫu → bá
     assert.equal(await el.locator('.dd-tbl tbody tr').count(), days);
     assert.equal(await el.locator('.dd-tbl tr.peak').count(), 1, 'ngày cao nhất in đậm');
     assert.ok((await el.locator('.dd-tbl').first().textContent()).includes('—'), 'ngày 11, 12 thiếu số đo ghi —');
-    const svg = await el.locator('.vz-svg svg').evaluate((s) => ({ w: s.getBoundingClientRect().width, bars: s.querySelectorAll('path').length, avg: s.querySelectorAll('line[stroke-dasharray]').length }));
+    // d4.25: kẻ khung từng ô, cột Ngày nền nhạt (dễ dò hàng, không lẫn sang ngày khác)
+    const cellBox = await el.locator('.dd-tbl tbody tr:nth-child(3)').first().evaluate((tr) => {
+      const [d, v] = [tr.cells[0], tr.cells[1]].map((c) => getComputedStyle(c));
+      return { top: v.borderTopWidth, bottom: v.borderBottomWidth, left: v.borderLeftWidth, color: v.borderBottomColor, dayBg: d.backgroundColor };
+    });
+    assert.deepEqual(cellBox, { top: '1px', bottom: '1px', left: '1px', color: 'rgb(175, 188, 204)', dayBg: 'rgb(241, 245, 249)' });
+    const svg =await el.locator('.vz-svg svg').evaluate((s) => ({ w: s.getBoundingClientRect().width, bars: s.querySelectorAll('path').length, avg: s.querySelectorAll('line[stroke-dasharray]').length }));
     assert.ok(svg.w > 500, 'biểu đồ vẽ theo bề rộng khung: ' + svg.w);
     assert.equal(svg.bars, days - 2, 'mỗi ngày đủ số một cột (thiếu 2 ngày)');
     assert.equal(svg.avg, 1, 'đường trung bình ngày');
