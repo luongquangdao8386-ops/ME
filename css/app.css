@@ -676,14 +676,16 @@ a.yc:hover, a.yc:focus-visible { background: #EAF2FB; }
 @media screen and (min-width: 900px) { html { font-size: 110%; } }
 @media (min-width: 900px) {
   .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); }
-  .side { display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #fff; border-right: 1px solid var(--line); padding: 14px 10px; }
-  .side-title { font-size: 0.8125rem; font-weight: 700; color: var(--graphite); padding: 4px 10px 10px; }
+  /* d4.23 Menu trái có màu nhẹ cho rõ: nền xanh xám nhạt, biểu tượng trong ô trắng; mục đang mở = thẻ trắng có vạch navy bên trái, ô biểu tượng navy */
+  .side { display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; background: #EBF1F7; border-right: 1px solid #D3DDE8; padding: 14px 10px; }
+  .side-title { font-size: 0.8125rem; font-weight: 700; color: var(--navy-2); padding: 4px 10px 10px; margin: 0 4px 6px; border-bottom: 1px solid #D3DDE8; }
   .side-nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
-  .side-nav hr { border: 0; border-top: 1px solid var(--line); margin: 8px 6px; }
+  .side-nav hr { border: 0; border-top: 1px solid #D3DDE8; margin: 8px 6px; }
   .side-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 10px; border-radius: 10px; color: var(--navy); text-decoration: none; border: 0; background: none; font-size: 0.875rem; text-align: left; cursor: pointer; width: 100%; }
-  .side-item svg { width: 20px; height: 20px; }
-  .side-item.active { background: #EAF0F7; font-weight: 700; }
-  .side-item:not(.dim):hover { background: #F2F5F8; }
+  .side-item svg { width: 18px; height: 18px; flex: none; box-sizing: content-box; padding: 5px; border-radius: 8px; background: #fff; border: 1px solid #DAE3ED; }
+  .side-item.active { background: #fff; font-weight: 700; box-shadow: inset 3px 0 0 var(--navy), 0 1px 3px rgba(23,50,79,0.10); }
+  .side-item.active svg { background: var(--navy); border-color: var(--navy); stroke: #fff; }
+  .side-item:not(.dim):not(.active):hover { background: #DEE8F2; }
   .side-label .soon { font-size: 0.6875rem; }
   .side-scan { margin-top: 12px; justify-content: center; width: 100%; min-height: 48px; }
   .bnav { display: none; }

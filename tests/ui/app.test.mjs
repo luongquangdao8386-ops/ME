@@ -45,6 +45,18 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
         assert.equal(await page.locator('.side-nav .side-item').count(), 13);
         assert.ok((await page.textContent('.side-title')).includes('Danh mục · 功能菜单'));
         assert.ok((await page.textContent('.home-today')).includes('Công việc hôm nay · 今日工作'));
+        // d4.23: menu trái có nền màu nhẹ (khác nền trắng), mục đang mở là thẻ trắng có ô biểu tượng navy, mục khác ô biểu tượng trắng
+        const side = await page.evaluate(() => {
+          const bg = (el) => getComputedStyle(el).backgroundColor;
+          const act = document.querySelector('.side-item.active');
+          const other = document.querySelector('.side-item:not(.active)');
+          return { side: bg(document.querySelector('.side')), act: act && act.dataset.nav, actBg: bg(act), actIcon: bg(act.querySelector('svg')), otherIcon: bg(other.querySelector('svg')) };
+        });
+        assert.equal(side.side, 'rgb(235, 241, 247)', 'nền menu trái');
+        assert.equal(side.act, 'home');
+        assert.equal(side.actBg, 'rgb(255, 255, 255)');
+        assert.equal(side.actIcon, 'rgb(23, 50, 79)', 'ô biểu tượng mục đang mở = navy');
+        assert.equal(side.otherIcon, 'rgb(255, 255, 255)');
       }
       assert.ok(await noOverflow(page));
       await page.screenshot({ path: path.join(SHOTS, `home-${name}.png`) });
