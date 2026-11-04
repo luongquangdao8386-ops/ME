@@ -1,5 +1,5 @@
 // HOME-01 / WEB-HOME-01: logo 57 + M&E/机电管理 trên nền nhà máy, lịch tuần, thẻ hạn, lưới 9 mục, bảng Công việc hôm nay (6.6)
-import { bi, biText, esc, fmtDate, badge, biName, nameText, session } from '../core.js';
+import { bi, biText, esc, fmtDate, badge, biName, nameText, session, ls } from '../core.js';
 import { brandHtml, ICON } from '../ui.js';
 import * as shellMod from '../shell.js';
 const { MODULES, isWide } = shellMod;
@@ -203,12 +203,202 @@ async function pendingHtml() {
   } catch (e) { console.warn(e); return ''; }
 }
 
-export async function renderHome(view, { shell }) {
+/* ---------------- Bố cục trang chủ: 3 mẫu (Mẫu 1 thanh chức năng · Mẫu 2 hai cột cân đối · Mẫu 3 bảng việc) ---------------- */
+
+/** Dữ liệu chung của 3 mẫu: tuần này, thời hạn, 9 ô chức năng */
+async function homeData() {
+  const t = today();
+  const from = weekStart(t), to = addDays(from, 6);
+  const items = await calendarItems(from, to);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+  const all = (await deadlineItems()).filter((x) => x.due.state !== 'NOT_DUE' && x.due.state !== 'MISSING').sort(dueSort);
+  for (const x of all) x.text = await deadlineText(x);
+  const soon = all.filter((x) => x.due.state === 'DUE_SOON' || x.due.state === 'DUE_TODAY');
+  const over = all.filter((x) => x.due.state === 'OVERDUE');
+  return { t, from, to, days, items, soon, over, tiles: await tileData() };
+}
+
+/** 9 ô chức năng: {m, soon, tail} — cùng số liệu như lưới cũ */
+async function tileData() {
+  const counts = {};
+  for (const [k, type] of Object.entries(COUNT_TYPE)) counts[k] = (await recs(type)).length;
+  const open = {};
+  if (dot2()) {
+    const { WO_OPEN, REPAIR_OPEN } = await import('../work.js');
+    open.maintenance = (await recs('WORK_ORDER')).filter((w) => WO_OPEN.has(w.status)).length;
+    open.repairs = (await recs('REPAIR')).filter((r) => REPAIR_OPEN.has(r.status)).length;
+  }
+  const extra = {};
+  if (dot3()) {
+    const { readingDue } = await import('../meters.js');
+    const { meters, by } = await meterReads();
+    const due = meters.filter((m) => readingDue(m, by.get(m.meter_id) || []).state !== 'DONE').length;
+    if (due) extra.utilities = bi('home.meters_due', { N: due });
+    else if (meters.length) extra.utilities = bi('home.records', { N: meters.length });
+    const nc = (await recs('CIRCUIT')).filter((c) => !c.archived_at).length;
+    if (nc) extra.circuits = bi('home.circuits_n', { N: nc });
+    const nr = (await recs('REPORT_DEFINITION')).filter((d) => !d.archived_at && d.active !== false).length;
+    if (nr) extra.reports = bi('home.reports_n', { N: nr });
+  }
+  return MODULES.map((m) => {
+    const soon = m.dot > shellMod.RELEASED_DOT;
+    const n = counts[m.key];
+    const o = open[m.key];
+    return { m, soon, tail: soon ? '' : (o ? bi('home.open_n', { N: o }) : (extra[m.key] || (n ? bi('home.records', { N: n }) : ''))) };
+  });
+}
+
+/** Lưới 9 ô; cls thêm vào khung (giữ lớp grid9 + tile cho các test cũ) */
+function tilesHtml(tiles, cls) {
+  return `<section class="grid9 ${cls}" aria-label="${esc(biText('menu.title'))}">${tiles.map(({ m, soon, tail }) => soon
+    ? `<button type="button" class="tile dim" aria-disabled="true" data-soon="1"><span class="tile-ic">${ICON[m.icon]}</span><span class="tile-txt"><span class="tile-label">${bi('module.' + m.key)}</span><span class="soon">${bi('tag.coming_soon')}</span></span></button>`
+    : `<a class="tile" href="#${m.path}"><span class="tile-ic">${ICON[m.icon]}</span><span class="tile-txt"><span class="tile-label">${bi('module.' + m.key)}</span>${tail ? `<span class="tile-count">${tail}</span>` : ''}</span></a>`).join('')}</section>`;
+}
+
+/** Đầu khung: ô biểu tượng theo màu khu + tiêu đề + phần phải */
+const headHtml = (zone, icon, title, right = '') =>
+  `<div class="hl-head"><span class="hl-ic ${zone}">${ICON[icon]}</span><h2>${bi(title)}</h2>${right}</div>`;
+const monthBtn = () => `<a class="btn tiny hl-month" href="#/alerts/month">${ICON.calendar}<span>${bi('btn.month_calendar')}</span></a>`;
+const ddmm = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+
+/** Lịch 7 cột: web ghi loại + mã trong ô ngày; iPhone chỉ chấm màu (CSS), danh sách việc nằm ở agendaHtml */
+function weekGridHtml(d) {
+  return `<div class="wk">${d.days.map((day, i) => {
+    const list = d.items.filter((x) => x.date === day);
+    const cls = [day === d.t ? 'today' : '', day < d.t ? 'past' : '', i >= 5 ? 'weekend' : '', list.length ? 'has' : ''].filter(Boolean).join(' ');
+    return `<div class="wk-day ${cls}"><div class="wk-head"><span class="wk-dow">${bi('weekday.' + weekday(day))}</span><span class="wk-num">${esc(day.slice(8, 10))}<small>/${esc(day.slice(5, 7))}</small></span></div>
+      <div class="wk-items">${list.map((x) => `<a class="wk-item ck-${x.kind.toLowerCase()}${x.done ? ' done' : ''}" href="#${esc(x.href)}" title="${esc(biText(KIND_KEY[x.kind] || 'home.item_service') + ' ' + (x.code || '') + ' — ' + (x.title || ''))}">
+        <span class="wk-kind">${bi(KIND_KEY[x.kind] || 'home.item_service')}</span>${x.code ? `<span class="wk-code">${esc(x.code)}</span>` : ''}</a>`).join('')}</div></div>`;
+  }).join('')}</div>`;
+}
+
+/** Một dòng việc (danh sách): vạch màu theo loại, loại + mã, nội dung một dòng, nhãn phải */
+const rowHtml = (x, right = '') => `<a class="hl-row ck-${x.kind.toLowerCase()}${x.done ? ' done' : ''}" href="#${esc(x.href)}">
+  <span class="hl-row-top"><span class="hl-kind">${bi(KIND_KEY[x.kind] || 'home.item_service')}</span>${x.code ? `<span class="hl-code">${esc(x.code)}</span>` : ''}</span>
+  ${x.title || x.text || right ? `<span class="hl-row-bot"><span class="hl-row-text">${esc(x.title || x.text || '')}</span>${right}</span>` : ''}</a>`;
+const dueChip = (x) => x.due.state === 'OVERDUE' ? `<span class="hl-due over">${bi('hl.days_over', { N: -x.due.days })}</span>`
+  : x.due.state === 'DUE_TODAY' ? `<span class="hl-due over">${bi('cal.today')}</span>` : `<span class="hl-due soon">${bi('hl.days_left', { N: x.due.days })}</span>`;
+
+/** Danh sách việc trong tuần theo ngày, từ hôm nay tới Chủ nhật (iPhone Mẫu 1–2, Mẫu 3) */
+function agendaHtml(d, { max = 12 } = {}) {
+  const groups = d.days.filter((day) => day >= d.t).map((day) => ({ day, list: d.items.filter((x) => x.date === day) })).filter((g) => g.list.length);
+  if (!groups.length) return `<div class="hl-empty">${ICON.calendar}<span>${bi('hl.week_empty')}</span></div>`;
+  let n = 0;
+  return `<div class="hl-agenda">${groups.map((g) => {
+    const label = g.day === d.t ? bi('cal.today') : g.day === addDays(d.t, 1) ? bi('hl.tomorrow') : bi('weekday.' + weekday(g.day));
+    const rows = g.list.filter(() => n++ < max);
+    return rows.length ? `<div class="hl-agenda-day${g.day === d.t ? ' today' : ''}"><div class="hl-agenda-h"><span>${label}</span><span class="hl-agenda-d">${esc(ddmm(g.day))}</span></div>${rows.map((x) => rowHtml(x)).join('')}</div>` : '';
+  }).join('')}${n > max ? `<a class="link-more" href="#/alerts/month">${bi('cal.more', { N: n - max })} →</a>` : ''}</div>`;
+}
+
+/** Khung Lịch tuần (Mẫu 1, 2) */
+function weekCardHtml(d, zoneCls = '') {
+  const n = d.items.length;
+  return `<section class="card hl-card hl-week ${zoneCls}">${headHtml('z1', 'calendar', 'home.week',
+    `<span class="hl-meta">${esc(fmtDate(d.from))} – ${esc(fmtDate(d.to))}</span>${monthBtn()}`)}
+    ${weekGridHtml(d)}<div class="hl-narrow">${agendaHtml(d)}</div>
+    <p class="hl-foot muted">${n ? bi('hl.week_count', { N: n }) : bi('hl.week_empty')}</p></section>`;
+}
+
+/** Thời hạn: hai ô số (Quá hạn, Sắp tới hạn) + danh sách gộp (Mẫu 1) */
+function deadlineStackHtml(d, max = 3) {
+  const list = [...d.over, ...d.soon];
+  return `<section class="card hl-card hl-dl">${headHtml('z2', 'bell', 'home.deadlines')}
+    <div class="hl-stats">
+      <a class="hl-stat over${d.over.length ? '' : ' zero'}" href="#/alerts"><span class="n">${d.over.length}</span><span class="l">${bi('home.overdue')}</span></a>
+      <a class="hl-stat soon${d.soon.length ? '' : ' zero'}" href="#/alerts"><span class="n">${d.soon.length}</span><span class="l">${bi('home.due_soon')}</span></a>
+    </div>
+    ${list.length ? `<div class="hl-list">${list.slice(0, max).map((x) => rowHtml(x, dueChip(x))).join('')}</div>`
+      : `<div class="hl-empty ok">${ICON.check}<span>${bi('hl.all_clear')}</span></div>`}
+    <div class="hl-foot-row">${list.length > max ? `<span class="muted">${bi('cal.more', { N: list.length - max })}</span>` : '<span></span>'}<a class="hl-link" href="#/alerts">${bi('hl.view_all')} →</a></div></section>`;
+}
+
+/** Thời hạn hai cột Sắp tới hạn | Quá hạn (Mẫu 2) */
+function deadlineColsHtml(d, max = 3) {
+  const col = (title, list, cls) => `<div class="hl-dcol ${cls}"><h3><span>${bi(title)}</span><span class="hl-n">${list.length}</span></h3>
+    ${list.length ? list.slice(0, max).map((x) => rowHtml(x, dueChip(x))).join('') + (list.length > max ? `<a class="link-more" href="#/alerts">${bi('cal.more', { N: list.length - max })} →</a>` : '')
+      : `<div class="hl-empty sm">${ICON.check}<span>${bi('home.none')}</span></div>`}</div>`;
+  return `<section class="card hl-card hl-dl tinted">${headHtml('z2', 'bell', 'home.deadlines', `<a class="hl-link" href="#/alerts">${bi('hl.view_all')} →</a>`)}
+    <div class="hl-dcols">${col('home.due_soon', d.soon, 'soon')}${col('home.overdue', d.over, 'over')}</div></section>`;
+}
+
+/** Mẫu 3: bảng Việc cần làm — số liệu, dải 7 ngày có chấm, danh sách quá hạn → từng ngày → sau tuần này */
+function agendaPanelHtml(d) {
+  const weekN = d.items.filter((x) => x.date >= d.t && !x.done).length;
+  const pastOpen = d.items.filter((x) => x.date < d.t && !x.done && x.kind === 'WO').map((x) => ({ ...x, due: { state: 'OVERDUE', days: daysBetween(d.t, x.date) } }));
+  const over = [...d.over, ...pastOpen];
+  const later = d.soon.filter((x) => x.date > d.to);
+  const strip = `<div class="hl-strip">${d.days.map((day) => {
+    const list = d.items.filter((x) => x.date === day);
+    return `<div class="hl-pill${day === d.t ? ' today' : ''}${day < d.t ? ' past' : ''}"><span class="hl-pill-dow">${bi('weekday.' + weekday(day))}</span><span class="hl-pill-num">${esc(day.slice(8, 10))}</span>
+      <span class="hl-dots">${list.slice(0, 3).map((x) => `<i class="ck-${x.kind.toLowerCase()}${x.done ? ' done' : ''}"></i>`).join('')}${list.length > 3 ? '<b>+</b>' : ''}</span></div>`;
+  }).join('')}</div>`;
+  const sec = (title, cls, rows) => rows.length ? `<div class="hl-sec ${cls}"><div class="hl-sec-h"><span>${bi(title)}</span><span class="hl-n">${rows.length}</span></div>${rows.slice(0, 4).map((x) => rowHtml(x, dueChip(x))).join('')}
+    ${rows.length > 4 ? `<a class="link-more" href="#/alerts">${bi('cal.more', { N: rows.length - 4 })} →</a>` : ''}</div>` : '';
+  // Chiều cao tối thiểu theo số dòng (web): ít việc thì khung gọn, nhiều việc thì cao hơn (tối đa 640 px, phần còn lại cuộn trong khung)
+  const rowsN = Math.min(over.length, 4) + Math.min(d.items.filter((x) => x.date >= d.t).length, 8) + Math.min(later.length, 4);
+  const minH = Math.max(440, Math.min(640, 250 + rowsN * 66));
+  return `<section class="card hl-card hl-panel" style="--panel-min:${minH}px">${headHtml('z1', 'calendar', 'hl.agenda', monthBtn())}
+    <div class="hl-stats three">
+      <a class="hl-stat over${over.length ? '' : ' zero'}" href="#/alerts"><span class="n">${over.length}</span><span class="l">${bi('home.overdue')}</span></a>
+      <a class="hl-stat soon${d.soon.length ? '' : ' zero'}" href="#/alerts"><span class="n">${d.soon.length}</span><span class="l">${bi('home.due_soon')}</span></a>
+      <a class="hl-stat week${weekN ? '' : ' zero'}" href="#/alerts/month"><span class="n">${weekN}</span><span class="l">${bi('hl.this_week')}</span></a>
+    </div>
+    ${strip}
+    <div class="hl-scroll">${over.length || later.length ? sec('home.overdue', 'over', over) : `<div class="hl-empty ok">${ICON.check}<span>${bi('hl.all_clear')}</span></div>`}
+      <div class="hl-sec"><div class="hl-sec-h"><span>${bi('home.week')}</span><span class="hl-meta">${esc(ddmm(d.from))} – ${esc(ddmm(d.to))}</span></div>${agendaHtml(d, { max: 8 })}</div>
+      ${sec('hl.later', 'soon', later)}</div></section>`;
+}
+
+/** Mẫu đang xem: 1 | 2 | 3; '0' = bố cục cũ */
+export function homeLayout() {
+  const v = ls.get('home_layout');
+  return ['0', '1', '2', '3'].includes(v) ? v : '0';
+}
+
+async function layoutHtml(lay, wide) {
+  const d = await homeData();
+  const pending = await pendingHtml();
+  const bottom = wide ? `<div class="home-bottom">${await todayWorkHtml()}</div>` : '';
+  if (lay === '1') {
+    return `<div class="home-body hl hl1">${pending ? `<div class="hl-pend">${pending}</div>` : ''}
+      ${tilesHtml(d.tiles, 'hl-launch')}
+      <div class="hl-pair">${weekCardHtml(d)}${deadlineStackHtml(d)}</div>${bottom}</div>`;
+  }
+  if (lay === '2') {
+    return `<div class="home-body hl hl2"><div class="hl-main">${pending}${weekCardHtml(d, 'tinted')}${deadlineColsHtml(d)}</div>
+      <section class="card hl-card hl-mods tinted">${headHtml('z3', 'apps', 'menu.title')}${tilesHtml(d.tiles, 'hl-fill')}</section>${bottom}</div>`;
+  }
+  return `<div class="home-body hl hl3"><div class="hl-main">${pending}<section class="card hl-card hl-mods">${headHtml('z3', 'apps', 'menu.title')}${tilesHtml(d.tiles, 'hl-wide')}</section></div>
+    <div class="hl-side">${agendaPanelHtml(d)}</div>${bottom}</div>`;
+}
+
+/** Nút chọn bố cục để xem thử — chỉ ở trang THỬ (tạm, bỏ khi người dùng chọn xong) */
+function layoutPickHtml(lay) {
+  if (ls.get('env') !== 'THU') return '';
+  return `<div class="hl-pick" role="group" aria-label="${esc(biText('hl.layout'))}"><span class="hl-pick-l">${bi('hl.layout')}</span>
+    ${['0', '1', '2', '3'].map((v) => `<button type="button" class="hl-pick-b${v === lay ? ' on' : ''}" data-lay="${v}" aria-pressed="${v === lay}">${v === '0' ? bi('hl.current') : bi('hl.sample', { N: v })}</button>`).join('')}</div>`;
+}
+function wireLayoutPick(view, ctx) {
+  view.querySelectorAll('[data-lay]').forEach((b) => b.addEventListener('click', () => { ls.set('home_layout', b.dataset.lay); renderHome(view, ctx); }));
+}
+
+export async function renderHome(view, ctx) {
+  const { shell } = ctx;
   shell.setScreen({ title: 'nav.home', home: true });
   const wide = isWide();
   const u = session.user || {};
+  const lay = homeLayout();
+  if (lay !== '0') {
+    view.innerHTML = `<div class="home" data-layout="${lay}">
+      <div class="home-hero">${brandHtml()}<div class="home-who">${esc(u.display_name || '')} · ${esc(fmtDate(today()))}</div>${layoutPickHtml(lay)}</div>
+      ${await layoutHtml(lay, wide)}</div>`;
+    view.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => import('../router.js').then((r) => r.navigate(tr.dataset.href))));
+    wireLayoutPick(view, ctx);
+    return;
+  }
   const html = `<div class="home">
-    <div class="home-hero">${brandHtml()}<div class="home-who">${esc(u.display_name || '')} · ${esc(fmtDate(today()))}</div></div>
+    <div class="home-hero">${brandHtml()}<div class="home-who">${esc(u.display_name || '')} · ${esc(fmtDate(today()))}</div>${layoutPickHtml('0')}</div>
     <div class="home-body${wide ? ' wide' : ''}">
       <div class="home-left">${await pendingHtml()}${await weekHtml()}${await deadlinesHtml()}</div>
       <div class="home-right">${await gridHtml()}</div>
@@ -216,4 +406,5 @@ export async function renderHome(view, { shell }) {
     </div></div>`;
   view.innerHTML = html;
   view.querySelectorAll('tr[data-href]').forEach((tr) => tr.addEventListener('click', () => import('../router.js').then((r) => r.navigate(tr.dataset.href))));
+  wireLayoutPick(view, ctx);
 }

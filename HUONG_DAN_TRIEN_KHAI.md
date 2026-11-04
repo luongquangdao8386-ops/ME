@@ -16,6 +16,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.29 (xem thử 3 mẫu bố cục trang chủ) — chỉ đổi app, không cần dán Code.gs:** trên trang **THỬ** (<https://luongquangdao8386-ops.github.io/ME-thu/>), góc phải trên ảnh trang chủ có dải nút **Bố cục · 布局: Hiện tại · Mẫu 1 · Mẫu 2 · Mẫu 3** — bấm để đổi ngay, máy nhớ lựa chọn. **Mẫu 1** thanh chức năng ngang (9 ô một hàng nổi trên ảnh, dưới là Lịch tuần | Thời hạn cao bằng nhau); **Mẫu 2** hai cột cân đối (Lịch tuần + Thời hạn bên trái, 9 ô bên phải, đầu khung có màu, đáy hai cột bằng nhau); **Mẫu 3** ô chức năng to bên trái + bảng **Việc cần làm** bên phải (số Quá hạn / Sắp tới hạn / Việc tuần này, dải 7 ngày có chấm, danh sách việc). Trang THẬT chưa đổi, không có dải nút; khi chọn xong mẫu nào thì mẫu đó thành bố cục chính và dải nút được bỏ.
+
 **Bản d4.28 (tự sửa lẫn bản: hiện "arc.title · arc.title") — chỉ đổi app, không bắt buộc dán Code.gs:** ngay sau phát hành, máy có thể còn giữ tệp từ điển nhãn cũ trong khi màn hình đã mới → chữ hiện dạng mã (vd "arc.title · arc.title" ở Quản trị). Nay app thấy nhãn thiếu thì **tự tải lại bản mới một lần**. Gặp lại thì bấm **Ctrl+Shift+R** (iPhone: đóng hẳn app rồi mở lại). Thêm nhãn "Kết nối app Checksheet" ở Trạng thái hệ thống (trước hiện mã `health.checksheet_feed`).
 
 **Bản d4.27 (Lưu trữ theo năm) — cần dán Code.gs, KHÔNG cần `migrateSchema`:**
