@@ -4,7 +4,7 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d4.21';
+export const APP_VERSION = '1.0.0-d4.22';
 
 export const uuid = () => crypto.randomUUID();
 
@@ -102,4 +102,19 @@ export function fakePdfB64(size = 3000) {
   const b = Buffer.alloc(size, 65);
   Buffer.from('%PDF-1.4\n').copy(b);
   return b.toString('base64');
+}
+
+/**
+ * Dải đầu PDF (d4.22): bảng đầu tiên của thân tài liệu [logo? | tiêu đề | mã] — {title: [Việt, Trung, dòng phụ], codes: "nhãn: giá trị"
+ * mỗi dòng, logo: ảnh trong ô logo (hoặc null), table}
+ */
+export function pdfHeadOf(doc) {
+  const t = doc.body.children.find((x) => x.kind === 'table');
+  const cells = t.rows[0].cells;
+  const n = cells.length;
+  const title = cells[n - 2].children.map((x) => x.text);
+  const cp = cells[n - 1].children.map((x) => x.text);
+  const codes = [];
+  for (let i = 0; i + 1 < cp.length; i += 2) codes.push(cp[i] + ': ' + cp[i + 1]);
+  return { table: t, title, codes: codes.join('\n'), logo: n === 3 ? (cells[0].children[0].images[0] || null) : null };
 }

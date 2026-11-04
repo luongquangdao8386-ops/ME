@@ -67,7 +67,7 @@ function setup() {
   // Kỳ 5 ngày đã đóng gần nhất: đầu kỳ hiện tại lùi 2 kỳ (kỳ trước còn có thể đang trong cửa sổ chốt)
   const cur = p5(dayVN());
   const a = p5(shift(cur, -6));
-  const b = p5(shift(a, 5));
+  const b = p5(shift(a, 6)); // đầu kỳ kế tiếp (kỳ cuối tháng 26–31 dài 6 ngày: +5 vẫn rơi vào chính kỳ đó)
   const elec = uuid(), water = uuid();
   ok(c.write('meter.edit', { meter_id: elec, name_vi: 'Điện xưởng A', name_zh: 'A厂房电表', utility_type: 'ELECTRICITY', location_id: loc, multiplier: 1, reading_cycle_type: 'DAY_5' }));
   ok(c.write('meter.edit', { meter_id: water, name_vi: 'Nước xưởng A', name_zh: 'A厂房水表', utility_type: 'WATER', location_id: loc, multiplier: 1, reading_cycle_type: 'DAY_5' }));

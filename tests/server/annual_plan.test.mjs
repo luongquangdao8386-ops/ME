@@ -2,7 +2,7 @@
 // (annual_plan.*): quyền, không tự duyệt, PIN, lần ban hành, bản chụp riêng tư, PDF có khối ký; schema cũ → FEATURE_NOT_ENABLED
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, pdfHeadOf } from '../helpers.mjs';
 
 const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const ok = (r) => { assert.equal(r.ok, true, JSON.stringify(r)); return r; };
@@ -241,12 +241,12 @@ test('PDF kế hoạch năm: phần 1 tổng quan (máy × việc, chấm theo t
   assert.equal(p1.data.file_name, 'KHN-2027-01-draft.pdf');
   let d = docOf();
   assert.equal(d.page.w, 842);
-  const [t0, t1, t2] = d.body.children;
-  assert.equal(t0.text, 'Kế hoạch bảo trì năm 2027');
-  assert.equal(t1.text, '2027年度维护计划');
-  assert.ok(t2.text.startsWith('BẢN CHƯA DUYỆT'), t2.text);
+  const head = pdfHeadOf(d);
+  assert.deepEqual(head.title.slice(0, 2), ['Kế hoạch bảo trì năm 2027', '2027年度维护计划']);
+  const notApproved = (doc) => doc.body.children.some((x) => x.kind === 'p' && x.text.startsWith('BẢN CHƯA DUYỆT'));
+  assert.ok(notApproved(d), 'dòng đỏ "Bản chưa duyệt" ngay dưới dải đầu');
   let tables = tablesOf(d);
-  assert.ok(tables[0].rows[0].cells[1].getText().includes('BM-BT-01'), 'mã biểu mẫu');
+  assert.ok(head.codes.includes('BM-BT-01'), 'mã biểu mẫu');
   // Tổng quan: dòng loại (đếm việc mỗi tháng, nền xám) → dòng máy × việc, ô tháng là ký hiệu + ngày
   const ov = tables.find((t) => t.rows[0].cells[0].getText().startsWith('Thiết bị'));
   assert.equal(ov.rows[0].cells.length, 15, 'Thiết bị, Công việc, T1–T12, Cả năm');
@@ -295,7 +295,7 @@ test('PDF kế hoạch năm: phần 1 tổng quan (máy × việc, chấm theo t
   const p3 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'MONTH', month: 2 }));
   assert.equal(p3.data.file_name, 'KHN-2027-01-draft_T02.pdf');
   d = docOf();
-  assert.equal(d.body.children[0].text, 'Việc bảo trì tháng 2/2027');
+  assert.equal(pdfHeadOf(d).title[0], 'Việc bảo trì tháng 2/2027');
   tables = tablesOf(d);
   assert.ok(!tables.some((t) => t.rows[0].cells[0].getText().startsWith('Thiết bị')));
   assert.equal(tables.filter((t) => t.rows[0].cells[0].getText().startsWith('Ngày')).length, 1);
@@ -310,7 +310,7 @@ test('PDF kế hoạch năm: phần 1 tổng quan (máy × việc, chấm theo t
   const p4 = ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'OVERVIEW' }));
   assert.equal(p4.data.file_name, 'KHN-2027-01_tong-quan.pdf');
   d = docOf();
-  assert.ok(!d.body.children[2].text || !d.body.children[2].text.startsWith('BẢN CHƯA DUYỆT'));
+  assert.ok(!notApproved(d));
   const sign2 = tablesOf(d).find((t) => t.rows[0].cells[0].getText().startsWith('Người lập'));
   assert.equal(sign2.rows[3].cells[1].getText(), 'Chủ hệ thống');
   assert.ok(sign2.rows[4].cells[1].getText().startsWith('Ngày'));

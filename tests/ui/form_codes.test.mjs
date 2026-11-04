@@ -73,7 +73,7 @@ test('web C4: nhập mã biểu mẫu cho phiếu bảo trì, kế hoạch năm,
     assert.equal(await page.locator('[data-view="RPT_CONTRACT_SERVICES"]').count(), 1, 'mẫu báo cáo mới');
     await page.click('[data-view="RPT_EQUIPMENT"]');
     await page.waitForSelector('#rp-paper .paper', { timeout: 15000 });
-    assert.ok((await page.textContent('#rp-paper .paper-meta-r')).includes('BM-CĐ-02-01'));
+    assert.ok((await page.textContent('#rp-paper .ph-codes')).includes('BM-CĐ-02-01'), 'mã biểu mẫu ở ô phải của dải đầu (d4.22)');
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

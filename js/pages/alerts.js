@@ -86,7 +86,7 @@ export async function renderAlerts(view, { shell }) {
 let monthCursor = null;
 let selDay = null;   // ngày đang chọn (danh sách bên dưới/bên phải); null = cả tháng
 let calKind = '';    // lọc theo loại việc; '' = tất cả
-const CAL_KINDS = ['INSPECTION', 'CONTRACT', 'SERVICE', 'WO', 'PLAN', 'READING'];
+const CAL_KINDS = ['INSPECTION', 'CONTRACT', 'SERVICE', 'WO', 'PLAN'];
 const CAL_ORDER = Object.fromEntries(CAL_KINDS.map((k, i) => [k, i]));
 
 /** Trạng thái hiển thị của một việc: xong · quá hạn · hôm nay */

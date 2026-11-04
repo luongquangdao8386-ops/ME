@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.21 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema`)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.22 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema`)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,6 +16,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.22 (báo cáo tháng Điện nước có từng ngày, biểu đồ kiểu mới, mỗi báo cáo gọn trong một mặt A4, lịch tuần/tháng không còn mục "Chỉ số") cần dán Code.gs, không cần `migrateSchema`:** làm **Phần Z** (THỬ) → thử theo **Phần Z2** → ưng thì nói **"phát hành THẬT"** → **Phần Z3** (THẬT). App mới chạy được với máy chủ cũ (chỉ thiếu bảng theo ngày và PDF bố cục mới) nên không cần làm cùng lúc.
+
 **Bản d4.21 (in từ app thay biểu mẫu ISO) cần dán Code.gs, không cần `migrateSchema`:** làm **Phần X** (THỬ) → thử theo **Phần X2** → ưng thì nói **"phát hành THẬT"** → **Phần Y** (THẬT). Bản này: phiếu bảo trì (thay BM-CĐ-03-03), phiếu sửa chữa (thay 04-01 + 04-02), **lý lịch thiết bị** (thay 02-02), lịch bảo trì tháng (thay 03-02), báo cáo Hợp đồng thêm cột dịch vụ + mẫu mới **Nhật ký dịch vụ nhà thầu** (thay 05-06), trang **Tài khoản → Quản trị → Mã biểu mẫu trên PDF** để in mã BM-CĐ-xx trên từng loại PDF.
 
 **Bản d4.20 (bấm Enter là xác nhận) chỉ đổi app — không dán Code.gs:** trong mọi hộp thoại (hỏi lại PIN khi duyệt/ký, nhập lý do, thêm link…) gõ xong bấm **Enter** = bấm nút chính (OK / Xác nhận / Duyệt / Lưu); hộp có nhiều ô thì Enter chuyển sang ô kế tiếp, tới ô cuối mới xác nhận; ô ghi chú nhiều dòng Enter vẫn xuống dòng; đang gõ tiếng Trung (bộ gõ còn khung chọn chữ) Enter chỉ chọn chữ; **Esc** = Hủy. Trang THỬ `/ME-thu/` tự cập nhật: Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.20** (máy chủ vẫn ghi bản đang chạy — bình thường). Bàn phím số của iPhone không có phím Enter, nên trên iPhone vẫn bấm OK như cũ. Chưa dán Code.gs d4.19 (Phần V/W) thì dán luôn bản Code.gs mới nhất — số bản đọc được sẽ là **1.0.0-d4.20**, các bước khác giữ nguyên. Ưng thì nói **"phát hành THẬT"**.
@@ -23,6 +25,39 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 
 **Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần Z — Đưa d4.22 lên THỬ (`ME_MayChu_THU`)
+
+1. Trang THỬ tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.22**.
+2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/lucid-goodall-x1vb66/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+3. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
+4. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.22` → **Triển khai** (giữ nguyên link).
+5. Không cần `migrateSchema`, không cần cấp quyền mới.
+6. App THỬ: Ctrl+Shift+R → **Tài khoản → Thông tin**: máy chủ **1.0.0-d4.22**.
+
+### Phần Z2 — Thử trên THỬ (máy tính)
+
+1. **Trang chủ → Lịch tuần:** không còn ô "Chỉ số · 抄表" ở các ngày (ô **Điện nước** của lưới 9 mục vẫn ghi số đồng hồ cần đọc). **Lịch tháng** cũng không còn loại "Chỉ số".
+2. **Báo cáo** (danh sách mẫu, máy tính): ô **Từ ngày** `01/10/2026`, **Đến ngày** `31/10/2026` → bấm **Điện nước** → bản xem trước bên phải là **tháng 10** (trước đây luôn ra tháng hiện tại nên "không ra dữ liệu"). Bấm **Tạo báo cáo**.
+3. Trang báo cáo: kỳ **1 tháng** có ô chọn **‹ Tháng 10/2026 ›** — bấm ‹ › để đổi tháng (không đi quá tháng hiện tại). Khoảng khác (vd 05/10–20/10) dùng **Tùy chọn**; khoảng ≤ 2 tháng cũng có từng ngày.
+4. Mỗi loại một trang riêng: trang **Điện · 电**, trang **Nước · 水**. Mỗi trang:
+   - Dải đầu một hàng: **logo công ty | tên báo cáo + loại | mã biểu mẫu, số, thời gian lập**; dưới là một dòng nhỏ (kỳ, khu vực · người lập).
+   - Ô tóm tắt thấp: **Tiêu thụ trong kỳ · Trung bình mỗi ngày · Ngày cao nhất · Ngày đủ số liệu** (vd 29/31), thêm Kỳ trước, Chi phí nếu có.
+   - **Biểu đồ theo ngày** kiểu mới: cột bo góc, đường nét đứt = trung bình ngày, dải xám nhạt = Chủ nhật, số ghi trên cột ngày cao nhất; rê chuột/chạm vào cột thấy ngày và số. Ngày thiếu số đo là vòng tròn nhỏ dưới đáy; ngày chưa tới để trống.
+   - **Bảng theo ngày** chia hai nửa (ngày 1–16 | 17–31): Ngày + thứ, **Chỉ số đầu ngày** (giờ đọc), **Tiêu thụ**. Ngày thiếu số ghi **—**, hôm nay **…**, ngày chưa tới để trống, ngày cao nhất chữ đậm. Có 2–4 đồng hồ cùng loại thì mỗi đồng hồ một cột + cột **Tổng** (đồng hồ nhánh có dấu ↳, không cộng vào Tổng).
+   - **Chi tiết đồng hồ** (chỉ số trước/mới kèm giờ đọc, tiêu thụ), chú thích cách tính, khối **Người lập / Người duyệt**.
+   - Cách tính mỗi ngày: số đầu ngày hôm sau − số đầu ngày đó (số đầu ngày = lần đọc hợp lệ đầu tiên trong 24 giờ sau 00:00). Thiếu một lần đọc thì **hai ngày** quanh đó không có số — không chia đều, không đoán.
+5. **PDF**: bấm **PDF** → tệp có **2 trang A4 dọc** (Điện một trang, Nước một trang), biểu đồ giống trên màn. Lọc **Loại = Điện** thì chỉ một trang.
+6. **Xuất Excel**: thêm sheet **Theo ngày · 按日** (mỗi dòng một ngày: chỉ số đầu ngày, tiêu thụ từng đồng hồ, tổng từng loại).
+7. Báo cáo khác (Thiết bị, Bảo trì, Sửa chữa…), phiếu BT/SC, lý lịch thiết bị, kế hoạch năm: phần đầu cũng gọn thành **một dải** (logo | tiêu đề | mã biểu mẫu, số, thời gian lập) — bảng chi tiết lên cao hơn, ít trang hơn.
+8. Màn **Điện nước** (UT-01): biểu đồ theo kỳ cũng đổi sang kiểu mới.
+
+## Phần Z3 — Phát hành d4.22 lên THẬT (sau khi nói "phát hành THẬT")
+
+1. Claude đẩy đúng bản đã thử lên `main` của repo ME. Chờ 2–3 phút (Actions xanh).
+2. Mở `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
+3. <https://script.google.com> → **ME_MayChu_THAT** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu** → **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → `THẬT d4.22` → **Triển khai**.
+4. Không cần `migrateSchema`. App THẬT: Ctrl+Shift+R → Tài khoản → Thông tin: app và máy chủ **1.0.0-d4.22**. Trên iPhone: đóng hẳn app rồi mở lại (gặp lỗi bấm **Tải lại bản mới**).
 
 ## Phần X — Đưa d4.21 lên THỬ (`ME_MayChu_THU`)
 

@@ -2,7 +2,7 @@
 // lý lịch thiết bị (02-02), lịch bảo trì tháng (03-02), sổ hợp đồng thuê ngoài + nhật ký dịch vụ (05-06), mã biểu mẫu theo loại PDF.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, pdfHeadOf } from '../helpers.mjs';
 
 const T = (s) => s + ':00+07:00';
 const ok = (r) => { assert.equal(r.ok, true, JSON.stringify(r)); return r; };
@@ -105,11 +105,11 @@ test('mã biểu mẫu theo loại PDF: C4 + PIN; loại sai/mã quá dài bị 
   assert.equal(c3.call('sync.bootstrap', {}).data.settings.pdf_form_codes.RPT_REPAIRS, 'BM-CĐ-04-03', 'app nhận để in trên bản xem trước và Excel');
   ok(c3.call('report.export', { format: 'PDF', code: 'RPT_REPAIRS', filters: {} }));
   const d = lastDoc(env);
-  assert.ok(tablesOf(d)[0].rows[0].cells[1].getText().includes('Mã biểu mẫu · 表单编号: BM-CĐ-04-03'));
+  assert.ok(pdfHeadOf(d).codes.includes('Mã biểu mẫu · 表单编号: BM-CĐ-04-03'), 'mã biểu mẫu ở dải đầu');
   assert.ok(d.footer.children[0].text.includes('BM-CĐ-04-03'));
   // Mẫu chưa đặt mã: không in dòng mã biểu mẫu
   ok(c3.call('report.export', { format: 'PDF', code: 'RPT_EQUIPMENT', filters: {} }));
-  assert.ok(!tablesOf(lastDoc(env))[0].rows[0].cells[1].getText().includes('Mã biểu mẫu'));
+  assert.ok(!pdfHeadOf(lastDoc(env)).codes.includes('Mã biểu mẫu'));
 });
 
 test('PDF phiếu bảo trì (thay BM-CĐ-03-03): kế hoạch, an toàn, dừng máy, giờ chạy, giờ công, gửi/nghiệm thu; checklist có giới hạn; vật tư dùng; thay linh kiện; ký 3 ô', () => {
@@ -140,7 +140,7 @@ test('PDF phiếu bảo trì (thay BM-CĐ-03-03): kế hoạch, an toàn, dừng
   assert.deepEqual(head(sign), ['Người thực hiện', 'Người nghiệm thu', 'Sản xuất xác nhận']);
   assert.deepEqual(row(sign, 3), ['U-KT', 'U-C3', '']);
   assert.ok(row(sign, 4)[0].startsWith('Ngày'));
-  assert.ok(tablesOf(d)[0].rows[0].cells[1].getText().includes('BM-CĐ-03-03'), 'mã biểu mẫu');
+  assert.ok(pdfHeadOf(d).codes.includes('BM-CĐ-03-03'), 'mã biểu mẫu');
   assert.ok(d.footer.children[0].text.includes('BM-CĐ-03-03'));
 });
 
@@ -189,7 +189,7 @@ test('PDF lý lịch thiết bị (thay BM-CĐ-02-02): A4 ngang, thông tin chun
   ok(c3.call('export.pdf', { entity_type: 'EQUIPMENT', entity_id: eq }));
   const d = lastDoc(env);
   assert.equal(d.page.w, 842, 'A4 ngang như biểu lý lịch');
-  assert.equal(d.body.children[0].text, 'Lý lịch thiết bị');
+  assert.equal(pdfHeadOf(d).title[0], 'Lý lịch thiết bị');
   const kv = kvOf(d);
   assert.equal(kv['Hãng sản xuất'], 'Atlas Copco');
   assert.equal(kv['Năm sản xuất'], '2019');
@@ -213,7 +213,7 @@ test('PDF lý lịch thiết bị (thay BM-CĐ-02-02): A4 ngang, thông tin chun
   assert.equal(row(hist, 2)[3], 'CN-1');
   assert.ok(row(hist, 1)[4].includes('Thay lọc, dầu') && row(hist, 1)[4].includes('Đã thay lọc gió'));
   assert.ok(row(hist, 4)[4].includes('→ Vệ sinh, thay mỡ ổ quạt'));
-  assert.ok(tablesOf(d)[0].rows[0].cells[1].getText().includes('BM-CĐ-02-02'));
+  assert.ok(pdfHeadOf(d).codes.includes('BM-CĐ-02-02'));
   // KT không có quyền xuất PDF (cờ X)
   assert.equal(ctx.kt.call('export.pdf', { entity_type: 'EQUIPMENT', entity_id: eq }).code, 'FORBIDDEN');
 });
@@ -245,11 +245,11 @@ test('lịch bảo trì tháng (thay BM-CĐ-03-02): phiếu đã sinh → phụ 
   assert.equal(r2[8], w2.work_order_code + '\n☐');
   assert.equal(r2[10], '→ 28/10', 'phiếu đã dời hạn');
   assert.deepEqual([r3[6], r3[7], r3[8], r3[10]], ['', '', '☐', ''], 'chưa có phiếu: để ghi tay');
-  assert.ok(tablesOf(d)[0].rows[0].cells[1].getText().includes('BM-CĐ-03-02'), 'in một tháng dùng mã lịch tháng');
+  assert.ok(pdfHeadOf(d).codes.includes('BM-CĐ-03-02'), 'in một tháng dùng mã lịch tháng');
   // In cả năm: mã kế hoạch năm
   ok(c3.call('annual_plan.pdf', { annual_plan_id: id, part: 'OVERVIEW' }));
   d = lastDoc(env);
-  assert.ok(tablesOf(d)[0].rows[0].cells[1].getText().includes('BM-CĐ-03-01'));
+  assert.ok(pdfHeadOf(d).codes.includes('BM-CĐ-03-01'));
 });
 
 test('sổ hợp đồng thuê ngoài: thêm người phụ trách, dịch vụ gần nhất, hạn dịch vụ kế tiếp, dịch vụ chưa nghiệm thu; mẫu mới "Nhật ký dịch vụ nhà thầu" lọc theo ngày, trạng thái; chi phí theo quyền giá', () => {
@@ -277,7 +277,7 @@ test('sổ hợp đồng thuê ngoài: thêm người phụ trách, dịch vụ 
   const defs = (cl) => (cl.call('sync.bootstrap', {}).data.records.REPORT_DEFINITION || []).map((x) => x.code);
   assert.ok(defs(hd).includes('RPT_CONTRACT_SERVICES'));
   ok(c3.call('report.export', { format: 'PDF', code: 'RPT_CONTRACT_SERVICES', filters: {} }));
-  assert.equal(lastDoc(env).body.children[0].text, 'Nhật ký dịch vụ nhà thầu');
+  assert.equal(pdfHeadOf(lastDoc(env)).title[0], 'Nhật ký dịch vụ nhà thầu');
 });
 
 test('máy chủ cũ (chưa có mẫu nhật ký dịch vụ): trigger nền 3 giờ tự thêm mẫu, không cần chạy lại migrateSchema; chạy lại không trùng', () => {

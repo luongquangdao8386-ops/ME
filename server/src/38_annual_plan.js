@@ -467,22 +467,22 @@ function annualPdf_(rec, snap, opts) {
   for (var m = 0; m < 12; m++) monthHead.push('T' + (m + 1) + '\n' + (m + 1) + '月');
   var pd = pdfStart_({ wide: true, footer: footer });
   try {
+    var tv = titleVi, tz = titleZh;
     if (part === 'MONTH') {
       var mt = LABELS['ap.month_doc_title'] || ['Việc bảo trì tháng {M}/{Y}', '{Y}年{M}月保养工作'];
-      pdfTitle_(pd, mt[0].split('{M}').join(opts.month).split('{Y}').join(year), mt[1].split('{M}').join(opts.month).split('{Y}').join(year));
-    } else {
-      pdfTitle_(pd, titleVi, titleZh);
+      tv = mt[0].split('{M}').join(opts.month).split('{Y}').join(year);
+      tz = mt[1].split('{M}').join(opts.month).split('{Y}').join(year);
     }
-    if (!approved) pdfPara_(pd.body.appendParagraph(lab_('ap.not_approved')), { align: 'CENTER', after: 6, text: true, size: 10, color: PDF_C_.bad, bold: true });
     var left = [[lab_('ap.year'), String(year)], [lab_('ap.revision'), annualPad2_(rec.revision)]];
     var reason = annualBi_(rec.change_reason_vi, rec.change_reason_zh);
     if (reason) left.push([lab_('ap.change_reason'), reason]);
-    var right = [];
-    if (formCode) right.push([lab_('ap.form_code'), formCode]);
-    right.push([lab_('ap.number'), approved ? rec.annual_plan_code : '—']);
-    right.push([lab_('col.status'), lab_('ap.status.' + rec.status)]);
-    right.push([lab_('rpt.generated_at'), gen]);
-    pdfMeta_(pd, left, right);
+    // Dải đầu gọn (d4.22): logo | tiêu đề | mã biểu mẫu, số kế hoạch, thời gian lập; dòng nhỏ: năm, lần, lý do · trạng thái
+    pdfHead_(pd, {
+      vi: tv, zh: tz,
+      codes: [[lab_('ap.form_code'), formCode], [lab_('ap.number'), approved ? rec.annual_plan_code : '—'], [lab_('rpt.generated_at'), gen]],
+      left: left, right: [[lab_('col.status'), lab_('ap.status.' + rec.status)]]
+    });
+    if (!approved) pdfPara_(pd.body.appendParagraph(lab_('ap.not_approved')), { align: 'CENTER', before: 2, after: 4, text: true, size: 10, color: PDF_C_.bad, bold: true });
 
     /* ---- Phần 1: Tổng quan năm ---- */
     if (part !== 'MONTH') {

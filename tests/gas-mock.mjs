@@ -512,7 +512,7 @@ function makeDocumentApp(drive) {
     const out = [];
     const walk = (x) => {
       if (x.kind === 'p') { x.images.forEach(() => out.push('[IMAGE]')); out.push(x.text); return; }
-      if (x.kind === 'table') { x.rows.forEach((r) => out.push(r.cells.map((c) => c.children.map((ch) => (ch.kind === 'p' ? ch.text : ch.getText())).join('\n')).join(' | '))); return; }
+      if (x.kind === 'table') { x.rows.forEach((r) => out.push(r.cells.map((c) => c.children.map((ch) => (ch.kind === 'p' ? ch.images.map(() => '[IMAGE]').join('') + ch.text : ch.getText())).join('\n')).join(' | '))); return; }
     };
     sec.children.forEach(walk);
     return out;

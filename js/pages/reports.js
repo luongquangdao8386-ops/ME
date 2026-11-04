@@ -5,7 +5,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session, b64ToBytes, BUILD_VERSION, L } from '../core.js';
 import { ICON, toast, dialog, $, $$ } from '../ui.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can, today, addDays } from '../data.js';
+import { recs, byId, mapOf, can, today, addDays, weekday } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { selectInput, textInput, bilingualInputs, dateInput, wireForm, readField, showErrors, writeOnline, busy, evBtn } from '../form.js';
@@ -13,7 +13,7 @@ import { shareFileNow, isTouchMobile } from '../media.js';
 import { handleWriteError } from './equipment.js';
 import { loadXlsx, buildSheet, aoaSheet, workbookFile } from '../xlsx.js';
 import { reportLogo, logoBytes, logoSize } from '../report-logo.js';
-import { columnChartHtml, barListHtml, wireCharts } from '../chart.js';
+import { columnChartHtml, barListHtml, wireCharts, chartModelOf, chartPng } from '../chart.js';
 import { chartPoints, chartStateKey } from './utilities.js';
 import { PERIOD_TYPES, UNIT, TONE, periodOf } from '../meters.js';
 
@@ -34,13 +34,27 @@ let last = { key: '', data: null };
 const files = {};
 
 const monthStart = () => today().slice(0, 8) + '01';
+const lastOfMonth = (iso) => addDays(addDays(iso.slice(0, 8) + '01', 32).slice(0, 8) + '01', -1);
+/** Khoảng [from, to] là một tháng (từ ngày 1 tới cuối tháng, hoặc tới hôm nay của tháng này) → báo cáo tháng */
+const isMonthRange = (a, b) => !!(a && b && a.slice(8) === '01' && a.slice(0, 7) === b.slice(0, 7) && (b === lastOfMonth(a) || b === today()));
+
 function defaultsFor(def, q) {
   const f = {};
   const schema = def.filter_schema || [];
   const g = (k) => (q && q.get(k)) || '';
   if (schema.includes('from')) { f.from = g('from') || RF.from || monthStart(); f.to = g('to') || RF.to || today(); }
   if (schema.includes('location_id') && (g('location_id') || RF.loc)) f.location_id = g('location_id') || RF.loc;
-  if (schema.includes('period_type')) { f.period_type = g('period_type') || 'MONTH'; if (f.period_type !== 'CUSTOM') { f.date = g('date') || today(); delete f.from; delete f.to; } }
+  if (schema.includes('period_type')) {
+    // Từ ngày / Đến ngày chung ở danh sách mẫu (chưa chọn kiểu kỳ): trọn một tháng → báo cáo tháng; khoảng khác → Tùy chọn (d4.22:
+    // trước đây bị bỏ qua, báo cáo Điện nước luôn chạy tháng hiện tại → "chọn 1/10–31/10 không ra dữ liệu")
+    let pt = g('period_type');
+    if (!pt && f.from && f.to && (g('from') || !q)) pt = isMonthRange(f.from, f.to) ? 'MONTH' : 'CUSTOM';
+    f.period_type = pt || 'MONTH';
+    if (f.period_type !== 'CUSTOM') {
+      f.date = g('date') || (f.period_type === 'MONTH' && f.from && (g('from') || !q) ? f.from : today());
+      delete f.from; delete f.to;
+    }
+  }
   ['status', 'severity', 'utility_type', 'panel_id', 'due'].forEach((k) => { if (schema.includes(k) && g(k)) f[k] = g(k); });
   return f;
 }
@@ -94,44 +108,197 @@ async function filterLines(d) {
   return out;
 }
 
-/** Biểu đồ của báo cáo: điện nước theo kỳ (mỗi loại một biểu đồ, không chung trục); đếm theo trạng thái (thanh ngang một màu) */
+/** Biểu đồ đếm theo trạng thái (báo cáo không phải Điện nước): thanh ngang một màu */
 function chartHtml(d) {
   const ch = d.chart;
-  if (!ch) return '';
-  if (d.definition.dataset === 'UTILITIES' && ch.line) {
-    const types = [...new Set(ch.line.flatMap((p) => Object.keys(p.totals || {})))];
-    const pt = (d.period && d.period.period_type) || 'MONTH';
-    return types.map((t) => columnChartHtml({ title: bi(t === 'WATER' ? 'ut.chart_water' : 'ut.chart_elec'), unit: UNIT[t], tone: TONE[t], points: chartPoints(ch.line, t, pt), stateKey: chartStateKey,
-      tableHead: [biText('rpt.period'), UNIT[t]] })).join('');
-  }
-  if (ch.series) {
-    const items = ch.series.map((s) => ({ label: biText(s.enumKey + '.' + s.key), value: s.value }));
-    return barListHtml({ title: bi('rpt.chart'), items, empty: bi('rpt.no_rows') });
-  }
-  return '';
+  if (!ch || !ch.series) return '';
+  const items = ch.series.map((s) => ({ label: biText(s.enumKey + '.' + s.key), value: s.value }));
+  return barListHtml({ title: bi('rpt.chart'), items, empty: bi('rpt.no_rows') });
 }
 
 /** Logo công ty cho bản xem trước/Excel; lỗi mạng hay chưa có logo → không logo (báo cáo vẫn hiện) */
 const logoOf = (rev) => reportLogo(rev).catch(() => null);
 
+/* ---------- Điện nước: mỗi loại một trang (d4.22) ---------- */
+
+/** Loại điện nước có trong báo cáo (Điện trước, Nước sau); lọc một loại → chỉ loại đó */
+export function utilTypes(d) {
+  if (!d || !d.definition || d.definition.dataset !== 'UTILITIES') return [];
+  const seen = new Set();
+  (d.summary || []).forEach((s) => { if (s.enumKey === 'utility_type') seen.add(s.enum); });
+  (d.rows || []).forEach((r) => { if (r.utility_type) seen.add(r.utility_type); });
+  if (d.daily) Object.keys(d.daily.totals || {}).forEach((k) => seen.add(k));
+  const only = (d.filters || {}).utility_type;
+  return ['ELECTRICITY', 'WATER'].filter((k) => seen.has(k) && (!only || only === k));
+}
+
+/** Thống kê theo ngày: số ngày đủ số, trung bình ngày đủ số, ngày cao nhất */
+function dailyStats(daily, t) {
+  const x = daily && daily.totals && daily.totals[t];
+  if (!x) return null;
+  let n = 0, sum = 0, max = null, maxDay = '';
+  x.v.forEach((v, i) => {
+    if (v === null || x.st[i] !== 'ok') return;
+    n++; sum += v;
+    if (max === null || v > max) { max = v; maxDay = daily.days[i]; }
+  });
+  return { ok: n, days: daily.days.length, avg: n ? Math.round((sum / n) * 1000) / 1000 : null, max, maxDay };
+}
+
+const dayLabel = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const wdText = (iso) => biText('weekday.' + weekday(iso)).replace(' · ', ' ');
+function dayCell(v, st) {
+  if (v !== null && v !== undefined) return fmtNumber(v) + (st === 'partial' ? '*' : '');
+  if (st === 'FUTURE' || st === 'future') return '';
+  if (st === 'OPEN_PERIOD' || st === 'open') return '…';
+  return '—';
+}
+
+/** Biểu đồ của một loại: theo ngày (báo cáo tháng / khoảng ≤ 2 tháng) hoặc theo kỳ */
+function utilChartHtml(d, t) {
+  const unit = UNIT[t];
+  if (d.daily && d.daily.totals && d.daily.totals[t]) {
+    const x = d.daily.totals[t];
+    const st = dailyStats(d.daily, t);
+    const points = d.daily.days.map((day, i) => ({
+      label: String(Number(day.slice(8, 10))), title: `${fmtDate(day)} (${wdText(day)})`, value: x.v[i],
+      state: x.st[i] === 'future' ? 'future' : (x.v[i] === null ? (x.st[i] === 'open' ? 'open' : 'none') : x.st[i]), weekend: weekday(day) === 7
+    }));
+    const key = t === 'WATER' ? 'rpt.chart_daily_water' : 'rpt.chart_daily_elec';
+    return columnChartHtml({ title: bi(key), titleText: biText(key), unit, tone: TONE[t], points, stateKey: chartStateKey, avg: st && st.avg, labels: 'peak',
+      tableHead: [biText('field.date'), unit] });
+  }
+  const ch = d.chart;
+  if (!ch || !ch.line || !ch.line.length) return '';
+  const key = t === 'WATER' ? 'ut.chart_water' : 'ut.chart_elec';
+  return columnChartHtml({ title: bi(key), titleText: biText(key), unit, tone: TONE[t], points: chartPoints(ch.line, t, (d.period && d.period.period_type) || 'MONTH'),
+    stateKey: chartStateKey, tableHead: [biText('rpt.period'), unit] });
+}
+
+/** Bảng theo ngày: một đồng hồ → Ngày | Chỉ số đầu ngày (giờ đọc) | Tiêu thụ; 2–4 đồng hồ → từng đồng hồ + Tổng; nhiều hơn → Tổng.
+ *  Bảng ≤ 4 cột chia hai nửa đặt cạnh nhau (ngày 1–16 | 17–31) cho vừa một trang A4; ngày cao nhất in đậm. */
+function dailyTablesHtml(d, t) {
+  const daily = d.daily;
+  const tot = daily && daily.totals && daily.totals[t];
+  if (!tot) return '';
+  const unit = tot.unit || UNIT[t];
+  const ms = daily.meters.filter((m) => m.utility_type === t);
+  const st = dailyStats(daily, t);
+  let head, rowOf;
+  if (ms.length === 1) {
+    const m = ms[0];
+    head = [bi('field.date'), bi('rpt.day_open'), `${bi('rpt.day_use')} (${esc(unit)})`];
+    rowOf = (i) => [m.o[i] === null ? dayCell(null, m.s[i] === 'FUTURE' ? 'FUTURE' : 'x') : `${fmtNumber(m.o[i])}${m.t[i] ? ` <span class="muted small">${esc(m.t[i])}</span>` : ''}`, dayCell(m.v[i], m.s[i])];
+  } else if (ms.length <= 4) {
+    head = [bi('field.date'), ...ms.map((m) => `<span class="code">${esc(m.meter_code)}</span>${m.in_total ? '' : ' ↳'}`), `${bi('rpt.day_total')} (${esc(unit)})`];
+    rowOf = (i) => [...ms.map((m) => dayCell(m.v[i], m.s[i])), dayCell(tot.v[i], tot.st[i])];
+  } else {
+    head = [bi('field.date'), `${bi('rpt.day_total')} (${esc(unit)})`];
+    rowOf = (i) => [dayCell(tot.v[i], tot.st[i])];
+  }
+  const n = daily.days.length;
+  const split = head.length <= 4 && n > 10;
+  const half = split ? Math.ceil(n / 2) : n;
+  const table = (a, b) => `<table class="tbl paper-tbl dd-tbl"><thead><tr>${head.map((h, i) => `<th${i ? ' class="num"' : ''}>${h}</th>`).join('')}</tr></thead>
+    <tbody>${daily.days.slice(a, b).map((day, k) => {
+      const i = a + k;
+      const peak = st && st.maxDay === day;
+      return `<tr class="${weekday(day) === 7 ? 'sun' : ''}${peak ? ' peak' : ''}"><td>${esc(dayLabel(day))} <span class="muted small">${esc(wdText(day))}</span></td>${rowOf(i).map((c) => `<td class="num">${c}</td>`).join('')}</tr>`;
+    }).join('')}</tbody></table>`;
+  return `<div class="dd-split${split ? ' two' : ''}">${table(0, half)}${split ? table(half, n) : ''}</div>`;
+}
+
+/** Chi tiết đồng hồ của một loại, gọn: số + giờ đọc chung một ô, tiêu thụ kèm đơn vị; bỏ cột Loại (trang đã theo loại) */
+function meterTableHtml(d, t) {
+  const cols = (d.columns || []).filter((c) => !['utility_type', 'unit', 'opening_at', 'closing_at'].includes(c.key));
+  const have = new Set((d.columns || []).map((c) => c.key));
+  const rows = d.rows.filter((r) => !r.utility_type || r.utility_type === t);
+  const cell = (c, r) => {
+    if (c.key === 'opening_value' || c.key === 'closing_value') {
+      const at = c.key === 'opening_value' ? 'opening_at' : 'closing_at';
+      return `${r[c.key] === '' || r[c.key] === null || r[c.key] === undefined ? '' : fmtNumber(r[c.key])}${have.has(at) && r[at] ? `<div class="muted small">${esc(fmtDateTime(r[at]))}</div>` : ''}`;
+    }
+    if (c.key === 'consumption') return r.consumption === '' || r.consumption === null || r.consumption === undefined ? '' : `<strong>${fmtNumber(r.consumption)}</strong>${r.unit ? '\u00A0' + esc(r.unit) : ''}`;
+    return cellHtml(c, r);
+  };
+  const num = (c) => isNumCol(c) || ['opening_value', 'closing_value', 'consumption'].includes(c.key);
+  return rows.length ? `<div class="table-wrap"><table class="tbl paper-tbl"><thead><tr><th class="num">#</th>${cols.map((c) => `<th${num(c) ? ' class="num"' : ''}>${bi([c.label_vi, c.label_zh])}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r, i) => `<tr><td class="num muted">${i + 1}</td>${cols.map((c) => `<td${num(c) ? ' class="num"' : ''}>${cell(c, r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+    : `<p class="muted">${bi('rpt.no_rows')}</p>`;
+}
+
+/** Ô tóm tắt của một loại: tiêu thụ kỳ, trung bình ngày, ngày cao nhất, số ngày đủ số, kỳ trước, chi phí */
+function utilTiles(d, t) {
+  const unit = UNIT[t];
+  const own = summaryRows(d).filter((s) => s.raw.enumKey === 'utility_type' && s.raw.enum === t);
+  const tiles = own.filter((s) => !s.raw.money).map((s) => ({ label: biText('rpt.period_use'), value: s.main, note: s.note }));
+  const st = dailyStats(d.daily, t);
+  if (st) {
+    tiles.push({ label: biText('rpt.daily_avg'), value: st.avg === null ? '—' : `${fmtNumber(st.avg, 1)}\u00A0${unit}` });
+    tiles.push({ label: biText('rpt.daily_max'), value: st.max === null ? '—' : `${fmtNumber(st.max)}\u00A0${unit}`, note: st.maxDay ? fmtDate(st.maxDay) : '' });
+    tiles.push({ label: biText('rpt.daily_ok'), value: `${st.ok}/${st.days}` });
+  }
+  const line = (d.chart && d.chart.line) || [];
+  if (line.length > 1) {
+    const pv = (line[line.length - 2].totals || {})[t];
+    if (pv && pv.ok && !pv.partial && !pv.open) tiles.push({ label: biText('rpt.prev_period'), value: `${fmtNumber(pv.consumption)}\u00A0${unit}` });
+  }
+  own.filter((s) => s.raw.money).forEach((s) => tiles.push({ label: biText('ut.cost'), value: s.main }));
+  return tiles;
+}
+
+const tilesHtml = (tiles) => (tiles.length ? `<div class="paper-tiles">${tiles.map((s) => `<div class="paper-tile"><div class="pt-label">${esc(s.label)}</div><div class="pt-value">${esc(s.value)}</div>${s.note ? `<div class="pt-note">${esc(s.note)}</div>` : ''}</div>`).join('')}</div>` : '');
+
 /**
- * Bản xem trước như trang in, cùng bố cục với PDF máy chủ dựng: logo công ty (nếu có), tiêu đề hai dòng, thông tin hai cột,
- * tóm tắt dạng ô, biểu đồ, chi tiết (cột #, hàng xen kẽ), chú thích, khối ký. Không logo app 57.
+ * Dải đầu gọn (d4.22, giống PDF): khung viền mảnh [logo công ty | tiêu đề hai dòng (+ dòng phụ) | mã biểu mẫu, số, thời gian lập]
+ * rồi một dòng nhỏ (trái: kỳ, khu vực…; phải: người lập).
+ */
+function paperHead(d, { logo, code, lines, sub = '' }) {
+  const fc = formCodeOf(d);
+  const codes = [...(fc ? [[biText('ap.form_code'), fc]] : []), ...(code ? [[biText('rpt.number'), code]] : []), [biText('rpt.generated_at'), fmtDateTime(d.generated_at)]];
+  const kv = ([k, v]) => `<span><span class="muted">${esc(k)}${v ? ':' : ''}</span> ${esc(v)}</span>`;
+  return `<header class="ph${logo ? ' has-logo' : ''}">
+    ${logo ? `<div class="ph-logo"><img class="paper-logo" src="${esc(logo.url)}" alt=""></div>` : ''}
+    <h2 class="paper-title"><span class="vi">${esc(d.title_vi || d.title_zh || '')}</span>${d.title_zh && d.title_vi ? `<span class="zh">${esc(d.title_zh)}</span>` : ''}${sub ? `<span class="ph-sub">${sub}</span>` : ''}</h2>
+    <dl class="ph-codes">${codes.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
+  </header>
+  <div class="paper-meta"><div class="paper-meta-l">${lines.map(kv).join('')}</div><div class="paper-meta-r">${kv([biText('rpt.prepared_by'), d.generated_by_name || ''])}</div></div>`;
+}
+
+const signHtml = (d) => {
+  const sign = (key, name) => `<div><strong>${bi(key)}</strong><span class="muted small">${bi('rpt.sign_hint')}</span><span class="sign-line"></span><span class="sign-name">${esc(name || '')}</span></div>`;
+  return `<div class="paper-sign">${sign('rpt.prepared_by', d.generated_by_name)}${sign('rpt.approved_by', '')}</div>`;
+};
+
+/**
+ * Bản xem trước như trang in, cùng bố cục với PDF máy chủ dựng: dải đầu gọn, ô tóm tắt thấp, biểu đồ, chi tiết (cột #, hàng xen kẽ),
+ * chú thích, khối ký. Điện nước: mỗi loại (Điện, Nước) một trang A4 riêng. Không logo app 57.
  */
 async function paperHtml(d, { code = '', logoRev } = {}) {
-  const lines = await filterLines(d);
-  const sum = summaryRows(d);
-  const cols = d.columns || [];
+  const all = await filterLines(d);
+  const wNote = d.filters && d.filters.window_hours ? biText('ut.window_note', { W: d.filters.window_hours }) : '';
+  const lines = all.filter(([k]) => !wNote || k !== wNote);
   const logo = await logoOf(logoRev !== undefined ? logoRev : d.logo_rev);
-  const fc = formCodeOf(d);
-  const right = [...(fc ? [[biText('ap.form_code'), fc, true]] : []), ...(code ? [[biText('rpt.number'), code, true]] : []), [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']];
-  const kv = ([k, v, strong]) => `<div><span class="muted">${esc(k)}${v ? ':' : ''}</span> ${strong ? `<strong>${esc(v)}</strong>` : esc(v)}</div>`;
-  const sign = (key, name) => `<div><strong>${bi(key)}</strong><span class="muted small">${bi('rpt.sign_hint')}</span><span class="sign-line"></span><span class="sign-name">${esc(name || '')}</span></div>`;
+  const types = utilTypes(d);
+  if (types.length) {
+    return `<div class="paper-set">${types.map((t) => {
+      const st = dailyStats(d.daily, t);
+      const notes = ['rpt.note.utility_rule', ...(d.daily ? ['rpt.note.daily'] : []), ...(st && d.daily.totals[t].st.includes('partial') ? ['rpt.note.partial_day'] : [])];
+      return `<article class="paper paper-a4" data-type="${t}" aria-label="${esc(biText('rpt.preview_paper') + ' — ' + biText('utility_type.' + t))}">
+        ${paperHead(d, { logo, code, lines, sub: bi('utility_type.' + t) })}
+        ${tilesHtml(utilTiles(d, t))}
+        ${utilChartHtml(d, t)}
+        ${d.daily && d.daily.totals && d.daily.totals[t] ? `<h3>${bi('rpt.by_day')} <span class="muted small">${esc(UNIT[t])}</span></h3>${dailyTablesHtml(d, t)}` : ''}
+        <h3>${bi('rpt.meters_detail')}</h3>${meterTableHtml(d, t)}
+        <p class="paper-notes muted small">${notes.map((n) => bi(n)).join(' · ')}${wNote ? `<br>${esc(wNote)}` : ''}${d.cost_hidden ? `<br>${bi('cost.hidden')}` : ''}</p>
+        ${signHtml(d)}
+      </article>`;
+    }).join('')}</div>`;
+  }
+  const cols = d.columns || [];
   return `<article class="paper" aria-label="${esc(biText('rpt.preview_paper'))}">
-    ${logo ? `<div class="paper-brand"><img class="paper-logo" src="${esc(logo.url)}" alt=""></div>` : ''}
-    <h2 class="paper-title"><span class="vi">${esc(d.title_vi || d.title_zh || '')}</span>${d.title_zh && d.title_vi ? `<span class="zh">${esc(d.title_zh)}</span>` : ''}</h2>
-    <div class="paper-meta"><div>${lines.map(kv).join('')}</div><div class="paper-meta-r">${right.map(kv).join('')}</div></div>
-    ${sum.length ? `<h3>${bi('rpt.summary')}</h3><div class="paper-tiles">${sum.map((s) => `<div class="paper-tile"><div class="pt-label">${esc(s.label)}</div><div class="pt-value">${esc(s.main)}</div>${s.note ? `<div class="pt-note">${esc(s.note)}</div>` : ''}</div>`).join('')}</div>` : ''}
+    ${paperHead(d, { logo, code, lines })}
+    ${tilesHtml(summaryRows(d).map((s) => ({ label: s.label, value: s.main, note: s.note })))}
     ${chartHtml(d)}
     <h3>${bi('rpt.detail')} <span class="muted small">${bi('rpt.rows_n', { N: fmtNumber(d.total_rows) })}</span></h3>
     ${d.rows.length ? `<div class="table-wrap"><table class="tbl paper-tbl"><thead><tr><th class="num">#</th>${cols.map((c) => `<th${isNumCol(c) ? ' class="num"' : ''}>${bi([c.label_vi, c.label_zh])}</th>`).join('')}</tr></thead>
@@ -141,8 +308,20 @@ async function paperHtml(d, { code = '', logoRev } = {}) {
     ${d.truncated ? `<p class="muted small">${bi('rpt.truncated', { N: fmtNumber(d.total_rows) })}</p>` : ''}
     ${d.cost_hidden ? `<p class="muted small">${bi('cost.hidden')}</p>` : ''}
     ${(d.notes || []).map((n) => `<p class="muted small">${bi(n)}</p>`).join('')}
-    <div class="paper-sign">${sign('rpt.prepared_by', d.generated_by_name)}${sign('rpt.approved_by', '')}</div>
+    ${signHtml(d)}
   </article>`;
+}
+
+/** Ảnh PNG các biểu đồ Điện nước đang hiện (gửi kèm khi xuất PDF); lỗi vẽ → bỏ qua (máy chủ in không ảnh) */
+async function chartImages(root, d) {
+  const out = {};
+  for (const t of utilTypes(d)) {
+    const fig = root && root.querySelector(`.paper-a4[data-type="${t}"] .vz2`);
+    const m = fig && chartModelOf(fig);
+    if (!m) continue;
+    try { out[t] = await chartPng(m); } catch (e) { /* bỏ qua */ }
+  }
+  return out;
 }
 
 /* ======================= Xuất Excel / PDF ======================= */
@@ -175,6 +354,29 @@ async function excelFile(d, code, fileName, logoRev) {
   });
   const rows = d.rows.map((r) => keys.map((k) => { const c = cols.find((x) => x.key === k); return c ? cellText(c, r) : (r[k] || ''); }));
   X.utils.book_append_sheet(wb, buildSheet(X, keys, labels, types, rows), biText('rpt.detail').slice(0, 31));
+  // Theo ngày (báo cáo tháng Điện nước, d4.22): mỗi dòng một ngày; cột chỉ số đầu ngày + tiêu thụ từng đồng hồ, tổng từng loại
+  if (d.daily && d.daily.days && d.daily.days.length) {
+    const dk = ['date', 'weekday'], dl = [[biText('field.date').split(' · ')[0], biText('field.date').split(' · ')[1] || ''], ['Thứ', '星期']], dt = ['date', 'text'];
+    const getters = [(i) => d.daily.days[i], (i) => wdText(d.daily.days[i])];
+    utilTypes(d).forEach((t) => {
+      d.daily.meters.filter((m) => m.utility_type === t).forEach((m) => {
+        dk.push(m.meter_code + '.open', m.meter_code + '.use');
+        dl.push([`${m.meter_code} — Chỉ số đầu ngày`, `${m.meter_code} — 日初读数`], [`${m.meter_code} — Tiêu thụ (${m.unit})`, `${m.meter_code} — 用量 (${m.unit})`]);
+        dt.push('num', 'num');
+        getters.push((i) => (m.o[i] === null ? '' : m.o[i]), (i) => (m.v[i] === null ? '' : m.v[i]));
+      });
+      const tot = d.daily.totals[t];
+      if (tot) {
+        dk.push('total.' + t);
+        const lb = biText('utility_type.' + t).split(' · ');
+        dl.push([`Tổng ${lb[0].toLowerCase()} (${tot.unit})`, `${lb[1] || ''}合计 (${tot.unit})`]);
+        dt.push('num');
+        getters.push((i) => (tot.v[i] === null ? '' : tot.v[i]));
+      }
+    });
+    const drows = d.daily.days.map((_, i) => getters.map((g) => g(i)));
+    X.utils.book_append_sheet(wb, buildSheet(X, dk, dl, dt, drows), biText('rpt.by_day').slice(0, 31));
+  }
   const lines = await filterLines(d);
   X.utils.book_append_sheet(wb, aoaSheet(X, [
     [biText('rpt.filters'), ''], ...lines,
@@ -194,7 +396,7 @@ function deliver(file, openBtn) {
   toast(bi('rpt.export_done', { F: file.name }), 'ok');
 }
 
-function wireExports(root, getData, { runId = '', code = '', def = null } = {}) {
+function wireExports(root, getData, { runId = '', code = '', def = null, paperRoot = null } = {}) {
   const xl = $('[data-x="xlsx"]', root), pdf = $('[data-x="pdf"]', root);
   if (xl) xl.addEventListener('click', async (ev) => {
     busy(evBtn(ev), true);
@@ -208,7 +410,10 @@ function wireExports(root, getData, { runId = '', code = '', def = null } = {}) 
   if (pdf) pdf.addEventListener('click', async (ev) => {
     busy(evBtn(ev), true);
     try {
-      const r = await api('report.export', runId ? { format: 'PDF', report_run_id: runId } : { format: 'PDF', code: def.code, filters: getData().filters }, { retry: true, timeoutMs: (session.settings.client_long_timeout_seconds || 55) * 1000 });
+      // Biểu đồ Điện nước: app vẽ ảnh PNG (cùng kiểu với màn hình) gửi kèm để máy chủ chèn vào PDF (d4.22)
+      const charts = await chartImages(paperRoot || root.closest('.view-page') || document, getData());
+      const extra = Object.keys(charts).length ? { charts } : {};
+      const r = await api('report.export', runId ? { format: 'PDF', report_run_id: runId, ...extra } : { format: 'PDF', code: def.code, filters: getData().filters, ...extra }, { retry: true, timeoutMs: (session.settings.client_long_timeout_seconds || 55) * 1000 });
       if (!r.ok) { toast(esc(resMsg(r) + ((r.errors || [])[0] ? ' — ' + (r.errors[0].message_vi || r.errors[0].code) : '')), 'err'); return; }
       deliver(new File([b64ToBytes(r.data.content_b64)], r.data.file_name, { type: 'application/pdf' }), $('[data-file="pdf"]', root));
     } finally { busy(evBtn(ev), false); }
@@ -311,7 +516,7 @@ async function previewInto(view, def, filters) {
   const canSave = await can('report.save');
   acts.innerHTML = `${exportBtns(canX)}${canSave ? `<button type="button" class="btn small" id="rp-save">${ICON.qr}<span>${bi('rpt.save')}</span></button>` : ''}
     <a class="btn small" href="#/reports/run/${encodeURIComponent(def.code)}?${new URLSearchParams(filters)}">${bi('btn.open')}</a>`;
-  wireExports(acts, () => last.data, { def });
+  wireExports(acts, () => last.data, { def, paperRoot: box });
   const sv = $('#rp-save', acts);
   if (sv) sv.addEventListener('click', (ev) => saveReport(ev, def, filters));
 }
@@ -343,7 +548,7 @@ export async function renderReportRun(view, ctx) {
   const st = STATUS_OPTS[def.dataset];
   const fields = `<section class="card rp-filters"><div class="form-grid rf-grid">
     ${schema.includes('period_type') ? `<div class="fld wide"><div class="ut-flabel">${bi('rpt.period')}</div><div class="segs">${PERIOD_TYPES.map((k) => `<button type="button" class="seg${f.period_type === k ? ' on' : ''}" data-pt="${k}">${bi('period.' + k)}</button>`).join('')}</div></div>
-      ${f.period_type === 'CUSTOM' ? `${dateInput('from', 'ut.from', query.get('from') || monthStart())}${dateInput('to', 'ut.to', query.get('to') || today())}` : dateInput('date', 'field.date', f.date)}` : ''}
+      ${f.period_type === 'CUSTOM' ? `${dateInput('from', 'ut.from', f.from || monthStart())}${dateInput('to', 'ut.to', f.to || today())}` : (f.period_type === 'MONTH' ? monthNavHtml(f.date) : dateInput('date', 'field.date', f.date))}` : ''}
     ${schema.includes('from') && !schema.includes('period_type') ? `${dateInput('from', 'ut.from', f.from)}${dateInput('to', 'ut.to', f.to)}` : ''}
     ${schema.includes('location_id') ? selectInput('location_id', 'rpt.area', locOpts, f.location_id || '', { empty: 'due_filter.ALL' }) : ''}
     ${schema.includes('panel_id') ? selectInput('panel_id', 'ci.panel', panelOpts, f.panel_id || '', { empty: 'due_filter.ALL' }) : ''}
@@ -370,11 +575,23 @@ export async function renderReportRun(view, ctx) {
       <p class="muted small">${bi('rpt.live_note')}</p></section>
     <section class="card">${await paperHtml(data)}</section>`;
   wireCharts(view);
-  wireExports(view, () => last.data, { def });
+  wireExports(view, () => last.data, { def, paperRoot: view });
   const sv = $('#rp-save', view);
   if (sv) sv.addEventListener('click', (ev) => saveReport(ev, def, f));
   wireRun(view, ctx, def, f);
 }
+
+/** Chọn tháng của báo cáo tháng: ‹ Tháng 10/2026 › (không đi quá tháng hiện tại) */
+function monthNavHtml(date) {
+  const d = date || today();
+  const Y = d.slice(0, 4), M = String(Number(d.slice(5, 7)));
+  const last = d.slice(0, 7) >= today().slice(0, 7);
+  return `<div class="fld"><div class="ut-flabel">${bi('rpt.month')}</div><div class="rp-month">
+    <button type="button" class="btn small" data-mnav="-1" aria-label="${esc(biText('rpt.month_prev'))}">‹</button>
+    <strong class="rp-month-l">${bi('rpt.month_label', { M, Y })}</strong>
+    <button type="button" class="btn small" data-mnav="1" aria-label="${esc(biText('rpt.month_next'))}" ${last ? 'disabled' : ''}>›</button></div></div>`;
+}
+const shiftMonth = (iso, n) => { const y = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7)) - 1 + n; const yy = y + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1; return `${yy}-${String(mm).padStart(2, '0')}-01`; };
 
 function wireRun(view, ctx, def, f) {
   wireForm(view);
@@ -386,8 +603,14 @@ function wireRun(view, ctx, def, f) {
   };
   $$('[data-pt]', view).forEach((b) => b.addEventListener('click', () => {
     const pt = b.dataset.pt;
-    go(pt === 'CUSTOM' ? { period_type: pt, date: '', from: monthStart(), to: today() } : { period_type: pt, from: '', to: '', date: f.date || today() });
+    if (pt === 'CUSTOM') {
+      // Từ báo cáo tháng sang Tùy chọn: giữ đúng tháng đang xem
+      const a = f.period_type === 'MONTH' && f.date ? f.date.slice(0, 8) + '01' : monthStart();
+      const z = lastOfMonth(a) < today() ? lastOfMonth(a) : today();
+      go({ period_type: pt, date: '', from: a, to: z });
+    } else go({ period_type: pt, from: '', to: '', date: f.date || f.from || today() });
   }));
+  $$('[data-mnav]', view).forEach((b) => b.addEventListener('click', () => go({ date: shiftMonth(f.date || today(), Number(b.dataset.mnav)) })));
   const ap = $('#rr-apply', view);
   if (ap) ap.addEventListener('click', () => {
     const patch = {};
@@ -420,7 +643,7 @@ export async function renderSavedReport(view, ctx) {
       <div class="row rp-actions">${exportBtns(canX)}${rr.qr_key ? `<a class="btn small" href="#/qr/REPORT_RUN/${esc(rr.report_run_id)}">${ICON.qr}<span>${bi('btn.view_qr')}</span></a>` : ''}</div></section>
     <section class="card">${await paperHtml(snapshot, { code: rr.report_run_code, logoRev })}</section>`;
   wireCharts(view);
-  wireExports(view, () => snapshot, { runId: rr.report_run_id, code: rr.report_run_code });
+  wireExports(view, () => snapshot, { runId: rr.report_run_id, code: rr.report_run_code, paperRoot: view });
 }
 
 /* ======================= RE-03 Mẫu báo cáo (C4) ======================= */

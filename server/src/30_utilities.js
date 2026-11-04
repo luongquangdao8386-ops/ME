@@ -13,6 +13,8 @@ var READING_KIND_ORDER_ = { SEGMENT_CLOSING: 0, SEGMENT_OPENING: 1, REGULAR: 2 }
 var METER_VALUE_MAX_ = 1e12;
 var MULTIPLIER_MAX_ = 100000;
 var PERIOD_CHART_N_ = { DAY_1: 7, DAY_5: 6, DAY_10: 6, MONTH: 6, CUSTOM: 1 };
+var UT_DAILY_MAX_DAYS_ = 62;   // báo cáo theo ngày (báo cáo tháng, khoảng tùy chọn ≤ 2 tháng; d4.22)
+var UT_DAILY_MAX_METERS_ = 40;
 
 /* ---------------- Số, thời điểm ---------------- */
 
@@ -773,8 +775,54 @@ function tariffCost_(t, consumption) {
 }
 
 /**
+ * Tiêu thụ từng ngày trong [a, b] (báo cáo tháng có các ngày, d4.22): mỗi ngày là một kỳ [d, d] theo đúng quy tắc B1 — số đầu ngày =
+ * lần đọc hợp lệ đầu tiên trong W giờ sau 00:00 của ngày, số cuối ngày = lần đọc như vậy của ngày hôm sau; thiếu một trong hai → ngày đó
+ * không có số (không nội suy, không chia đều). Trả {days, meters: [{meter_id, meter_code, name_vi/zh, utility_type, unit, in_total,
+ * v: [tiêu thụ | null], s: [trạng thái], o: [số đầu ngày | null], t: ['HH:MM' giờ đọc số đầu ngày | '']}],
+ * totals: {loại: {unit, v: [tổng các đồng hồ không có cha trong tập | null], st: ['ok' | 'partial' | 'open' | 'none' | 'future']}}}.
+ * Ngày sau hôm nay: trạng thái FUTURE / 'future', không số (bảng để trống, biểu đồ không vẽ).
+ */
+function utilityDaily_(d, meters, top, a, b, W, nowMs) {
+  var days = [];
+  for (var x = a; x <= b && days.length < UT_DAILY_MAX_DAYS_; x = addDaysIso_(x, 1)) days.push(x);
+  var today = todayVN_();
+  var list = meters.map(function (m) {
+    var o = { meter_id: m.meter_id, meter_code: m.meter_code, name_vi: m.name_vi, name_zh: m.name_zh, utility_type: m.utility_type,
+      unit: m.unit || UTILITY_UNIT_[m.utility_type], in_total: top(m), v: [], s: [], o: [], t: [] };
+    days.forEach(function (day) {
+      if (day > today) { o.v.push(null); o.s.push('FUTURE'); o.o.push(null); o.t.push(''); return; } // ngày chưa tới: để trống
+      var r = meterPeriod_(d, m, day, day, W, nowMs);
+      o.v.push(r.status === 'OK' ? r.consumption : null);
+      o.s.push(r.status);
+      o.o.push(r.opening_value === null || r.opening_value === undefined || r.opening_value === '' ? null : Number(r.opening_value));
+      o.t.push(r.opening_at ? String(r.opening_at).slice(11, 16) : '');
+    });
+    return o;
+  }).filter(function (o) { return o.s.some(function (st) { return st !== 'NO_READING'; }); });
+  var totals = {};
+  UTILITY_TYPES_.forEach(function (ut) {
+    var ms = list.filter(function (o) { return o.utility_type === ut && o.in_total; });
+    if (!ms.length) return;
+    var t = { unit: UTILITY_UNIT_[ut], v: [], st: [] };
+    days.forEach(function (day, i) {
+      var sum = 0, ok = 0, miss = 0, open = 0;
+      ms.forEach(function (o) {
+        var st = o.s[i];
+        if (st === 'OK') { sum += o.v[i]; ok++; }
+        else if (st === 'OPEN_PERIOD') open++;
+        else if (st !== 'NO_READING' && st !== 'FUTURE') miss++;
+      });
+      t.v.push(ok ? Math.round(sum * 1000) / 1000 : null);
+      t.st.push(day > today ? 'future' : (!ok ? (open ? 'open' : 'none') : (miss ? 'partial' : (open ? 'open' : 'ok'))));
+    });
+    totals[ut] = t;
+  });
+  return { days: days, meters: list.slice(0, UT_DAILY_MAX_METERS_), meters_total: list.length, totals: totals };
+}
+
+/**
  * Tổng hợp theo kỳ (UT-01, WEB-UT-01, báo cáo Điện nước):
- * f = {period_type, date (ngày trong kỳ) | from, to (CUSTOM), location_id?, utility_type?, meter_ids?}
+ * f = {period_type, date (ngày trong kỳ) | from, to (CUSTOM), location_id?, utility_type?, meter_ids?}; opts.daily → thêm `daily` (utilityDaily_)
  * Trả {period_type, period_start, period_end, window_hours, rows[], totals{type: {consumption, unit, partial, missing, meters}},
  *      chart{line: [{period_start, period_end, totals}], by_location: [{location_id, type, consumption}]}, cost_*}
  */
@@ -839,6 +887,9 @@ function utilitySummary_(ctx, f, opts) {
     if (costOk) { totals[ut].cost = cost; totals[ut].cost_missing = costMissing; }
   });
   var out = { period_type: type, period_start: a, period_end: b, window_hours: W, rows: rows, totals: totals, cost_visible: !!costOk, today: todayVN_() };
+  // Theo ngày (báo cáo): kỳ từ 2 ngày tới 2 tháng
+  var nDays = dayNum_(b) - dayNum_(a) + 1;
+  if (opts.daily && nDays >= 2 && nDays <= UT_DAILY_MAX_DAYS_) out.daily = utilityDaily_(d, meters, top, a, b, W, nowMs);
   if (opts.chart !== false) {
     var line = [];
     if (type !== 'CUSTOM') {

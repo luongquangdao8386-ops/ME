@@ -96,7 +96,7 @@ test('web C4: Quản trị → Logo trên báo cáo: chưa có → tải ảnh l
     await page.click('[data-view="RPT_EQUIPMENT"]');
     await page.waitForSelector('#rp-paper .paper .paper-logo', { timeout: 15000 });
     const h = await page.locator('#rp-paper .paper-logo').evaluate((el) => el.getBoundingClientRect().height);
-    assert.ok(Math.abs(h - 56) < 1, 'logo cao 56 px như đầu trang PDF');
+    assert.ok(Math.abs(h - 40) < 1, 'logo cao 40 px trong dải đầu như PDF (d4.22)');
     assert.equal(await page.textContent('#rp-paper .paper-title .vi'), 'Hồ sơ và linh kiện thiết bị');
     assert.equal(await page.textContent('#rp-paper .paper-title .zh'), '设备档案与配件');
     assert.ok(await page.locator('#rp-paper .paper-tile').count() >= 1);

@@ -42,7 +42,7 @@ async function meterReads() {
 
 /**
  * Việc theo ngày trong [from, to] cho lịch tuần (trang chủ) và lịch tháng: hạn kiểm định, hạn hợp đồng (hạn báo gia hạn, ngày hết hạn),
- * dịch vụ HĐ chưa làm (6.6), mốc đọc chỉ số (Đợt 3), phiếu bảo trì theo hạn (Đợt 2); `plans` thêm hạn kế tiếp của kế hoạch bảo trì
+ * dịch vụ HĐ chưa làm (6.6), phiếu bảo trì theo hạn (Đợt 2) — không có mốc đọc chỉ số điện nước (d4.22); `plans` thêm hạn kế tiếp của kế hoạch bảo trì
  * chưa sinh phiếu (lịch tháng). Mỗi mục {date, kind, code, title, href, done, sub}.
  */
 export async function calendarItems(from, to, { plans = false } = {}) {
@@ -73,17 +73,8 @@ export async function calendarItems(from, to, { plans = false } = {}) {
       out.push({ date: s.due_date, kind: 'SERVICE', code: c ? c.contract_code : '', href: '/contracts/' + s.contract_id, title: c ? nameText(c, 'title') : '' });
     }
   }
-  // Mốc đọc chỉ số (Đợt 3): một mục mỗi ngày có mốc, kèm số đồng hồ; đã đọc đủ thì mờ
-  if (dot3()) {
-    const { lastBoundary, readingDue } = await import('../meters.js');
-    const { meters, by } = await meterReads();
-    for (let d = from; d <= to; d = addDays(d, 1)) {
-      const due = meters.filter((m) => lastBoundary(m, d) === d);
-      if (!due.length) continue;
-      const done = d <= today() && due.every((m) => readingDue(m, by.get(m.meter_id) || [], d).state === 'DONE');
-      out.push({ date: d, kind: 'READING', code: String(due.length), href: '/utilities/meters', done, title: biText('home.meters_due', { N: due.length }) });
-    }
-  }
+  // Mốc đọc chỉ số điện nước không đưa vào lịch (người dùng yêu cầu 04/11/2026): việc đọc hằng ngày làm lịch rối;
+  // số đồng hồ cần đọc vẫn ở ô Điện nước của trang chủ.
   // Phiếu bảo trì theo hạn (Đợt 2); kế hoạch chưa sinh phiếu cho hạn kế tiếp (lịch tháng)
   if (dot2()) {
     const wos = (await recs('WORK_ORDER')).filter((w) => w.status !== 'CANCELLED' && w.due_date);

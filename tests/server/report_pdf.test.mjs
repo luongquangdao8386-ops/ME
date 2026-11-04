@@ -3,7 +3,7 @@
 // Giả lập DocumentApp chặt: chỉ phương thức có thật, cỡ chữ số nguyên, màu #RRGGBB.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakePdfB64 } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakePdfB64, pdfHeadOf } from '../helpers.mjs';
 
 const T = (s) => s + ':00+07:00';
 const ok = (r) => { assert.equal(r.ok, true, JSON.stringify(r)); return r; };
@@ -75,7 +75,7 @@ test('logo báo cáo: chỉ C4 + PIN; tệp riêng tư trong thư mục dữ li�
   assert.equal(logs.length, 3, 'ghi nhật ký mỗi lần đổi (lần trùng nội dung không ghi)');
 });
 
-test('PDF báo cáo: có logo → đầu trang mỗi trang là ảnh logo cao 56 px, lề trên chừa chỗ; chân trang số báo cáo; tiêu đề hai dòng; bảng chi tiết cột #, vừa khổ giấy, tiêu đề đậm nền nhạt; số căn phải; khối ký', () => {
+test('PDF báo cáo: dải đầu gọn [logo 40 px | tiêu đề hai dòng | mã, số, thời gian lập], lề trên hẹp, không đầu trang Docs; chân trang số báo cáo; bảng chi tiết cột #, vừa khổ giấy, tiêu đề đậm nền nhạt; số căn phải; khối ký', () => {
   const { env, c, c3 } = setup();
   ok(c.write('report.logo.set', { content_b64: fakePngB64(800, 605), mime_type: 'image/png' }, { reauth_token: c.reauth() }));
   for (const [name, model] of [['Máy nén khí 01', 'GA-37'], ['Máy nén khí 02', 'GA-45'], ['Bơm nước', 'CR-10']]) {
@@ -88,27 +88,31 @@ test('PDF báo cáo: có logo → đầu trang mỗi trang là ảnh logo cao 56
   assert.ok(text.startsWith('%PDF'));
   assert.ok(!text.includes('M&E'), 'không cụm nhận diện app');
   const d = lastDoc(env);
-  // Đầu trang: một ảnh, cao 56 px, rộng theo tỷ lệ
-  const img = d.header.children[0].images[0];
-  assert.ok(img, 'có logo ở đầu trang');
-  assert.equal(img.h, 56);
-  assert.equal(img.w, Math.round(56 * 800 / 605));
-  assert.equal(d.body.st.MARGIN_TOP, 84);
+  // Dải đầu (d4.22): bảng đầu thân tài liệu; logo cao 40 px trong ô trái; không đầu trang Docs riêng; lề trên hẹp
+  assert.equal(d.header, null);
+  assert.equal(d.body.st.MARGIN_TOP, 26);
+  const head = pdfHeadOf(d);
+  assert.ok(head.logo, 'có logo ở dải đầu');
+  assert.equal(head.logo.h, 40);
+  assert.equal(head.logo.w, Math.round(40 * 800 / 605));
+  assert.equal(head.table.st.BORDER_WIDTH, 1, 'dải đầu viền mảnh');
+  // Tiêu đề hai dòng căn giữa trong ô giữa; mã/số/thời gian lập ở ô phải
+  const tp = head.table.rows[0].cells[1].children;
+  assert.equal(tp[0].text, 'Hồ sơ và linh kiện thiết bị');
+  assert.equal(tp[0].st.FONT_SIZE, 13);
+  assert.equal(tp[0].st.HORIZONTAL_ALIGNMENT, 'CENTER');
+  assert.equal(tp[1].text, '设备档案与配件');
+  assert.ok(head.codes.includes('Số báo cáo · 报告编号: BC-2610-001'));
+  assert.ok(/Thời gian tạo · 生成时间: \d\d\/\d\d\/2026/.test(head.codes));
   // Chân trang
   assert.ok(d.footer.children[0].text.includes('BC-2610-001'));
-  // Tiêu đề hai dòng, căn giữa, chữ to
-  const [t0, t1] = d.body.children;
-  assert.equal(t0.text, 'Hồ sơ và linh kiện thiết bị');
-  assert.equal(t0.st.FONT_SIZE, 16);
-  assert.equal(t0.st.HORIZONTAL_ALIGNMENT, 'CENTER');
-  assert.equal(t1.text, '设备档案与配件');
   // Bảng chi tiết: bảng cuối có cột # (trước khối ký)
   const tables = d.body.children.filter((x) => x.kind === 'table');
   const detail = tables.find((t) => t.rows[0].cells[0].getText() === '#');
   assert.ok(detail, 'bảng chi tiết có cột #');
   assert.equal(detail.rows.length, 4, 'tiêu đề + 3 thiết bị');
   assert.deepEqual(Array.from(detail.rows.slice(1), (r) => r.cells[0].getText()), ['1', '2', '3']); // mảng tạo trong máy chủ giả lập → Array.from cho cùng realm
-  const width = d.page.w - 80;
+  const width = d.page.w - 64;
   const sum = detail.colWidths.reduce((a, b) => a + b, 0);
   assert.ok(detail.colWidths.every((w) => w >= 24), 'mọi cột đã đặt độ rộng');
   assert.ok(sum <= width && sum > width - 20, `vừa khổ: ${sum} / ${width}`);
@@ -136,20 +140,21 @@ test('PDF báo cáo: có logo → đầu trang mỗi trang là ảnh logo cao 56
   assert.ok([...env.drive._docs.keys()].every((k) => env.drive._files.get(k)?.trashed === true));
 });
 
-test('PDF không có logo: không đầu trang, lề trên thường; báo cáo trực tiếp (chưa lưu) vẫn có chân trang; 0 dòng ghi "Không có hồ sơ phù hợp"', () => {
+test('PDF không có logo: dải đầu không ô logo, lề trên hẹp; báo cáo trực tiếp (chưa lưu) vẫn có chân trang; 0 dòng ghi "Không có hồ sơ phù hợp"', () => {
   const { env, c3 } = setup();
   const p = ok(c3.call('report.export', { format: 'PDF', code: 'RPT_EQUIPMENT', filters: {} }));
   assert.ok(!pdfText(p).includes('[IMAGE]'));
   const d = lastDoc(env);
   assert.equal(d.header, null);
-  assert.equal(d.body.st.MARGIN_TOP, 40);
+  assert.equal(d.body.st.MARGIN_TOP, 26);
+  assert.equal(pdfHeadOf(d).table.rows[0].cells.length, 2, 'không logo: dải đầu hai ô (tiêu đề | mã)');
   assert.ok(d.footer.children[0].text.includes('Hồ sơ và linh kiện thiết bị'));
   const detail = d.body.children.filter((x) => x.kind === 'table').find((t) => t.rows[0].cells[0].getText() === '#');
   assert.equal(detail.rows.length, 2);
   assert.equal(detail.rows[1].cells[1].getText(), 'Không có hồ sơ phù hợp · 没有符合条件的记录');
 });
 
-test('PDF phiếu bảo trì: bảng thông tin nhãn – giá trị, checklist tô màu Đạt (xanh) / Không đạt (đỏ) kèm chữ; logo ở đầu trang; nhãn hai thứ tiếng', () => {
+test('PDF phiếu bảo trì: bảng thông tin nhãn – giá trị, checklist tô màu Đạt (xanh) / Không đạt (đỏ) kèm chữ; logo ở dải đầu; nhãn hai thứ tiếng', () => {
   const { env, c, c3 } = setup();
   ok(c.write('report.logo.set', { content_b64: fakePngB64(), mime_type: 'image/png' }, { reauth_token: c.reauth() }));
   const eq = uuid();
@@ -192,14 +197,16 @@ test('PDF phiếu bảo trì: bảng thông tin nhãn – giá trị, checklist 
   assert.equal(cl.rows[2].cells[3].children[0].st.HORIZONTAL_ALIGNMENT, 'RIGHT', 'số đo căn phải');
 });
 
-test('PDF Điện nước: biểu đồ điện theo kỳ bằng thanh màu cam; kỳ chưa có số ghi chữ, không vẽ thanh 0', () => {
+test('PDF Điện nước kỳ 1 ngày (không có bảng theo ngày, app không gửi ảnh): biểu đồ theo kỳ bằng thanh màu cam; kỳ chưa có số ghi chữ, không vẽ thanh 0', () => {
   const { env, c, c3 } = setup();
   const dn = userClient(env, 'U-DN', 2, '583016', 'DOC_DIEN_NUOC');
   const m = uuid();
-  ok(c.write('meter.edit', { meter_id: m, name_vi: 'Điện xưởng A', utility_type: 'ELECTRICITY', multiplier: 1, reading_cycle_type: 'DAY_5' }));
-  ok(dn.write('reading.create', { reading_id: uuid(), meter_id: m, measured_at: T('2026-10-01T07:45'), cumulative_value: 12350 }));
+  ok(c.write('meter.edit', { meter_id: m, name_vi: 'Điện xưởng A', utility_type: 'ELECTRICITY', multiplier: 1, reading_cycle_type: 'DAY_1' }));
+  ok(dn.write('reading.create', { reading_id: uuid(), meter_id: m, measured_at: T('2026-10-05T07:45'), cumulative_value: 12350 }));
   ok(dn.write('reading.create', { reading_id: uuid(), meter_id: m, measured_at: T('2026-10-06T08:00'), cumulative_value: 12480 }));
-  ok(c3.call('report.export', { format: 'PDF', code: 'RPT_UTILITIES', filters: { period_type: 'DAY_5', date: '2026-10-03' } }));
+  ok(dn.write('reading.create', { reading_id: uuid(), meter_id: m, measured_at: T('2026-10-07T08:00'), cumulative_value: 12600 }));
+  ok(c3.call('report.export', { format: 'PDF', code: 'RPT_UTILITIES', filters: { period_type: 'DAY_1', date: '2026-10-06' } }));
+  assert.equal(pdfHeadOf(lastDoc(env)).title[2], 'Điện · 电', 'trang Điện');
   const d = lastDoc(env);
   const bars = d.body.children.filter((x) => x.kind === 'table').find((t) => t.rows.some((r) => r.cells.length === 3 && /█/.test(r.cells[1].getText())));
   assert.ok(bars, 'có biểu đồ điện');

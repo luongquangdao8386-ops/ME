@@ -244,7 +244,7 @@ var REPORT_DATASETS_ = {
       rc_('cost', 'money', 'Chi phí', '费用', { cost: true, cur: 'currency' })
     ],
     build: function (ctx, f, L, cost) {
-      var s = utilitySummary_(ctx, f, { cost: cost && can_(ctx, 'tariff.view', { module: 'utilities' }) });
+      var s = utilitySummary_(ctx, f, { cost: cost && can_(ctx, 'tariff.view', { module: 'utilities' }), daily: true });
       var rows = s.rows.filter(function (r) { return r.status !== 'NO_READING'; }).map(function (r) {
         var o = {
           meter_code: r.meter_code, name_vi: r.name_vi, name_zh: r.name_zh, utility_type: r.utility_type, location: rptLoc_(L, r.location_id),
@@ -269,6 +269,7 @@ var REPORT_DATASETS_ = {
         chart: { type: 'LINE', line: s.chart.line, by_location: s.chart.by_location.map(function (x) { return { location: rptLoc_(L, x.location_id), utility_type: x.utility_type, consumption: x.consumption }; }) },
         notes: ['rpt.note.utility_rule'].concat(Object.keys(s.totals).some(function (k) { return s.totals[k].partial; }) ? ['ut.partial'] : []),
         period: { period_type: s.period_type, period_start: s.period_start, period_end: s.period_end, window_hours: s.window_hours },
+        daily: s.daily || null,
         cost_visible: s.cost_visible
       };
     }
@@ -570,6 +571,7 @@ function reportCompute_(ctx, def, filters) {
     if (c.type === 'bi') { keys[c.key + '_vi'] = true; keys[c.key + '_zh'] = true; }
     if (c.cur) keys[c.cur] = true;
   });
+  if (ds.module === 'utilities') keys.utility_type = true; // PDF/bản xem trước chia trang theo loại dù mẫu ẩn cột Loại (d4.22)
   var rows = res.rows.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { if (keys[k]) o[k] = r[k]; }); return o; });
   var chartType = def.chart_type && def.chart_type !== 'AUTO' ? def.chart_type : ds.chart;
   var st = readState_();
@@ -582,6 +584,7 @@ function reportCompute_(ctx, def, filters) {
     summary: (res.summary || []).filter(function (s) { return !s.money || cost; }),
     chart: chartType === 'NONE' ? null : (res.chart || null),
     notes: res.notes || [], period: res.period || null, filters: f,
+    daily: res.daily || null,
     generated_at: isoVN_(now_()), generated_by_name: (userDirectory_()[ctx.user.user_id] || {}).display_name || '',
     source_revision: Number(stateGet_(st, 'sync_revision', 0)),
     cost_visible: !!cost, cost_hidden: !cost && ds.columns.some(function (c) { return c.cost; }),
@@ -706,7 +709,10 @@ function reportExport_(ctx) {
   var out = { format: p.format, report: data, logo_rev: reportLogoRev_() };
   if (p.format === 'PDF') {
     if (data.rows.length > REPORT_PDF_ROW_MAX_) throw validationError_([fieldError_('format', 'PDF_TOO_MANY_ROWS')]);
-    var pdf = reportPdf_(data);
+    // Ảnh biểu đồ app vẽ (PNG) gửi kèm cho báo cáo Điện nước: {ELECTRICITY, WATER}; ảnh sai bỏ qua (PDF vẫn dựng)
+    var charts = {};
+    if (p.charts && typeof p.charts === 'object') UTILITY_TYPES_.forEach(function (k) { var b = reportChartBlob_(p.charts[k]); if (b) charts[k] = b; });
+    var pdf = reportPdf_(data, { charts: charts });
     out = { format: 'PDF', file_name: pdfFileName_(data), mime_type: 'application/pdf', content_b64: b64_(pdf), size_bytes: pdf.length };
   }
   withWriteLock_(function () {
