@@ -15,24 +15,12 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --label-offset: 0mm;
-  /* d4.24 Phối màu (menu trái + 3 khu trang chủ). Kiểu 1 mặc định; kiểu 2, 3 ở html[data-pal] bên dưới */
+  /* d4.24 Phối màu "Xanh biển" (người dùng chọn kiểu 1 trong 3): menu trái (--side-*) + 3 khu trang chủ: Lịch tuần (z1 xanh dương) · Thời hạn (z2 hổ phách) · ô chức năng (z3 xanh ngọc) */
   --side-bg: #EBF1F7; --side-line: #D3DDE8; --side-hover: #DEE8F2; --side-title: #23466B; --side-act: #17324F;
   --z1: #2F6DB5; --z1-bg: #F2F7FD; --z1-line: #D5E3F3;
   --z2: #C27C12; --z2-bg: #FFF9EB; --z2-line: #F0E0B8;
   --z3: #1D7486; --z3-bg: #EEF6F8; --z3-line: #CFE5EA; --z3-chip: #DCEEF2;
   color-scheme: light;
-}
-html[data-pal="2"] {
-  --side-bg: #EAF3EF; --side-line: #CFE3DA; --side-hover: #DCEBE4; --side-title: #24594A; --side-act: #1F5E4D;
-  --z1: #2E7D6B; --z1-bg: #F0F8F5; --z1-line: #CFE6DD;
-  --z2: #C0633A; --z2-bg: #FDF4EE; --z2-line: #F1D9CB;
-  --z3: #3B6C9C; --z3-bg: #F0F5FA; --z3-line: #D4E1EE; --z3-chip: #DDE8F4;
-}
-html[data-pal="3"] {
-  --side-bg: #F3F0EA; --side-line: #E0DAD0; --side-hover: #E8E3D9; --side-title: #5E5340; --side-act: #17324F;
-  --z1: #4C6B8A; --z1-bg: #F4F7FA; --z1-line: #DCE3EB;
-  --z2: #AE5A43; --z2-bg: #FBF3F0; --z2-line: #EDD8D0;
-  --z3: #8C6A32; --z3-bg: #F8F4EC; --z3-line: #E7DDCB; --z3-chip: #EFE5D2;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }

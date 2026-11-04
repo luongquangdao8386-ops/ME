@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.23 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.24 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app)
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -16,7 +16,9 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
-**Bản d4.23 (menu trái trên máy tính có màu nhẹ cho rõ) chỉ đổi app — không dán Code.gs:** cột **Danh mục · 功能菜单** có nền xanh xám nhạt, mỗi biểu tượng nằm trong ô trắng nhỏ; mục đang mở là thẻ trắng có vạch navy bên trái và ô biểu tượng navy. iPhone không đổi. Trang THỬ `/ME-thu/`: Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.23** (máy chủ vẫn ghi bản đang chạy — bình thường). Ưng thì nói **"phát hành THẬT"**. Nếu chưa làm Phần Z/Z3 (dán Code.gs d4.22) thì dán luôn Code.gs mới nhất — số bản máy chủ đọc được là **1.0.0-d4.23**, các bước khác giữ nguyên.
+**Bản d4.24 (phối màu "Xanh biển" — kiểu 1 trong 3 kiểu đã xem) chỉ đổi app — không dán Code.gs:** trang chủ chia **3 khu**, mỗi khu một nền nhạt và vạch màu trên đầu: **Lịch tuần này** (xanh dương, ô hôm nay viền xanh), **Thời hạn quan trọng** (vàng hổ phách; chữ "Sắp tới hạn"/"Quá hạn" giữ màu cũ), **các ô chức năng** Thiết bị … Kiểm định (xanh ngọc, gom trong một khung, biểu tượng trong ô màu nhạt); menu trái giữ nền xanh xám của d4.23. Có cả trên iPhone (trừ menu trái — iPhone không có). Mở app → Ctrl+Shift+R (iPhone: đóng hẳn app rồi mở lại) → Tài khoản → Thông tin: app **1.0.0-d4.24**.
+
+**Bản d4.23 (menu trái trên máy tính có màu nhẹ cho rõ) chỉ đổi app — không dán Code.gs:** cột **Danh mục · 功能菜单** có nền xanh xám nhạt, mỗi biểu tượng nằm trong ô trắng nhỏ; mục đang mở là thẻ trắng có vạch navy bên trái và ô biểu tượng navy. iPhone không đổi. Trang THỬ `/ME-thu/`: Ctrl+Shift+R → Tài khoản → Thông tin: app **1.0.0-d4.23** (máy chủ vẫn ghi bản đang chạy — bình thường). Ưng thì nói **"phát hành THẬT"**. Nếu chưa làm Phần Z/Z3 (dán Code.gs d4.22) thì dán luôn Code.gs mới nhất — số bản máy chủ đọc được là bản mới nhất (**1.0.0-d4.24**), các bước khác giữ nguyên.
 
 **Bản d4.22 (báo cáo tháng Điện nước có từng ngày, biểu đồ kiểu mới, mỗi báo cáo gọn trong một mặt A4, lịch tuần/tháng không còn mục "Chỉ số") cần dán Code.gs, không cần `migrateSchema`:** làm **Phần Z** (THỬ) → thử theo **Phần Z2** → ưng thì nói **"phát hành THẬT"** → **Phần Z3** (THẬT). App mới chạy được với máy chủ cũ (chỉ thiếu bảng theo ngày và PDF bố cục mới) nên không cần làm cùng lúc.
 
@@ -30,12 +32,12 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 
 ## Phần Z — Đưa d4.22 lên THỬ (`ME_MayChu_THU`)
 
-1. Trang THỬ tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.23**.
+1. Trang THỬ tự cập nhật app: mở <https://luongquangdao8386-ops.github.io/ME-thu/> → Ctrl+Shift+R → **Tài khoản → Thông tin**: Phiên bản app **1.0.0-d4.24**.
 2. Mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/lucid-goodall-x1vb66/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 3. <https://script.google.com> → dự án **ME_MayChu_THU** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu**.
 4. **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → Mô tả `THỬ d4.22` → **Triển khai** (giữ nguyên link).
 5. Không cần `migrateSchema`, không cần cấp quyền mới.
-6. App THỬ: Ctrl+Shift+R → **Tài khoản → Thông tin**: máy chủ **1.0.0-d4.23** (d4.22 cũng được).
+6. App THỬ: Ctrl+Shift+R → **Tài khoản → Thông tin**: máy chủ **1.0.0-d4.24** (d4.22, d4.23 cũng được).
 
 ### Phần Z2 — Thử trên THỬ (máy tính)
 
@@ -59,7 +61,7 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 1. Claude đẩy đúng bản đã thử lên `main` của repo ME. Chờ 2–3 phút (Actions xanh).
 2. Mở `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs` → Ctrl+A → Ctrl+C.
 3. <https://script.google.com> → **ME_MayChu_THAT** → `Code.gs` → Ctrl+A → xóa → dán → **Lưu** → **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** → `THẬT d4.22` → **Triển khai**.
-4. Không cần `migrateSchema`. App THẬT: Ctrl+Shift+R → Tài khoản → Thông tin: app và máy chủ **1.0.0-d4.23** (d4.22 cũng được). Trên iPhone: đóng hẳn app rồi mở lại (gặp lỗi bấm **Tải lại bản mới**).
+4. Không cần `migrateSchema`. App THẬT: Ctrl+Shift+R → Tài khoản → Thông tin: app và máy chủ **1.0.0-d4.24** (d4.22, d4.23 cũng được). Trên iPhone: đóng hẳn app rồi mở lại (gặp lỗi bấm **Tải lại bản mới**).
 
 ## Phần X — Đưa d4.21 lên THỬ (`ME_MayChu_THU`)
 

@@ -58,6 +58,15 @@ for (const [name, vp] of [['iphone', IPHONE], ['web', WEB]]) {
         assert.equal(side.actIcon, 'rgb(23, 50, 79)', 'ô biểu tượng mục đang mở = navy');
         assert.equal(side.otherIcon, 'rgb(255, 255, 255)');
       }
+      // d4.24 phối màu "Xanh biển": 3 khu trang chủ, mỗi khu nền nhạt + vạch màu 4 px trên đầu
+      const zones = await page.evaluate(() => {
+        const st = (sel) => { const c = getComputedStyle(document.querySelector(sel)); return { bg: c.backgroundColor, top: c.borderTopColor, w: c.borderTopWidth }; };
+        return { week: st('.home-week'), dl: st('.home-deadlines'), grid: st('.home .grid9'), icon: getComputedStyle(document.querySelector('.home .tile svg')).backgroundColor };
+      });
+      assert.deepEqual(zones.week, { bg: 'rgb(242, 247, 253)', top: 'rgb(47, 109, 181)', w: '4px' }, 'khu Lịch tuần');
+      assert.deepEqual(zones.dl, { bg: 'rgb(255, 249, 235)', top: 'rgb(194, 124, 18)', w: '4px' }, 'khu Thời hạn');
+      assert.deepEqual(zones.grid, { bg: 'rgb(238, 246, 248)', top: 'rgb(29, 116, 134)', w: '4px' }, 'khu ô chức năng');
+      assert.equal(zones.icon, 'rgb(220, 238, 242)', 'ô biểu tượng màu nhạt');
       assert.ok(await noOverflow(page));
       await page.screenshot({ path: path.join(SHOTS, `home-${name}.png`) });
       // Màn nghiệp vụ: không logo, header không có chữ M&E (C2)
