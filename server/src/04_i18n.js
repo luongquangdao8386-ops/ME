@@ -32,6 +32,8 @@ var MSG = {
 
 /** Lời báo cho mã con trong errors[] */
 var SUB_MSG = {
+  ARCHIVE_TOO_EARLY: ['Chỉ lưu trữ được năm đã kết thúc, từ ngày 01/02 năm sau', '仅可归档已结束的年份，自次年2月1日起'],
+  ARCHIVE_DONE: ['Năm này đã lưu trữ', '该年份已归档'],
   ID_INVALID: ['Mã định danh không hợp lệ', '标识无效'],
   ID_EXISTS: ['Mã định danh đã tồn tại', '标识已存在'],
   CODE_DUPLICATE: ['Mã đã được dùng', '编号已被使用'],

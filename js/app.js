@@ -276,6 +276,7 @@ function registerRoutes() {
   route('/admin/audit', lazy('./pages/admin.js', 'renderAudit'), { nav: 'account' });
   route('/admin/status', lazy('./pages/admin.js', 'renderStatus'), { nav: 'account' });
   route('/admin/report-logo', soonOr(3, lazy('./pages/admin.js', 'renderReportLogo')), { nav: 'account' });
+  route('/admin/archive', soonOr(4, lazy('./pages/archive.js', 'renderArchive')), { nav: 'account' });
   route('/admin/form-codes', soonOr(3, lazy('./pages/admin.js', 'renderFormCodes')), { nav: 'account' });
   route('/admin/catalog', lazy('./pages/catalog.js', 'renderCatalog'), { nav: 'account' });
   // Đợt 4: Dữ liệu hệ thống — Xóa sạch (chỉ owner; trước route chung /admin/:page)

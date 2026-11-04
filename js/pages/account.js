@@ -69,6 +69,8 @@ export async function renderAccount(view, { shell }) {
   if (await can('location.edit') || await can('vendor.edit') || await can('lookup.edit') || await can('glossary.edit')) admin.push(['admin.catalog', '/admin/catalog']);
   if (await can('notify.log.view')) admin.push(['admin.gmail', '/admin/gmail']);
   if (await can('backup.view')) admin.push(['admin.backup', '/admin/backup']);
+  // d4.27: lưu trữ theo năm (Quản trị)
+  if (RELEASED_DOT >= 4 && await can('archive.view')) admin.push(['arc.title', '/admin/archive']);
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
   if (await can('report.logo.set')) admin.push(['admin.report_logo', '/admin/report-logo']);

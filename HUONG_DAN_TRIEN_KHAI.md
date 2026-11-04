@@ -16,6 +16,14 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.27 (Lưu trữ theo năm) — cần dán Code.gs, KHÔNG cần `migrateSchema`:**
+- **Tài khoản → Quản trị → Lưu trữ theo năm** (chỉ Quản trị). Chuyển dữ liệu phát sinh của **năm đã kết thúc** sang một tệp Google Sheets riêng `ME_LuuTru_<năm>` trong thư mục **Backups/LuuTru** để app không chậm dần: chỉ số đồng hồ (giữ lần đọc cuối năm mỗi đồng hồ để tính tiếp, giữ chỉ số Cần xem lại), dòng ảnh chỉ số (tệp ảnh vẫn ở Drive), nhật ký thao tác, thao tác đã xong, dòng nhập Excel của lô đã xong.
+- **Giữ nguyên:** thiết bị, đồng hồ, tủ/lộ, tem QR, danh mục, kế hoạch, checklist, hợp đồng, kiểm định, phiếu bảo trì/sửa chữa (lý lịch máy), báo cáo đã lưu.
+- Chỉ chọn được năm đã kết thúc, **từ 01/02 năm sau** (vd năm 2026 từ 01/02/2027). Máy chủ **tự sao lưu trước** (phải "Đã kiểm chứng"), chép sang tệp lưu trữ rồi mới xóa khỏi bảng chính; mất vài phút; giữ trang mở tới khi xong (đóng giữa chừng thì mở lại → **Chạy tiếp**). Làm ngoài giờ ghi phiếu.
+- Tệp lưu trữ có sheet **Tổng kết** (tiêu thụ từng tháng mỗi đồng hồ + cả năm), **Cân bằng** (tổng – nhánh từng tháng), **Thông tin**, và mỗi bảng đã chuyển một sheet. Sau khi lưu trữ, báo cáo Điện nước các tháng của năm đó trong app không còn số — xem trong tệp lưu trữ.
+- **THỬ:** link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/claude/optimistic-hamilton-dewikm/apps-script/Code.gs` → dán vào **ME_MayChu_THU** → Lưu → **Triển khai → Quản lý bản triển khai** → bút chì → **Phiên bản mới** `THỬ d4.27` → Triển khai. Năm 2026 chỉ chạy được từ 01/02/2027, nên bây giờ trang chỉ hiện "Chưa có năm nào để lưu trữ".
+- **THẬT (sau khi nói "phát hành THẬT"):** như Phần Z3, link raw nhánh `main`, Phiên bản mới `THẬT d4.27`.
+
 **Bản d4.26 (lọc từng đồng hồ + cân bằng đồng hồ tổng – nhánh, theo dõi thất thoát) — cần dán Code.gs, KHÔNG cần `migrateSchema`:**
 - **Báo cáo → Điện nước** có ô **Đồng hồ · 计量表** (mặc định Tất cả; đồng hồ nhánh có dấu ↳). Chọn một đồng hồ → báo cáo chỉ của đồng hồ đó (biểu đồ, bảng theo ngày).
 - Báo cáo có bảng **Cân bằng đồng hồ tổng – nhánh**: mỗi đồng hồ có nhánh một dòng — Tổng, Cộng nhánh, **Chênh lệch (%)**, Ngưỡng, Kết luận (**Đạt** / **Vượt ngưỡng** / **Nhánh lớn hơn tổng** / Thiếu số liệu / Kỳ chưa kết thúc). Nhánh nhiều cấp: mỗi cấp so với nhánh trực tiếp của nó. Kết luận theo số cả tháng; số từng ngày chỉ tham khảo (tổng và nhánh đọc lệch giờ).

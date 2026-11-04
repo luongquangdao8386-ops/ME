@@ -171,6 +171,10 @@ var ACTION_TABLE_ = [
   'audit.auth|audit|V|N N N N N N N Y|pin|1|R',
   'backup.view|backup|V|N N N N N N N Y|net|1|R',
   'backup.run|backup|E|N N N N N N N Y|pin|1|W',
+  // d4.27: lưu trữ theo năm (chuyển dữ liệu phát sinh cũ sang tệp lưu trữ; Quản trị, PIN khi bắt đầu)
+  'archive.view|backup|V|N N N N N N N Y|net|4|R',
+  'archive.start|backup|E|N N N N N N N Y|pin|4|W',
+  'archive.step|backup|E|N N N N N N N Y|net|4|R',
   'settings.edit|system|E|N N N N N N N Y|pin|1|W',
   'permission.view|system|V|N N N N N N N Y|pin|1|R',
   'permission.edit|system|E|N N N N N N N Y|pin|1|W',

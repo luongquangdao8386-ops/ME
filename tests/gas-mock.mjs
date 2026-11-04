@@ -185,6 +185,7 @@ class MockSheet {
     this._ss = ss; this._name = name; this._rows = []; this._maxRows = 1000; this._maxCols = 26; this._fmt = {};
   }
   getName() { return this._name; }
+  setName(n) { if (this._ss.getSheetByName(n) && this._ss.getSheetByName(n) !== this) throw new Error("Sheet exists " + n); this._name = n; return this; }
   getParent() { return this._ss; }
   getMaxRows() { return this._maxRows; }
   getMaxColumns() { return this._maxCols; }
