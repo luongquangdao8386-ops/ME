@@ -16,6 +16,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
 
+**Bản d4.33 (Điện nước: "thiếu số đầu kỳ" báo sớm) — app tự sửa ngay; nên dán Code.gs + Phiên bản mới (KHÔNG migrateSchema) để báo cáo cũng đúng:** xem kỳ **1 ngày = hôm nay** mà đồng hồ chưa đọc hôm nay thì trước đây ghi đỏ **Thiếu số đo · thiếu số đầu kỳ**, dù còn tới 00:00 hôm sau mới hết hạn đọc. Nay ghi **Kỳ chưa kết thúc · chưa đọc số đầu kỳ · hạn …**; chỉ khi qua hạn mà vẫn không có lần đọc nào mới báo Thiếu. Bấm dòng đồng hồ trong bảng → trang đồng hồ có khung **Kỳ đang xem**: số đầu kỳ, số cuối kỳ (hoặc cần đọc trong khoảng giờ nào), lần đọc gần nhất trước kỳ.
+
 **Bản d4.32 (màu ô chức năng trang chủ) — chỉ đổi app, không cần dán Code.gs:** biểu tượng và nhãn số của 9 ô chức năng (Thiết bị, Bảo trì, Kiểm định…) và biểu tượng khung **Danh mục** đổi từ xanh ngọc sang **xanh logo PAISHING** (`#0054A7`, ô biểu tượng nền xanh nhạt). Sau khi phát hành: **Ctrl+Shift+R** trên máy tính; iPhone đóng hẳn app rồi mở lại.
 
 **Bản d4.31 (sửa ô Quá hạn ở bảng Việc cần làm) — chỉ đổi app, không cần dán Code.gs:** trước đây ô **Quá hạn** và mục Quá hạn của bảng Việc cần làm chỉ lấy kiểm định/hợp đồng quá hạn và phiếu bảo trì của **tuần này** → phiếu bảo trì quá hạn từ tuần trước (vd hạn 29/10) có ở bảng **Công việc hôm nay** bên dưới nhưng bảng trên ghi 0. Nay lấy cùng nguồn với Công việc hôm nay: kiểm định/hợp đồng quá hạn + **mọi phiếu bảo trì đang mở đã quá hạn** + dịch vụ hợp đồng quá hạn chưa làm; quá hạn lâu nhất đứng đầu.

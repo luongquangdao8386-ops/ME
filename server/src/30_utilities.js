@@ -703,7 +703,7 @@ function firstReadingIn_(list, from, to) {
 
 /**
  * Kết quả một đồng hồ trong một kỳ [a, b] (3.12): {period_start, period_end, opening_*, closing_*, consumption, unit, status, missing_side}.
- * status: OK | MISSING_READING | BASELINE | NEEDS_REVIEW | OPEN_PERIOD (kỳ chưa tới hạn chốt) | NO_READING (chưa có số đo nào).
+ * status: OK | MISSING_READING | BASELINE | NEEDS_REVIEW | OPEN_PERIOD (kỳ chưa tới hạn chốt; await_opening = còn trong W giờ đầu kỳ, chưa đọc) | NO_READING (chưa có số đo nào).
  */
 function meterPeriod_(d, m, a, b, W, nowMs) {
   var list = d.readsBy[m.meter_id] || [];
@@ -719,6 +719,8 @@ function meterPeriod_(d, m, a, b, W, nowMs) {
   if (c) { out.closing_reading_id = c.reading_id; out.closing_value = c.cumulative_value; out.closing_at = c.measured_at; }
   var started = tms_(list[0].measured_at) >= bs;
   if (!o && started) { out.status = 'BASELINE'; return out; }
+  // d4.33: còn trong W giờ đầu kỳ mà chưa đọc → chưa phải thiếu số; kỳ đang mở, chờ số đầu kỳ (hạn opening_due_at)
+  if (!o && nowMs < bs + w) { out.status = 'OPEN_PERIOD'; out.await_opening = true; out.opening_due_at = new Date(bs + w).toISOString(); return out; }
   if (!c && nowMs < be + w) { out.status = o ? 'OPEN_PERIOD' : 'MISSING_READING'; out.missing_side = o ? null : 'OPENING'; return out; }
   if (!o || !c) { out.status = 'MISSING_READING'; out.missing_side = !o && !c ? 'BOTH' : (!o ? 'OPENING' : 'CLOSING'); return out; }
   // Tổng các giai đoạn từ giai đoạn của số mở tới giai đoạn của số đóng

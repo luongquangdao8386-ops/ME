@@ -391,3 +391,26 @@ test('tổng hợp kỳ có lưu đệm máy chủ: gọi lại trả cùng số
   assert.equal(rowOf(summary(c, f), id).cost, 240000);
   assert.ok(!('cost' in rowOf(summary(dn, f), id)), 'ĐN không nhận bản đệm có chi phí');
 });
+
+test('d4.33: xem kỳ 1 ngày = hôm nay, đồng hồ đã có số hôm trước mà hôm nay chưa đọc → Kỳ chưa kết thúc (chờ số đầu kỳ, hạn 00:00 hôm sau), không báo Thiếu số đo; qua hạn → Thiếu số đầu kỳ', () => {
+  const { env, c, dn } = setup('2026-11-04T10:00');
+  const m = addMeter(c, { reading_cycle_type: 'MONTH' }).id;
+  const w = addMeter(c, { name_vi: 'Nước tổng', utility_type: 'WATER', reading_cycle_type: 'MONTH' }).id;
+  read(dn, m, '2026-11-04T09:30', 1000);
+  read(dn, w, '2026-11-04T09:30', 12000);
+  setNow(env, T('2026-11-05T10:00'));
+  read(dn, w, '2026-11-05T07:57', 12415);
+  const s = summary(c, { period_type: 'DAY_1', date: '2026-11-05' });
+  const x = rowOf(s, m);
+  assert.equal(x.status, 'OPEN_PERIOD');
+  assert.equal(x.await_opening, true);
+  assert.equal(x.missing_side, null);
+  assert.equal(Date.parse(x.opening_due_at), Date.parse(T('2026-11-06T00:00')));
+  assert.equal(rowOf(s, w).status, 'OPEN_PERIOD');
+  assert.equal(rowOf(s, w).await_opening, undefined);
+  assert.equal(s.totals.ELECTRICITY.partial, false, 'chưa tới hạn đọc thì không tính là thiếu');
+  setNow(env, T('2026-11-06T08:00'));
+  const y = rowOf(summary(c, { period_type: 'DAY_1', date: '2026-11-05' }), m);
+  assert.equal(y.status, 'MISSING_READING');
+  assert.equal(y.missing_side, 'OPENING');
+});

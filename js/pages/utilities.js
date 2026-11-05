@@ -22,7 +22,7 @@ import { columnChartHtml, wireCharts } from '../chart.js';
 import { kidsOf, meterTolHtml, wireMeterTol } from '../meter-balance.js';
 import {
   UTILITY_TYPES, UNIT, TONE, PERIOD_TYPES, READ_CYCLES, periodOf, prevPeriod, nextPeriod, periodsBack, readingDue, lastValidBefore, useOf,
-  windowHours, nextBoundary, nowMs
+  windowHours, nextBoundary, nowMs, boundaryMs
 } from '../meters.js';
 
 const PAGE = 20;
@@ -213,7 +213,7 @@ export async function renderUtilities(view, ctx) {
   else if (res.error) body = `<div class="card"><p class="banner warn">${esc(resMsg(res.error))}</p></div>`;
   else if (!res.data) body = `<div class="card"><p class="banner info">${bi('ut.summary_offline', { T: '—' })}</p></div>`;
   else {
-    const d = res.data;
+    const d = { ...res.data, rows: res.data.rows.map((r) => awaitOpening(r, res.data.window_hours)) };
     const types = UTILITY_TYPES.filter((t) => d.totals[t]);
     const prevLine = (d.chart && d.chart.line) || [];
     const prevOf = (t) => (prevLine.length > 1 ? (prevLine[prevLine.length - 2].totals || {})[t] : null);
@@ -231,18 +231,18 @@ export async function renderUtilities(view, ctx) {
       const cost = d.cost_visible;
       table = `<div class="table-wrap"><table class="tbl ut-table"><thead><tr><th>${bi('ut.col.code')}</th><th>${bi('ut.col.meter')}</th><th>${bi('ut.col.interval')}</th>
         <th class="num">${bi('ut.col.prev')}</th><th class="num">${bi('ut.col.new')}</th><th class="num">${bi('ut.col.mult')}</th><th class="num">${bi('ut.col.use')}</th>${cost ? `<th class="num">${bi('ut.cost')}</th>` : ''}<th>${bi('col.status')}</th></tr></thead>
-        <tbody>${shown.map((r) => `<tr class="click${r.in_total ? '' : ' sub'}" data-href="/utilities/meters/${esc(r.meter_id)}">
+        <tbody>${shown.map((r) => `<tr class="click${r.in_total ? '' : ' sub'}" data-href="/utilities/meters/${esc(r.meter_id)}?pa=${esc(r.period_start || '')}&pb=${esc(r.period_end || '')}">
           <td class="code">${esc(r.meter_code)}</td><td>${biName(r)}${r.parent_meter_id ? `<div class="muted small">${bi('ut.parent_meter')}: ${esc((mById.get(r.parent_meter_id) || {}).meter_code || '')}</div>` : ''}</td>
           <td class="num">${r.opening_at || r.closing_at ? `${esc(shortDT(r.opening_at) || '—')} – ${esc(shortDT(r.closing_at) || '—')}` : '—'}</td>
           <td class="num">${r.opening_value === null ? '—' : fmtNumber(r.opening_value)}</td><td class="num">${r.closing_value === null ? '—' : fmtNumber(r.closing_value)}</td>
           <td class="num">${r.multiplier === null || r.multiplier === undefined ? '—' : fmtNumber(r.multiplier)}</td><td class="num"><strong>${qty(r.consumption, r.unit)}</strong></td>
           ${cost ? `<td class="num">${r.cost !== undefined ? `${fmtNumber(r.cost, r.currency === 'VND' ? 0 : 2)}\u00A0${esc(r.currency || '')}` : (r.status === 'OK' ? `<span class="muted small">${bi('ut.cost_missing')}</span>` : '')}</td>` : ''}
-          <td>${badge('utility_status.' + r.status)}${r.missing_side ? `<div class="muted small">${bi('missing_side.' + r.missing_side)}</div>` : ''}</td></tr>`).join('')}</tbody></table></div>
+          <td>${badge('utility_status.' + r.status)}${statusNote(r, 'div')}</td></tr>`).join('')}</tbody></table></div>
         <div class="row pager"><span class="muted small">${bi('ut.showing', { A: rows.length ? F.page * PAGE + 1 : 0, B: Math.min(rows.length, (F.page + 1) * PAGE), N: rows.length })}</span>
           ${rows.length > PAGE ? `<button type="button" class="btn small" id="ut-pp" ${F.page ? '' : 'disabled'}>‹</button><span class="muted small">${F.page + 1} / ${Math.ceil(rows.length / PAGE)}</span><button type="button" class="btn small" id="ut-np" ${(F.page + 1) * PAGE < rows.length ? '' : 'disabled'}>›</button>` : ''}</div>`;
     } else if (!wide && missing.length) {
       table = `<section class="card"><div class="card-head"><h2>${bi('ut.missing_list')}</h2><span class="count">${missing.length}</span></div>
-        <ul class="list">${missing.slice(0, 8).map((r) => `<li><a href="#/utilities/meters/${esc(r.meter_id)}"><span class="code">${esc(r.meter_code)}</span> ${biName(r)}</a> ${badge('utility_status.' + r.status)}${r.missing_side ? ` <span class="muted small">${bi('missing_side.' + r.missing_side)}</span>` : ''}</li>`).join('')}</ul></section>`;
+        <ul class="list">${missing.slice(0, 8).map((r) => `<li><a href="#/utilities/meters/${esc(r.meter_id)}?pa=${esc(r.period_start || '')}&pb=${esc(r.period_end || '')}"><span class="code">${esc(r.meter_code)}</span> ${biName(r)}</a> ${badge('utility_status.' + r.status)}${statusNote(r, 'span')}</li>`).join('')}</ul></section>`;
     }
     const charts = types.length && d.period_type !== 'CUSTOM' ? `<div class="ut-charts${wide ? ' two' : ''}">${types.map((t) => `<section class="card">
         <div class="card-head"><h2>${bi(t === 'WATER' ? 'ut.chart_water' : 'ut.chart_elec')}</h2>
@@ -387,6 +387,43 @@ async function meterFull(id, fresh = false) {
   return fullCache.data;
 }
 
+/**
+ * d4.33: máy chủ cũ (≤ d4.32) báo "Thiếu số đo · thiếu số đầu kỳ" cả khi còn trong W giờ đầu kỳ (vd xem kỳ 1 ngày = hôm nay, chưa đọc).
+ * Khi đó chưa phải thiếu: coi như kỳ đang mở, chờ số đầu kỳ (máy chủ mới trả sẵn await_opening).
+ */
+function awaitOpening(r, W) {
+  if (r.await_opening || r.status !== 'MISSING_READING' || r.missing_side !== 'OPENING' || r.closing_at || !r.period_start) return r;
+  const due = boundaryMs(r.period_start) + (Number(W) || windowHours()) * 3600000;
+  return nowMs() < due ? { ...r, status: 'OPEN_PERIOD', missing_side: null, await_opening: true, opening_due_at: new Date(due).toISOString() } : r;
+}
+function statusNote(r, tag) {
+  const t = r.await_opening ? bi('ut.await_opening', { T: fmtDateTime(r.opening_due_at) }) : (r.missing_side ? bi('missing_side.' + r.missing_side) : '');
+  return t ? (tag === 'div' ? `<div class="muted small">${t}</div>` : ` <span class="muted small">${t}</span>`) : '';
+}
+
+/** Khung "Kỳ đang xem" trên trang đồng hồ (mở từ bảng Điện nước): số đầu/cuối kỳ theo B1 và lý do khi chưa có */
+function periodViewHtml(asc, a, b, m) {
+  const W = windowHours() * 3600000, now = nowMs();
+  const bs = boundaryMs(a), be = boundaryMs(addDays(b, 1));
+  const ok = asc.filter((r) => r.status !== 'VOID' && r.status !== 'NEEDS_REVIEW');
+  const first = (f, t) => ok.find((r) => { const x = Date.parse(r.measured_at); return x >= f && x < t; }) || null;
+  const o = first(bs, bs + W), c = first(be, be + W);
+  const before = lastValidBefore(asc, bs - 1);
+  const T = (x) => esc(fmtDateTime(new Date(x).toISOString()));
+  const val = (r) => `<strong>${fmtNumber(r.cumulative_value)}</strong> <span class="muted small">${esc(fmtDateTime(r.measured_at))}</span>`;
+  const warn = (k, f) => `<span class="${now < f + W ? 'muted' : 't-red-text'} small">${bi(k, { A: T(f), B: T(f + W) })}</span>`;
+  const started = ok.length && Date.parse(ok[0].measured_at) >= bs;
+  const oTxt = o ? val(o) : (started ? `<span class="muted small">${bi('ut.pv.baseline')}</span>` : warn(now < bs + W ? 'ut.pv.need' : 'ut.pv.missed', bs));
+  const cTxt = c ? val(c) : warn(now < be + W ? 'ut.pv.not_yet' : 'ut.pv.missed', be);
+  const use = o && c && o.meter_segment_id === c.meter_segment_id ? useOf(o.cumulative_value, c.cumulative_value, c.multiplier_at_reading || 1) : null;
+  const row = (k, v) => `<div class="kv"><span>${bi(k)}</span><span>${v}</span></div>`;
+  return `<section class="card ut-pv" id="ut-pv"><div class="card-head"><h2>${bi('ut.pv.title', { A: esc(fmtDate(a)), B: esc(fmtDate(b)) })}</h2></div><div class="kv-grid">
+    ${row('ut.pv.opening', oTxt)}${row('ut.pv.closing', cTxt)}
+    ${use !== null ? row('ut.pv.use', `<strong>${qty(use, m.unit || UNIT[m.utility_type])}</strong>`) : ''}
+    ${!o ? row('ut.pv.last_before', before ? val(before) : '—') : ''}
+  </div><p class="muted small">${bi('ut.window_note', { W: windowHours() })}</p></section>`;
+}
+
 export async function renderMeter(view, ctx) {
   const { shell, params, query } = ctx;
   const ld = await localData();
@@ -447,6 +484,7 @@ export async function renderMeter(view, ctx) {
         ${pending.created_by_name ? ` · ${esc(pending.created_by_name)}` : ''}
         ${p.approve ? (pending.created_by === uidMe ? `<div class="muted small">${bi('ut.event_self')}</div>` : `<div class="row"><button type="button" class="btn small primary" data-ev-ok="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.approve')}</button><button type="button" class="btn small" data-ev-no="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.reject')}</button></div>`) : ''}</div>` : ''}
     </section>
+    ${/^\d{4}-\d{2}-\d{2}$/.test(query.get('pa') || '') && /^\d{4}-\d{2}-\d{2}$/.test(query.get('pb') || '') ? periodViewHtml(asc, query.get('pa'), query.get('pb'), m) : ''}
     <section class="card"><div class="card-head"><h2>${bi('ut.reading_use')}</h2></div><div class="kv-grid">
       ${kv('ut.prev_reading', prev ? `${fmtNumber(prev.cumulative_value)} <span class="muted small">${esc(fmtDateTime(prev.measured_at))}</span>` : '—')}
       ${kv('ut.new_reading', last ? `${fmtNumber(last.cumulative_value)} <span class="muted small">${esc(fmtDateTime(last.measured_at))}</span>${last._local ? ` <span class="badge t-amber">${bi('sync.local_saved')}</span>` : ''}` : bi('utility_status.NO_READING'))}
