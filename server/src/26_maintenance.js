@@ -1010,7 +1010,7 @@ function maintenanceAccept_(ctx) {
         if (p.confirm_usage) {
           findAll_('MaterialUsageLines', 'work_id', w.work_order_id).forEach(function (u) {
             if (u.work_type !== 'WORK_ORDER' || u.archived_at || u.status !== 'PENDING_CONFIRMATION') return;
-            if (u.recorded_by === ctx.user.user_id) { usageSkipped.push(u.usage_line_id); return; }
+            if (u.recorded_by === ctx.user.user_id && !adminSelfOk_(ctx)) { usageSkipped.push(u.usage_line_id); return; }
             var u2 = clone_(u); delete u2.__row;
             u2.status = 'CONFIRMED'; u2.confirmed_by = ctx.user.user_id; u2.confirmed_at = nowIso;
             cUpdate_(ctx, u2);
@@ -1037,7 +1037,7 @@ function maintenanceAccept_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: 'WORK_ORDER', entity_id: row.work_order_id, before_json: { status: w.status }, after_json: { status: row.status, next_due_date: row.next_due_date || undefined, usage_confirmed: usageDone.length || undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }

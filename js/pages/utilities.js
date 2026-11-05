@@ -4,7 +4,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, resMsg, session, blobToB64, b64ToBytes, L } from '../core.js';
 import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can, today, addDays, daysBetween } from '../data.js';
+import { recs, byId, mapOf, can, today, addDays, daysBetween, adminSelf } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { getMeta, setMeta, enqueue } from '../sync.js';
@@ -482,7 +482,7 @@ export async function renderMeter(view, ctx) {
       ${pending ? `<div class="banner warn ut-pending"><strong>${bi('ut.event_pending')}</strong>: ${bi('meter_event.' + pending.event_type)} · ${esc(fmtDateTime(pending.event_at))}
         · ${bi('ut.closing_value')}: ${fmtNumber(pending.closing_value)}${pending.event_type !== 'MULTIPLIER_CHANGE' ? ` · ${bi('ut.opening_value')}: ${fmtNumber(pending.opening_value)}` : ` · ${bi('ut.new_multiplier')}: ${fmtNumber(pending.new_multiplier)}`}
         ${pending.created_by_name ? ` · ${esc(pending.created_by_name)}` : ''}
-        ${p.approve ? (pending.created_by === uidMe ? `<div class="muted small">${bi('ut.event_self')}</div>` : `<div class="row"><button type="button" class="btn small primary" data-ev-ok="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.approve')}</button><button type="button" class="btn small" data-ev-no="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.reject')}</button></div>`) : ''}</div>` : ''}
+        ${p.approve ? (pending.created_by === uidMe && !adminSelf() ? `<div class="muted small">${bi('ut.event_self')}</div>` : `<div class="row"><button type="button" class="btn small primary" data-ev-ok="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.approve')}</button><button type="button" class="btn small" data-ev-no="${esc(pending.event_id)}" ${navigator.onLine ? '' : 'disabled'}>${bi('btn.reject')}</button></div>`) : ''}</div>` : ''}
     </section>
     ${/^\d{4}-\d{2}-\d{2}$/.test(query.get('pa') || '') && /^\d{4}-\d{2}-\d{2}$/.test(query.get('pb') || '') ? periodViewHtml(asc, query.get('pa'), query.get('pb'), m) : ''}
     <section class="card"><div class="card-head"><h2>${bi('ut.reading_use')}</h2></div><div class="kv-grid">
@@ -909,7 +909,7 @@ export async function renderTariffs(view, ctx) {
     <div class="row tools">${canEdit ? `<a class="btn small primary" href="#/utilities/tariffs/new">${ICON.plus}<span>${bi('ut.tariff_new')}</span></a>` : ''}${await excelLink('utility_tariffs')}</div></div>
     ${list.length ? `<div class="cards">${list.map((t) => {
       const l = locs.get(t.location_id);
-      const mine = t.created_by === uidMe || t.updated_by === uidMe;
+      const mine = !adminSelf() && (t.created_by === uidMe || t.updated_by === uidMe);
       return `<div class="card rec-card"><div class="rec-top"><span>${bi('utility_type.' + t.utility_type)} · ${l ? esc(l.location_code) : bi('tariff.all_plant')}</span>${badge('tariff_status.' + t.status)}</div>
         ${t.name_vi || t.name_zh ? `<div class="rec-name">${biName(t)}</div>` : ''}
         <div class="dates"><span>${bi('tariff.from')}: <strong>${esc(fmtDate(t.effective_from))}</strong></span><span>${bi('tariff.to')}: <strong>${t.effective_to ? esc(fmtDate(t.effective_to)) : '—'}</strong></span></div>

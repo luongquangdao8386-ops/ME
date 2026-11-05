@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, noAdminSelf } from '../helpers.mjs';
 
 function setup() {
   const env = freshServer();
@@ -71,6 +71,7 @@ test('quyền giá: C1 và KT không thấy value/price/cost; người không c�
 
 test('contract.edit không đổi hạn/giá trị phiên hiện hành; editTerms cần PIN, lý do, không phải người tạo; due_revision mới', () => {
   const { env, c, hd, c3, eq } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   const { id } = create(hd, eq);
   assert.equal(hd.write('contract.edit', { contract_id: id, end_date: '2027-06-30' }, { expected_version: 1 }).errors[0].field, 'end_date');
   assert.equal(hd.write('contract.edit', { contract_id: id, title_vi: 'Bảo trì điều hòa (sửa)' }, { expected_version: 1 }).ok, true);
@@ -85,6 +86,7 @@ test('contract.edit không đổi hạn/giá trị phiên hiện hành; editTerm
 
 test('gia hạn: dự thảo giữ hạn hiện hành; người nộp không tự duyệt; duyệt → phiên mới ACTIVE (revision 2), phiên cũ SUPERSEDED, QR giữ nguyên (NT1-93)', () => {
   const { env, c, hd, c3, eq } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   const { id } = create(hd, eq);
   const qrBefore = env.rows('QrRegistry').find((q) => q.entity_id === id).qr_key;
   const d = uuid();

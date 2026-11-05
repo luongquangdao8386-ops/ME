@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, noAdminSelf } from '../helpers.mjs';
 
 function setup() {
   const env = freshServer();
@@ -192,6 +192,7 @@ test('lô dở kiểu cũ 150 dòng không đổi (trạng thái OK) → một l
 
 test('lô nhạy cảm (kiểm định): HĐ nhập + gửi duyệt; HĐ không commit; C4 nhập thì không tự commit; C3 commit (PIN) = duyệt → APPROVED, hạn hiện hành, nhắc hạn', () => {
   const { env, c } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   const eq = uuid(), type = uuid(), req = uuid();
   c.write('equipment.create', { equipment_id: eq, name_vi: 'Bình áp lực' });
   c.write('inspection.type.edit', { inspection_type_id: type, code: 'AP_LUC', name_vi: 'Bình chịu áp lực' });

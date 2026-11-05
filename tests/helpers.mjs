@@ -4,7 +4,7 @@ import { loadServer } from './gas-mock.mjs';
 export const OWNER_CODE = 'NV-001';
 export const OWNER_TEMP_PIN = '358024';
 export const OWNER_PIN = '604817';
-export const APP_VERSION = '1.0.0-d4.33';
+export const APP_VERSION = '1.0.0-d4.34';
 
 export const uuid = () => crypto.randomUUID();
 
@@ -58,6 +58,14 @@ export function ownerClient(env) {
   if (!r2.ok) throw new Error('pin.change failed ' + JSON.stringify(r2));
   c.token = r2.data.token;
   return c;
+}
+
+/** d4.34: tắt "Quản trị tự duyệt" (Settings admin_self_approval) để thử quy tắc không tự duyệt với tài khoản cấp 4 */
+export function noAdminSelf(env, c) {
+  const rt = c.call('auth.reauth', { pin: OWNER_PIN }).data.reauth_token;
+  const r = c.call('settings.edit', { changes: { admin_self_approval: false }, reason: 'thử quy tắc không tự duyệt' }, { operation_id: uuid(), reauth_token: rt });
+  if (!r.ok) throw new Error('settings.edit admin_self_approval ' + JSON.stringify(r));
+  env.g.dbReset_();
 }
 
 /** Thêm người dùng trực tiếp (không qua API) */

@@ -277,7 +277,7 @@ function inspectionApprove_(ctx) {
         audit: {
           entity_type: 'INSPECTION', entity_id: row.inspection_id, before_json: { status: cur.status },
           after_json: { status: row.status, current_due_date: reqAfter ? reqAfter.current_due_date : undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }

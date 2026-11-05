@@ -4,7 +4,7 @@ import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, l
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
-import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel } from '../data.js';
+import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel, adminSelf } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import {
@@ -384,7 +384,7 @@ export async function partsTabHtml(eq) {
         <div class="row">
           ${canLink ? `<button type="button" class="btn tiny" data-pedit="${esc(p.equipment_part_id)}" ${online ? '' : 'disabled'}>${ICON.edit}<span>${bi('btn.edit')}</span></button>` : ''}
           ${unlinkOk(p) ? `<button type="button" class="btn tiny" data-punlink="${esc(p.equipment_part_id)}" ${online ? '' : 'disabled'}>${bi('btn.unlink')}</button>` : ''}
-          ${canApprove && !p.approved_by && p.created_by !== uid && p.updated_by !== uid ? `<button type="button" class="btn tiny primary" data-pappr="${esc(p.equipment_part_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>` : ''}
+          ${canApprove && !p.approved_by && (adminSelf() || (p.created_by !== uid && p.updated_by !== uid)) ? `<button type="button" class="btn tiny primary" data-pappr="${esc(p.equipment_part_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>` : ''}
         </div></div>`;
     }).join('')}</div>` : `<p class="muted">${bi('mat.no_parts')}</p>`}
     <div class="row">

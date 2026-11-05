@@ -1,7 +1,7 @@
 // Vật tư trên phiếu Đợt 2: đề nghị, lượng dùng, chi phí tham khảo, thay linh kiện (4.4.2, 4.4.5, 4.5, 4.6, MAT-03)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, noAdminSelf } from '../helpers.mjs';
 
 const nowIso = (env, minutes = 0) => env.g.isoVN_(new env.clock.Date(env.clock.Date.now() + minutes * 60000));
 const uidOf = (env, code) => env.rows('Users').find((u) => u.employee_code === code).user_id;
@@ -33,6 +33,7 @@ const reqLines = (env, rid) => env.rows('MaterialRequestLines').filter((l) => l.
 
 test('đề nghị vật tư: người được giao tạo nháp (mã DN, đơn vị cơ sở), gửi duyệt; người khác không; người đề nghị không tự duyệt; duyệt sửa SL; không gửi kho', () => {
   const { env, c, c3, kt, kt2, wo, bearing, grease } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   const rid = uuid(), l1 = uuid(), l2 = uuid();
   const mk = (cl, id = rid, lines = [{ request_line_id: l1, material_id: bearing, requested_qty: 2 }, { request_line_id: l2, material_id: grease, requested_qty: 0.5, note_vi: 'Loại chịu nhiệt' }]) =>
     cl.write('matreq.create', { request_id: id, work_type: 'WORK_ORDER', work_id: wo, needed_at: env.g.todayVN_(), lines });

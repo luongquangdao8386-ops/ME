@@ -221,7 +221,7 @@ test('iPhone Báo sự cố (BS): mức độ bắt chọn, không chọn sẵn;
   } finally { await app.close(); }
 });
 
-test('web C4: Sửa chữa — phân công cho KT, KT xử lý xong, C4 nghiệm thu có PIN → đủ 6 mốc (C9); phiếu C4 tự báo thì không có nút nghiệm thu', async () => {
+test('web C4: Sửa chữa — phân công cho KT, KT xử lý xong, C4 nghiệm thu có PIN → đủ 6 mốc (C9); phiếu C4 tự báo: d4.34 Quản trị vẫn có nút nghiệm thu', async () => {
   const ctx = setup();
   const { env, c, kt, ktId, eq } = ctx;
   // Phiếu do KT báo
@@ -267,7 +267,7 @@ test('web C4: Sửa chữa — phân công cho KT, KT xử lý xong, C4 nghiệm
     assert.deepEqual(ms2, ['done', 'done', 'done', 'done', 'done', 'done'], 'đủ 6 mốc');
     assert.ok(await noOverflow(page));
     await page.screenshot({ path: path.join(SHOTS, 'repair-done-web.png'), fullPage: true });
-    // C4 tự báo → không tự nghiệm thu (4.6)
+    // C4 tự báo → d4.34: Quản trị được tự nghiệm thu (cấp 3 vẫn không)
     const own = uuid();
     assert.equal(c.write('repair.report', { repair_id: own, equipment_id: eq, symptom_vi: 'Đèn báo lỗi', severity: 'LOW' }).ok, true);
     let o = env.rows('Repairs').find((r) => r.repair_id === own);
@@ -281,8 +281,8 @@ test('web C4: Sửa chữa — phân công cho KT, KT xử lý xong, C4 nghiệm
     assert.equal(kt.write('repair.submit', { repair_id: own }, { expected_version: p.record_version }).ok, true);
     await go(page, `#/repairs/${own}`);
     await page.reload();
-    await page.waitForFunction(() => ((document.querySelector('.view') || {}).textContent || '').includes('không tự nghiệm thu'), null, { timeout: 15000 });
-    assert.equal(await page.locator('#rp-accept').count(), 0);
+    await page.waitForSelector('#rp-accept', { timeout: 15000 });
+    assert.ok(!(await page.textContent('.view')).includes('không tự nghiệm thu'));
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

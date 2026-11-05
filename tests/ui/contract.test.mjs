@@ -73,7 +73,7 @@ test('web C4: hồ sơ hợp đồng chưa có thiết bị → nút Thêm thi�
   } finally { await app.close(); }
 });
 
-test('web C4: dự thảo gia hạn do chính mình tạo và gửi → không có nút Duyệt, có dòng giải thích không tự duyệt', async () => {
+test('web C4: dự thảo gia hạn do chính mình tạo và gửi → d4.34 Quản trị tự duyệt được: có nút Duyệt, không có dòng "không tự duyệt"', async () => {
   const env = freshServer();
   const owner = ownerClient(env);
   const id = uuid(), d = uuid();
@@ -85,9 +85,8 @@ test('web C4: dự thảo gia hạn do chính mình tạo và gửi → không c
     const { page } = app;
     await login(page);
     await go(page, `#/contracts/${d}`);
-    await page.waitForSelector('#co-why');
-    assert.match(await page.textContent('#co-why'), /không tự duyệt/);
-    assert.equal(await page.locator('#co-appr').count(), 0);
+    await page.waitForSelector('#co-appr', { timeout: 15000 });
+    assert.equal(await page.locator('#co-why').count(), 0);
     assert.deepEqual(app.consoleErrors, []);
   } finally { await app.close(); }
 });

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, noAdminSelf } from '../helpers.mjs';
 
 function setup() {
   const env = freshServer();
@@ -44,6 +44,7 @@ test('loại kiểm định: mã chữ hoa, không trùng; tên không dịch t�
 
 test('quyền: HĐ tạo yêu cầu, nộp; HĐ không duyệt; người nộp không tự duyệt (cả cấp 4); C3 duyệt cần PIN', () => {
   const { env, c, hd, c3, eq, type, req } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   assert.equal(hd.write('inspection.type.edit', { inspection_type_id: uuid(), code: 'X1', name_vi: 'X' }).code, 'FORBIDDEN');
   const kt = userClient(env, 'U-KT', 2, '583016', 'KY_THUAT');
   assert.equal(kt.write('inspection.requirement.edit', { requirement_id: uuid(), equipment_id: eq, inspection_type_id: type }).code, 'FORBIDDEN');
@@ -119,4 +120,18 @@ test('IN-03 (C10): PASS/CONDITIONAL_PASS bắt buộc Hiệu lực từ và đ�
   assert.equal(r2.ok, true, JSON.stringify(r2));
   const r3 = hd.write('inspection.submit', { inspection_id: uuid(), requirement_id: req, inspection_date: '2026-10-01', valid_from: '2027-10-02', valid_to: '2027-10-01', result: 'PASS' });
   assert.equal(r3.errors[0].field, 'valid_to');
+});
+
+test('d4.34: Quản trị tự nộp rồi tự duyệt chứng nhận được (nhật ký ADMIN_SELF); Trưởng bộ phận nộp thì không tự duyệt', () => {
+  const { env, c, c3, req } = setup();
+  c.reauth = () => c.call('auth.reauth', { pin: '604817' }).data.reauth_token;
+  const own = submit(c, req);
+  assert.equal(own.r.ok, true, JSON.stringify(own.r));
+  const a = approve(c, own.id);
+  assert.equal(a.ok, true, JSON.stringify(a));
+  assert.equal(env.rows('Inspections').find((x) => x.inspection_id === own.id).status, 'APPROVED');
+  assert.equal(env.rows('AuditLogs').filter((x) => x.action === 'inspection.approve').pop().auth_basis, 'ADMIN_SELF');
+  const mine3 = submit(c3, req, { certificate_number: 'CN-2', inspection_date: '2026-10-02' });
+  assert.equal(mine3.r.ok, true, JSON.stringify(mine3.r));
+  assert.equal(approve(c3, mine3.id).code, 'FORBIDDEN');
 });

@@ -2,7 +2,7 @@
 // Chưa kết nối kho: không gửi kho/xuất kho, không trừ tồn; chi phí nhập tay ghi "Tham khảo" (1.4 §5.4, phụ lục 4.4.5, 4.5)
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, badge, nameText, uuid } from '../core.js';
 import { ICON, toast, dialog, h, $, $$ } from '../ui.js';
-import { recs, mapOf, can, costModules } from '../data.js';
+import { recs, mapOf, can, costModules, adminSelf } from '../data.js';
 import { afterCommit } from '../app.js';
 import { enqueue } from '../sync.js';
 import { writeOnline, writeWithPin, busy, evBtn, oneLang, parseNumberInput, wireForm, readField, showErrors, dateInput, textInput } from '../form.js';
@@ -91,7 +91,7 @@ export async function workMatHtml(kind, work) {
   const canApprove = await can('matreq.approve');
   const canCost = (await can('work.cost.edit')) && showCost;
   const matName = (id) => { const m = mats.get(id); return m ? `<span class="code">${esc(m.material_code)}</span> ${esc(nameText(m))}` : esc(id || ''); };
-  const pendingConfirm = data.usage.filter((u) => u.status === 'PENDING_CONFIRMATION' && !u._local && u.recorded_by !== uid());
+  const pendingConfirm = data.usage.filter((u) => u.status === 'PENDING_CONFIRMATION' && !u._local && (adminSelf() || u.recorded_by !== uid()));
   const reqHtml = data.reqs.length ? data.reqs.sort((a, b) => String(b.requested_at).localeCompare(String(a.requested_at))).map((r) => {
     const ls = data.lines.filter((l) => l.request_id === r.request_id);
     const mine = r.requested_by === uid();
@@ -105,7 +105,7 @@ export async function workMatHtml(kind, work) {
       <div class="row">
         ${r.status === 'DRAFT' && canReq && (mine || lead) ? `<button type="button" class="btn tiny" data-req-edit="${esc(r.request_id)}">${ICON.edit}<span>${bi('btn.edit')}</span></button>` : ''}
         ${r.status === 'DRAFT' && (mine || lead) && !r._local_submit ? `<button type="button" class="btn tiny primary" data-req-submit="${esc(r.request_id)}">${bi('btn.submit_review')}</button>` : ''}
-        ${r.status === 'PENDING_APPROVAL' && !r._local && canApprove && !mine && r.created_by !== uid() ? `<button type="button" class="btn tiny primary" data-req-appr="${esc(r.request_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>` : ''}
+        ${r.status === 'PENDING_APPROVAL' && !r._local && canApprove && (adminSelf() || (!mine && r.created_by !== uid())) ? `<button type="button" class="btn tiny primary" data-req-appr="${esc(r.request_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>` : ''}
         ${['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(r.status) && !r._local && (mine || lead) ? `<button type="button" class="btn tiny" data-req-cancel="${esc(r.request_id)}" ${online ? '' : 'disabled'}>${bi('btn.cancel_request')}</button>` : ''}
       </div></li>`;
   }).join('') : `<li class="muted">${bi('field.not_set')}</li>`;

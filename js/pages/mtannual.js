@@ -3,7 +3,7 @@
 // dựng). Có bản đã duyệt → KPI "so với bản đã duyệt" tính trên máy từ bản chụp (tải một lần bằng annual_plan.view, giữ trên máy).
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, uuid, api, resMsg, b64ToBytes } from '../core.js';
 import { toast, dialog, $, $$ } from '../ui.js';
-import { recs, can, today } from '../data.js';
+import { recs, can, today, adminSelf } from '../data.js';
 import { RELEASED_DOT } from '../shell.js';
 import { getMeta, setMeta } from '../sync.js';
 import { afterCommit } from '../app.js';
@@ -123,7 +123,7 @@ export function annualBoxHtml(info) {
     parts.push(`<p class="muted small ap-none">${bi('ap.none')}</p>`);
   }
   if (open) {
-    const self = [open.created_by, open.prepared_by, open.submitted_by].includes(me);
+    const self = !adminSelf() && [open.created_by, open.prepared_by, open.submitted_by].includes(me);
     const reason = open.change_reason_vi || open.change_reason_zh;
     parts.push(`<div class="ap-line">${stTag(open.status)}<span>${bi('ap.rev_n', { R: pad2(open.revision) })}</span>
       <span class="muted small">${bi('ap.prepared')}: ${who(open.prepared_by_name, open.prepared_at)}</span>
@@ -280,7 +280,7 @@ export async function annualPending() {
   const href = (y) => `/maintenance?tab=year&year=${y}`;
   for (const r of list) {
     const code = `KHN ${r.year} · ${biText('ap.rev_n', { R: pad2(r.revision) })}`;
-    if (ca && r.status === 'SUBMITTED' && ![r.created_by, r.prepared_by, r.submitted_by].includes(me)) out.push({ kind: 'ANNUAL', code, sub: r.submitted_by_name || '', href: href(r.year), at: r.submitted_at || '' });
+    if (ca && r.status === 'SUBMITTED' && (adminSelf() || ![r.created_by, r.prepared_by, r.submitted_by].includes(me))) out.push({ kind: 'ANNUAL', code, sub: r.submitted_by_name || '', href: href(r.year), at: r.submitted_at || '' });
     if (cs && r.status === 'RETURNED' && r.prepared_by === me) out.push({ kind: 'ANNUAL_RET', code, sub: r.return_reason || '', href: href(r.year), at: r.returned_at || '' });
   }
   const t = today();

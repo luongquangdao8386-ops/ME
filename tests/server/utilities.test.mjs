@@ -1,7 +1,7 @@
 // Điện nước Đợt 3: đồng hồ, chỉ số lũy kế, chốt kỳ B1 (3.12), sự kiện thay/reset/đổi hệ số, biểu giá, quyền (4.4.6, 6.9.2)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakeJpegB64 } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakeJpegB64, noAdminSelf } from '../helpers.mjs';
 
 /** Đặt đồng hồ giả của máy chủ về một thời điểm (giờ Việt Nam) */
 function setNow(env, iso) { env.clock.offset = 0; env.clock.offset = Date.parse(iso) - Date.now(); }
@@ -297,6 +297,7 @@ test('đồng hồ tổng/nhánh: tổng không cộng nhánh khi có đồng h�
 
 test('hệ số ban đầu sửa được khi chưa có chỉ số; có rồi → MULTIPLIER_NEEDS_EVENT; sự kiện đổi hệ số được duyệt thì kỳ tính theo từng giai đoạn', () => {
   const { env, c, dn, c3 } = setup();
+  noAdminSelf(env, c); // d4.34: Quản trị mặc định được tự duyệt; tắt để thử quy tắc với tài khoản cấp 4
   const m = addMeter(c).id;
   const ver = () => env.rows('Meters').find((x) => x.meter_id === m).record_version;
   assert.equal(c.write('meter.edit', { meter_id: m, multiplier: 2 }, { expected_version: ver() }).ok, true);

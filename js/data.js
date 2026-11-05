@@ -54,6 +54,8 @@ export async function costModules() {
 }
 
 export function roleLevel() { return Number(session.user && session.user.role_level) || 0; }
+/** d4.34: cấp Quản trị tự duyệt/nghiệm thu/xác minh được việc của mình (máy chủ ≥ d4.34 gửi Settings admin_self_approval; máy chủ cũ không gửi → như trước) */
+export function adminSelf() { return roleLevel() === 4 && !!(session.settings && session.settings.admin_self_approval === true); }
 export function isOwner() { return !!(session.user && session.user.is_system_owner && roleLevel() === 4); }
 
 /* ---------------- Ngày (giờ Việt Nam, ngày lịch) ---------------- */

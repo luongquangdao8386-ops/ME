@@ -470,7 +470,7 @@ function circuitVerify_(ctx) {
         writes: [{ sheet: sheet, mode: 'update', row: row }],
         result: { entity_type: kind, entity_id: row[key], record_version: row.record_version, record: projectRow_(ctx, row, sheet) },
         record_version: row.record_version,
-        audit: { entity_type: kind, entity_id: row[key], before_json: { verified_by: cur.verified_by }, after_json: { verified_by: row.verified_by }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+        audit: { entity_type: kind, entity_id: row[key], before_json: { verified_by: cur.verified_by }, after_json: { verified_by: row.verified_by }, auth_basis: selfBasis_(basis), reason: trimStr_(p.self_approval_reason) }
       };
     }
   });
@@ -539,7 +539,7 @@ function circuitDrawingApprove_(ctx) {
         writes: writes,
         result: { entity_type: 'DOCUMENT', entity_id: row.document_id, approval_status: row.approval_status, record_version: row.record_version, record: projectDoc_(ctx, row) },
         record_version: row.record_version,
-        audit: { entity_type: d.entity_type, entity_id: d.entity_id, before_json: { document_id: d.document_id, approval_status: d.approval_status }, after_json: { approval_status: row.approval_status, superseded: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: d.entity_type, entity_id: d.entity_id, before_json: { document_id: d.document_id, approval_status: d.approval_status }, after_json: { approval_status: row.approval_status, superseded: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis) }
       };
     }
   });

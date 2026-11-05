@@ -38,6 +38,8 @@ for (const [name, viewport, mobile] of [['web', { width: 1440, height: 900 }, fa
       if (name === 'web') {
         const row = page.locator(`tr[data-href^="/utilities/meters/${id.MSB1}"]`);
         await row.waitFor({ timeout: 15000 });
+        // chờ bảng vẽ lại theo kỳ 1 ngày (bảng kỳ 5 ngày có sẵn trước khi bấm)
+        await page.waitForFunction((x) => ((document.querySelector(`tr[data-href^="/utilities/meters/${x}"]`) || {}).textContent || '').includes('Kỳ chưa kết thúc'), id.MSB1, { timeout: 15000 });
         const txt = await row.textContent();
         assert.ok(txt.includes('Kỳ chưa kết thúc'), txt);
         assert.ok(txt.includes('chưa đọc số đầu kỳ'), txt);

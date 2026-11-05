@@ -870,7 +870,7 @@ function importCommit_(ctx) {
     var nowIso = isoVN_(now_());
     if (b.status === 'READY' || b.status === 'PENDING_APPROVAL') {
       if (b.status === 'READY' && b.imported_by !== ctx.user.user_id) throw validationError_([fieldError_('import_batch_id', 'INVALID_VALUE')]);
-      if (sensitive && b.imported_by === ctx.user.user_id) throw apiError_('FORBIDDEN');
+      if (sensitive && b.imported_by === ctx.user.user_id && !adminSelfOk_(ctx)) throw apiError_('FORBIDDEN');
       writeCells_('ImportBatches', b.__row, { status: 'COMMITTING', approved_by: ctx.user.user_id, committing_session_id: ctx.sid, commit_started_at: nowIso, updated_at: nowIso, record_version: (b.record_version || 1) + 1 });
     } else if (b.status === 'COMMITTING' || b.status === 'PARTIAL') {
       if (b.approved_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');

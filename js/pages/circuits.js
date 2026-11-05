@@ -4,7 +4,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, resMsg, session } from '../core.js';
 import { ICON, toast, toTop, dialog, $, $$, setViewHtml, wireSearch, freshFilters } from '../ui.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can, invalidate } from '../data.js';
+import { recs, byId, mapOf, can, invalidate, adminSelf } from '../data.js';
 import { upsertLocal } from '../sync.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
@@ -302,7 +302,7 @@ async function circuitPane(pane, id, ctx) {
     <div class="row">
       <a class="btn small primary" href="#/circuits/trace?circuit=${esc(c.circuit_id)}">${ICON.circuits}<span>${bi('ci.view_trace')}</span></a>
       ${p.edit ? `<a class="btn small" href="#/circuits/c/${esc(c.circuit_id)}/edit" ${navigator.onLine ? '' : 'aria-disabled="true"'}>${ICON.edit}<span>${bi('ci.edit_circuit')}</span></a>` : ''}
-      ${p.verify && !c.verified_by ? (c.updated_by === uidMe ? `<span class="muted small">${bi('ci.verify_self')}</span>` : `<button type="button" class="btn small" id="ci-verify" ${navigator.onLine ? '' : 'disabled'}>${ICON.check}<span>${bi('ci.verify')}</span></button>`) : ''}
+      ${p.verify && !c.verified_by ? (c.updated_by === uidMe && !adminSelf() ? `<span class="muted small">${bi('ci.verify_self')}</span>` : `<button type="button" class="btn small" id="ci-verify" ${navigator.onLine ? '' : 'disabled'}>${ICON.check}<span>${bi('ci.verify')}</span></button>`) : ''}
     </div>
     <p class="muted small ci-safe"><span>${bi('ci.not_isolation')}</span></p>
   </section>
@@ -450,7 +450,7 @@ async function panelPane(pane, id, ctx) {
       ${eq ? `<a class="btn small" href="#/equipment/${esc(eq.equipment_id)}">${ICON.equipment}<span>${bi('ci.equipment_link')}</span></a>` : ''}
       ${p.edit ? `<a class="btn small" href="#/circuits/p/${esc(pn.panel_id)}/edit" ${navigator.onLine ? '' : 'aria-disabled="true"'}>${ICON.edit}<span>${bi('ci.edit_panel')}</span></a>
         <a class="btn small" href="#/circuits/c/new?panel=${esc(pn.panel_id)}">${ICON.plus}<span>${bi('ci.add_circuit')}</span></a>` : ''}
-      ${p.verify && !pn.verified_by ? (pn.updated_by === uidMe ? `<span class="muted small">${bi('ci.verify_self')}</span>` : `<button type="button" class="btn small" id="pn-verify" ${navigator.onLine ? '' : 'disabled'}>${ICON.check}<span>${bi('ci.verify')}</span></button>`) : ''}
+      ${p.verify && !pn.verified_by ? (pn.updated_by === uidMe && !adminSelf() ? `<span class="muted small">${bi('ci.verify_self')}</span>` : `<button type="button" class="btn small" id="pn-verify" ${navigator.onLine ? '' : 'disabled'}>${ICON.check}<span>${bi('ci.verify')}</span></button>`) : ''}
       ${pn.qr_key && isWide() ? `<a class="btn small" href="#/qr/PANEL/${esc(pn.panel_id)}">${ICON.qr}<span>${bi('btn.view_qr')}</span></a>` : ''}
     </div>
     <p class="muted small ci-safe"><span>${bi('ci.not_isolation')}</span></p></section>
@@ -504,7 +504,7 @@ async function drawingsHtml(type, id, p) {
       <td>v${esc(d.file_version || 1)}</td><td>${badge('drawing_status.' + st)}</td><td class="num">${esc(fmtDate(d.document_date || String(d.created_at || '').slice(0, 10)))}</td>
       <td><div class="row">${d.storage_kind === 'LINK' ? `<a class="btn tiny" href="${esc(d.external_url)}" target="_blank" rel="noopener noreferrer">${bi('ci.open_drawing')}</a>`
         : `<button type="button" class="btn tiny" data-dr-dl="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${ICON.download}<span>${bi('ci.open_drawing')}</span></button><button type="button" class="btn tiny primary" data-dr-open="${esc(d.document_id)}" hidden>${bi('btn.open_save')}</button>`}
-        ${p.approve && st === 'DRAFT' ? (d.created_by === uidMe ? `<span class="muted small">${bi('ci.drawing_self')}</span>` : `<button type="button" class="btn tiny primary" data-dr-ok="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${bi('btn.approve')}</button><button type="button" class="btn tiny" data-dr-no="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button>`) : ''}</div></td></tr>`; }).join('')}</tbody></table></div>`
+        ${p.approve && st === 'DRAFT' ? (d.created_by === uidMe && !adminSelf() ? `<span class="muted small">${bi('ci.drawing_self')}</span>` : `<button type="button" class="btn tiny primary" data-dr-ok="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${bi('btn.approve')}</button><button type="button" class="btn tiny" data-dr-no="${esc(d.document_id)}" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button>`) : ''}</div></td></tr>`; }).join('')}</tbody></table></div>`
     : `<p class="muted">${bi('doc.none')}</p>`}
     ${p.upload ? `<div class="row upload-row"><label class="btn small file${online ? '' : ' disabled'}">${ICON.upload}<span>${bi('ci.drawing_upload')}</span><input type="file" accept="application/pdf,image/jpeg,image/png" data-dr-up="1" hidden ${online ? '' : 'disabled'}></label>
       <button type="button" class="btn small" data-dr-link="1" ${online ? '' : 'disabled'}>${ICON.link}<span>${bi('ci.drawing_link')}</span></button></div>

@@ -2,7 +2,7 @@
 import { bi, biText, esc, api, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, session, uuid, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, daysBetween } from '../data.js';
+import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, daysBetween, adminSelf } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
@@ -159,11 +159,11 @@ export async function renderContract(view, ctx) {
       ${!isDraft && c.lifecycle_status === 'ACTIVE' && can_['contract.editTerms'] ? `<button type="button" class="btn small" id="co-terms" ${online ? '' : 'disabled'}>${bi('co.edit_terms')}</button>` : ''}
       ${!isDraft && c.lifecycle_status === 'ACTIVE' && can_['contract.close'] ? `<button type="button" class="btn small" id="co-close" ${online ? '' : 'disabled'}>${bi('co.close')}</button>` : ''}
       ${isDraft && ['DRAFT', 'REJECTED'].includes(c.status) && can_['contract.renewal.submit'] ? `<button type="button" class="btn small primary" id="co-submit" ${online ? '' : 'disabled'}>${bi('btn.submit_review')}</button>` : ''}
-      ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && c.created_by !== uid && c.submitted_by !== uid ? `<button type="button" class="btn small primary" id="co-appr" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button><button type="button" class="btn small" id="co-rej" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button>` : ''}
+      ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && (adminSelf() || (c.created_by !== uid && c.submitted_by !== uid)) ? `<button type="button" class="btn small primary" id="co-appr" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button><button type="button" class="btn small" id="co-rej" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button>` : ''}
       ${can_['contract.archive'] && !c.archived_at && c.lifecycle_status !== 'ACTIVE' ? `<button type="button" class="btn small" id="co-arch" ${online ? '' : 'disabled'}>${ICON.archive}<span>${bi('co.archive')}</span></button>` : ''}
     </div>
     ${c.status === 'PENDING_APPROVAL' && !can_['contract.renewal.approve'] && Number(session.user && session.user.role_level) >= 3 ? `<p class="muted small" id="co-why">${bi('co.no_approve_right')}</p>` : ''}
-    ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && (c.created_by === uid || c.submitted_by === uid) ? `<p class="muted small" id="co-why">${bi('co.self_no_approve')}</p>` : ''}
+    ${c.status === 'PENDING_APPROVAL' && can_['contract.renewal.approve'] && !adminSelf() && (c.created_by === uid || c.submitted_by === uid) ? `<p class="muted small" id="co-why">${bi('co.self_no_approve')}</p>` : ''}
     ${!online ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}
   </section>
   <section class="card"><h3>${bi('co.equipment')}</h3>
@@ -180,7 +180,7 @@ export async function renderContract(view, ctx) {
           ${showCost && s.cost !== undefined && s.cost !== '' ? `<div class="muted small">${bi('in.cost')}: ${money(s.cost, s.currency)}</div>` : ''}</div>
         <div class="row">
           ${s.status !== 'ACCEPTED' && can_['contract.service.record'] && c.lifecycle_status === 'ACTIVE' ? `<button type="button" class="btn tiny" data-rec="${esc(s.service_id)}">${bi('co.record_service')}</button>` : ''}
-          ${s.status === 'DONE' && can_['contract.service.accept'] && s.created_by !== uid && s.updated_by !== uid ? `<button type="button" class="btn tiny primary" data-acc="${esc(s.service_id)}" ${online ? '' : 'disabled'}>${bi('co.accept_service')}</button>` : ''}
+          ${s.status === 'DONE' && can_['contract.service.accept'] && (adminSelf() || (s.created_by !== uid && s.updated_by !== uid)) ? `<button type="button" class="btn tiny primary" data-acc="${esc(s.service_id)}" ${online ? '' : 'disabled'}>${bi('co.accept_service')}</button>` : ''}
         </div></li>`).join('') || (local.length ? '' : `<li class="muted">${bi('field.not_set')}</li>`)}
     </ul>
     ${can_['contract.service.record'] && c.lifecycle_status === 'ACTIVE' ? `<div class="row"><button type="button" class="btn small" id="co-rec-new">${ICON.plus}<span>${bi('co.record_service')}</span></button></div>` : ''}

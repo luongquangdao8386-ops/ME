@@ -4,7 +4,7 @@ import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, l
 import { excelLink } from '../excel-link.js';
 import { reportLink } from '../report-link.js';
 import { isWide } from '../shell.js';
-import { recs, byId, mapOf, can, canSync, boot, roleLevel, dueInfo, requirementRecordStatus, costModules, today } from '../data.js';
+import { recs, byId, mapOf, can, canSync, boot, roleLevel, dueInfo, requirementRecordStatus, costModules, today, adminSelf } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
@@ -198,7 +198,7 @@ export async function renderRequirement(view, ctx) {
       ${insp.map((i) => `<li class="hist-row">
         <div><a href="#/inspections/record/${esc(i.inspection_id)}" class="code">${esc(i.inspection_code)}</a> · ${esc(fmtDate(i.inspection_date))} · ${badge('inspection_result.' + i.result)} ${badge('cert_status.' + i.status)}
           ${i.valid_to ? `<span class="muted small"> · ${bi('field.valid_to')}: ${esc(fmtDate(i.valid_to))}</span>` : ''}</div>
-        ${i.status === 'PENDING_APPROVAL' && canApprove && i.submitted_by !== uid && i.created_by !== uid ? `<div class="row"><button type="button" class="btn tiny primary" data-appr="${esc(i.inspection_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>
+        ${i.status === 'PENDING_APPROVAL' && canApprove && (adminSelf() || (i.submitted_by !== uid && i.created_by !== uid)) ? `<div class="row"><button type="button" class="btn tiny primary" data-appr="${esc(i.inspection_id)}" ${online ? '' : 'disabled'}>${ICON.check}<span>${bi('btn.approve')}</span></button>
           <button type="button" class="btn tiny" data-rej="${esc(i.inspection_id)}" ${online ? '' : 'disabled'}>${bi('btn.reject')}</button></div>` : ''}
       </li>`).join('') || (local.length ? '' : `<li class="muted">${bi('history.empty')}</li>`)}
     </ul></section>`;
@@ -250,7 +250,7 @@ export async function renderInspectionRecord(view, ctx) {
   const vendors = await mapOf('VENDOR');
   const r = await byId('INSPECTION_REQUIREMENT', i.requirement_id);
   const uid = session.user && session.user.user_id;
-  const canApprove = (await can('inspection.approve')) && i.status === 'PENDING_APPROVAL' && i.submitted_by !== uid && i.created_by !== uid;
+  const canApprove = (await can('inspection.approve')) && i.status === 'PENDING_APPROVAL' && (adminSelf() || (i.submitted_by !== uid && i.created_by !== uid));
   view.innerHTML = `<section class="card">
     <div class="rec-top"><span class="code big">${esc(i.inspection_code)}</span>${badge('cert_status.' + i.status)}</div>
     ${r ? `<p><a href="#/inspections/${esc(r.requirement_id)}">${esc(r.requirement_code)}</a></p>` : ''}

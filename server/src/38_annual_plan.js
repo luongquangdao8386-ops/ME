@@ -255,7 +255,7 @@ function annualPlanApprove_(ctx) {
         audit: {
           entity_type: 'ANNUAL_PLAN', entity_id: row.annual_plan_id, before_json: { status: cur.status },
           after_json: { status: row.status, code: row.annual_plan_code, year: row.year, revision: row.revision },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }

@@ -251,7 +251,7 @@ function contractEditTerms_(ctx) {
         writes: [{ sheet: 'Contracts', mode: 'update', row: row }],
         result: contractResult_(ctx, row),
         record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: before, after_json: after, reason: trimStr_(p.reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: before, after_json: after, reason: trimStr_(p.reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -430,7 +430,7 @@ function contractRenewalApprove_(ctx) {
       writes.unshift({ sheet: 'Contracts', mode: 'update', row: row });
       return {
         writes: writes, result: contractResult_(ctx, row), record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'PENDING_APPROVAL' }, after_json: { status: row.status, end_date: row.end_date, due_revision: row.due_revision }, reason: trimStr_(p.reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'PENDING_APPROVAL' }, after_json: { status: row.status, end_date: row.end_date, due_revision: row.due_revision }, reason: trimStr_(p.reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -513,7 +513,7 @@ function contractServiceAccept_(ctx) {
         writes: [{ sheet: 'ContractServices', mode: 'update', row: row }],
         result: { entity_type: 'CONTRACT_SERVICE', entity_id: row.service_id, record_version: row.record_version, record: projectRow_(ctx, row, 'ContractServices') },
         record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'DONE' }, after_json: { status: 'ACCEPTED' }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'DONE' }, after_json: { status: 'ACCEPTED' }, auth_basis: selfBasis_(basis) }
       };
     }
   });

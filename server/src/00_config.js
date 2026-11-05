@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.33';
+var SERVER_VERSION = '1.0.0-d4.34';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
@@ -74,6 +74,8 @@ var SETTINGS_DEFAULTS = [
   ['backup_hour', 'INT', 1, false, 1, 'Giờ sao lưu', '备份时间'],
   ['backup_keep_count', 'INT', 8, false, 1, 'Số bản sao lưu giữ lại', '保留备份份数'],
   ['self_approval_exceptions', 'JSON', [], true, 1, 'Ngoại lệ tự duyệt', '自审批例外'],
+  // d4.34 (người dùng yêu cầu 05/11/2026): cấp Quản trị (4) được tự duyệt/nghiệm thu/xác minh việc của chính mình; cấp 1–3 giữ quy tắc không tự duyệt
+  ['admin_self_approval', 'BOOL', true, true, 1, 'Quản trị được tự duyệt việc của mình', '管理员可审批本人事项'],
   // Đợt 2: phiếu bảo trì theo lịch được tạo trước hạn N ngày (đề xuất mặc định, phiên Đợt 2)
   ['wo_generate_days_ahead', 'INT', 7, true, 2, 'Tạo phiếu bảo trì trước hạn (ngày)', '提前生成保养工单（天）'],
   ['meter_boundary_window_hours', 'INT', 24, true, 3, 'Cửa sổ chốt chỉ số theo kỳ (giờ)', '抄表周期结算时间窗（小时）'],

@@ -403,11 +403,22 @@ function canViewCost_(ctx, module) {
 function assertNotSelf_(ctx, code, people) {
   var uid = ctx.user.user_id;
   if (people.indexOf(uid) < 0) return 'ROLE_LEVEL';
+  if (adminSelfOk_(ctx)) return 'ADMIN_SELF';
   var ex = setting_('self_approval_exceptions') || [];
   var reason = trimStr_((ctx.req.payload || {}).self_approval_reason);
   var allowed = ex.some(function (e) { return e && e.action_code === code; });
   if (allowed && reason) return 'SELF_APPROVAL_EXCEPTION';
   throw apiError_('FORBIDDEN');
+}
+
+/** d4.34: cấp Quản trị (4) được tự duyệt khi Settings admin_self_approval bật (mặc định bật); cấp 1–3 không */
+function adminSelfOk_(ctx) {
+  return !!(ctx && ctx.user && Number(ctx.user.role_level) === 4 && setting_('admin_self_approval') !== false);
+}
+
+/** auth_basis ghi nhật ký khi người duyệt cũng là người lập/gửi/làm (ngoại lệ có lý do, hoặc Quản trị tự duyệt) */
+function selfBasis_(basis) {
+  return basis === 'SELF_APPROVAL_EXCEPTION' || basis === 'ADMIN_SELF' ? basis : undefined;
 }
 
 /** Cơ sở quyền ghi vào AuditLogs.auth_basis */

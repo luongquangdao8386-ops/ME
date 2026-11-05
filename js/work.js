@@ -1,7 +1,7 @@
 // Phiếu công việc Đợt 2 (bảo trì, sửa chữa): gộp nháp trên máy lên bản máy chủ, điều kiện Gửi nghiệm thu (5.1.1, C8),
 // danh sách Công việc (5.2), quyền phía client (chỉ để ẩn/hiện nút; máy chủ kiểm lại)
 import { session, bi, badge, esc, nameText, fmtNumber } from './core.js';
-import { recs, mapOf, can, today, daysBetween } from './data.js';
+import { recs, mapOf, can, today, daysBetween, adminSelf } from './data.js';
 import { queueItems, enqueue } from './sync.js';
 
 export const WO_OPEN = new Set(['DRAFT', 'ASSIGNED', 'IN_PROGRESS', 'PENDING_ACCEPTANCE']);
@@ -164,11 +164,13 @@ export function wireIssueList(view) {
 
 /** Người không được nghiệm thu phiếu bảo trì: người được giao, người gửi, người lập (trừ SYSTEM), người sửa kết quả checklist */
 export function woSelfPeople(w, results) {
+  if (adminSelf()) return [];
   return [w.assignee_user_id, w.submitted_by, w.created_by === 'SYSTEM' ? '' : w.created_by,
     ...results.filter((r) => r.updated_by && r.updated_by !== r.created_by).map((r) => r.updated_by)].filter(Boolean);
 }
 /** Người không được nghiệm thu phiếu sửa: người báo, người gửi, người phụ trách, người làm việc con */
 export function repairSelfPeople(r, tasks) {
+  if (adminSelf()) return [];
   return [r.reported_by, r.submitted_by, r.assignee_user_id, ...tasks.map((t) => t.assignee_user_id)].filter(Boolean);
 }
 
@@ -207,7 +209,7 @@ export async function pendingForMe() {
   }
   if (cm) {
     for (const q of await recs('MATERIAL_REQUEST')) {
-      if (q.status !== 'PENDING_APPROVAL' || q.archived_at || q.requested_by === u || q.created_by === u) continue;
+      if (q.status !== 'PENDING_APPROVAL' || q.archived_at || (!adminSelf() && (q.requested_by === u || q.created_by === u))) continue;
       const w = q.work_type === 'REPAIR' ? reps.find((x) => x.repair_id === q.work_id) : wos.find((x) => x.work_order_id === q.work_id);
       if (!w) continue;
       const href = q.work_type === 'REPAIR' ? '/repairs/' + q.work_id : '/maintenance/wo/' + q.work_id;
@@ -218,7 +220,7 @@ export async function pendingForMe() {
     // Bản vẽ tủ/lộ chờ duyệt (người tải lên không tự duyệt): bấm tới hồ sơ, mở sẵn tab Tài liệu
     const pns = await mapOf('PANEL'), cis = await mapOf('CIRCUIT');
     for (const d of await recs('DOCUMENT')) {
-      if (d.kind !== 'DRAWING' || d.approval_status !== 'DRAFT' || d.active === false || d.created_by === u) continue;
+      if (d.kind !== 'DRAWING' || d.approval_status !== 'DRAFT' || d.active === false || (!adminSelf() && d.created_by === u)) continue;
       const host = d.entity_type === 'CIRCUIT' ? cis.get(d.entity_id) : (d.entity_type === 'PANEL' ? pns.get(d.entity_id) : null);
       if (!host || host.archived_at) continue;
       const href = d.entity_type === 'CIRCUIT' ? `/circuits/c/${d.entity_id}?tab=documents` : `/circuits/p/${d.entity_id}`;

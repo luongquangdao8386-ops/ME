@@ -1,7 +1,7 @@
 // Nhập/xuất Excel (CM-03, 1.4 §11, phụ lục 6.5.1): tải mẫu, chọn tệp → xem trước theo khúc → lỗi theo dòng → gửi duyệt / nhập dữ liệu; xuất theo quyền
 import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, uuid, resMsg, session, BUILD_VERSION } from '../core.js';
 import { $, $$, ICON, toast, dialog } from '../ui.js';
-import { can, roleLevel } from '../data.js';
+import { can, roleLevel, adminSelf } from '../data.js';
 import { writeOnline, writeWithPin, busy, evBtn } from '../form.js';
 import { afterCommit } from '../app.js';
 import { loadXlsx, readImportFile, buildSheet, aoaSheet, workbookFile } from '../xlsx.js';
@@ -164,7 +164,7 @@ function summaryHtml(key, s) {
     s.mt_fields ? `<p class="muted small">${bi('excel.mt_fields', { N: s.mt_fields })}</p>` : '',
     s.sensitive ? `<p class="banner warn">${bi('excel.sensitive')}</p>` : '',
     s.status === 'NEEDS_FIX' ? `<p class="banner err">${bi('excel.blocked')}</p>` : '',
-    s.status === 'PENDING_APPROVAL' && s.mine ? `<p class="banner info">${bi('excel.wait_approval')}</p>` : '',
+    s.status === 'PENDING_APPROVAL' && s.mine && !adminSelf() ? `<p class="banner info">${bi('excel.wait_approval')}</p>` : '',
     s.failed ? `<p class="banner err">${bi('excel.failed_rows', { N: s.failed })}</p>` : ''
   ].join('');
   const errs = (s.errors || []).length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('excel.sheet')}</th><th>${bi('excel.row')}</th><th>${bi('excel.field')}</th><th>${bi('excel.errors')}</th></tr></thead>
@@ -173,7 +173,7 @@ function summaryHtml(key, s) {
   const changes = (s.changes || []).length ? `<details class="card"><summary><strong>${bi('excel.changes')}</strong> (${s.changes.length})</summary>
     <div class="table-wrap"><table class="tbl"><thead><tr><th>${bi('excel.row')}</th><th>${bi('col.code')}</th><th>${bi('excel.field')}</th><th>${bi('adm.audit.before')}</th><th>${bi('adm.audit.after')}</th></tr></thead>
     <tbody>${s.changes.flatMap((c) => Object.entries(c.diff).map(([f, [a, b]]) => `<tr><td>${esc(c.row_number)}</td><td class="code">${esc(c.code)}</td><td><code>${esc(f)}</code></td><td>${esc(String(a))}</td><td>${esc(String(b))}</td></tr>`)).join('')}</tbody></table></div></details>` : '';
-  const canCommit = s.can_commit && (s.status === 'PENDING_APPROVAL' || s.status === 'PARTIAL' || (s.status === 'READY' && s.mine)) && !(s.sensitive && s.mine);
+  const canCommit = s.can_commit && (s.status === 'PENDING_APPROVAL' || s.status === 'PARTIAL' || (s.status === 'READY' && s.mine)) && !(s.sensitive && s.mine && !adminSelf());
   const actions = `<div class="row">
     ${canCommit ? `<button type="button" class="btn primary" id="x-commit">${bi('excel.btn_commit')}</button>` : ''}
     ${s.status === 'READY' && s.mine ? `<button type="button" class="btn${canCommit ? '' : ' primary'}" id="x-submit">${bi('excel.btn_submit')}</button>` : ''}

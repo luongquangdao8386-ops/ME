@@ -663,7 +663,7 @@ function meterEventApprove_(ctx) {
         audit: {
           entity_type: 'METER', entity_id: ev.meter_id, before_json: { event_id: ev.event_id, status: ev.status },
           after_json: { event_id: ev.event_id, status: e2.status, new_segment_id: e2.new_segment_id || undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -1119,7 +1119,7 @@ function tariffApprove_(ctx) {
         writes: writes,
         result: { entity_type: 'TARIFF', entity_id: row.tariff_id, status: row.status, record_version: row.record_version, record: projectRow_(ctx, row, 'UtilityTariffs') },
         record_version: row.record_version,
-        audit: { entity_type: 'TARIFF', entity_id: row.tariff_id, before_json: { status: t.status }, after_json: { status: row.status, closed: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'TARIFF', entity_id: row.tariff_id, before_json: { status: t.status }, after_json: { status: row.status, closed: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis) }
       };
     }
   });

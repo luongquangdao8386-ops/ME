@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d4.33
+ * M&E · 机电管理 — Code.gs 1.0.0-d4.34
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.33';
+var SERVER_VERSION = '1.0.0-d4.34';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
@@ -82,6 +82,8 @@ var SETTINGS_DEFAULTS = [
   ['backup_hour', 'INT', 1, false, 1, 'Giờ sao lưu', '备份时间'],
   ['backup_keep_count', 'INT', 8, false, 1, 'Số bản sao lưu giữ lại', '保留备份份数'],
   ['self_approval_exceptions', 'JSON', [], true, 1, 'Ngoại lệ tự duyệt', '自审批例外'],
+  // d4.34 (người dùng yêu cầu 05/11/2026): cấp Quản trị (4) được tự duyệt/nghiệm thu/xác minh việc của chính mình; cấp 1–3 giữ quy tắc không tự duyệt
+  ['admin_self_approval', 'BOOL', true, true, 1, 'Quản trị được tự duyệt việc của mình', '管理员可审批本人事项'],
   // Đợt 2: phiếu bảo trì theo lịch được tạo trước hạn N ngày (đề xuất mặc định, phiên Đợt 2)
   ['wo_generate_days_ahead', 'INT', 7, true, 2, 'Tạo phiếu bảo trì trước hạn (ngày)', '提前生成保养工单（天）'],
   ['meter_boundary_window_hours', 'INT', 24, true, 3, 'Cửa sổ chốt chỉ số theo kỳ (giờ)', '抄表周期结算时间窗（小时）'],
@@ -2352,11 +2354,22 @@ function canViewCost_(ctx, module) {
 function assertNotSelf_(ctx, code, people) {
   var uid = ctx.user.user_id;
   if (people.indexOf(uid) < 0) return 'ROLE_LEVEL';
+  if (adminSelfOk_(ctx)) return 'ADMIN_SELF';
   var ex = setting_('self_approval_exceptions') || [];
   var reason = trimStr_((ctx.req.payload || {}).self_approval_reason);
   var allowed = ex.some(function (e) { return e && e.action_code === code; });
   if (allowed && reason) return 'SELF_APPROVAL_EXCEPTION';
   throw apiError_('FORBIDDEN');
+}
+
+/** d4.34: cấp Quản trị (4) được tự duyệt khi Settings admin_self_approval bật (mặc định bật); cấp 1–3 không */
+function adminSelfOk_(ctx) {
+  return !!(ctx && ctx.user && Number(ctx.user.role_level) === 4 && setting_('admin_self_approval') !== false);
+}
+
+/** auth_basis ghi nhật ký khi người duyệt cũng là người lập/gửi/làm (ngoại lệ có lý do, hoặc Quản trị tự duyệt) */
+function selfBasis_(basis) {
+  return basis === 'SELF_APPROVAL_EXCEPTION' || basis === 'ADMIN_SELF' ? basis : undefined;
 }
 
 /** Cơ sở quyền ghi vào AuditLogs.auth_basis */
@@ -3837,7 +3850,7 @@ function inspectionApprove_(ctx) {
         audit: {
           entity_type: 'INSPECTION', entity_id: row.inspection_id, before_json: { status: cur.status },
           after_json: { status: row.status, current_due_date: reqAfter ? reqAfter.current_due_date : undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -5639,7 +5652,7 @@ function partApprove_(ctx) {
         writes: [{ sheet: 'EquipmentParts', mode: 'update', row: row }, { sheet: 'EquipmentPartEvents', mode: 'insert', row: ev }],
         result: { entity_type: 'EQUIPMENT_PART', entity_id: row.equipment_part_id, record_version: row.record_version, record: projectRow_(ctx, row, 'EquipmentParts') },
         record_version: row.record_version,
-        audit: { entity_type: 'EQUIPMENT', entity_id: row.equipment_id, before_json: { approved_by: '' }, after_json: { approved_by: row.approved_by, alternate_part_id: row.alternate_part_id }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+        audit: { entity_type: 'EQUIPMENT', entity_id: row.equipment_id, before_json: { approved_by: '' }, after_json: { approved_by: row.approved_by, alternate_part_id: row.alternate_part_id }, auth_basis: selfBasis_(basis), reason: trimStr_(p.self_approval_reason) }
       };
     }
   });
@@ -5899,7 +5912,7 @@ function contractEditTerms_(ctx) {
         writes: [{ sheet: 'Contracts', mode: 'update', row: row }],
         result: contractResult_(ctx, row),
         record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: before, after_json: after, reason: trimStr_(p.reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: before, after_json: after, reason: trimStr_(p.reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -6078,7 +6091,7 @@ function contractRenewalApprove_(ctx) {
       writes.unshift({ sheet: 'Contracts', mode: 'update', row: row });
       return {
         writes: writes, result: contractResult_(ctx, row), record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'PENDING_APPROVAL' }, after_json: { status: row.status, end_date: row.end_date, due_revision: row.due_revision }, reason: trimStr_(p.reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'PENDING_APPROVAL' }, after_json: { status: row.status, end_date: row.end_date, due_revision: row.due_revision }, reason: trimStr_(p.reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -6161,7 +6174,7 @@ function contractServiceAccept_(ctx) {
         writes: [{ sheet: 'ContractServices', mode: 'update', row: row }],
         result: { entity_type: 'CONTRACT_SERVICE', entity_id: row.service_id, record_version: row.record_version, record: projectRow_(ctx, row, 'ContractServices') },
         record_version: row.record_version,
-        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'DONE' }, after_json: { status: 'ACCEPTED' }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'CONTRACT', entity_id: row.contract_id, before_json: { status: 'DONE' }, after_json: { status: 'ACCEPTED' }, auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -9052,7 +9065,7 @@ function importCommit_(ctx) {
     var nowIso = isoVN_(now_());
     if (b.status === 'READY' || b.status === 'PENDING_APPROVAL') {
       if (b.status === 'READY' && b.imported_by !== ctx.user.user_id) throw validationError_([fieldError_('import_batch_id', 'INVALID_VALUE')]);
-      if (sensitive && b.imported_by === ctx.user.user_id) throw apiError_('FORBIDDEN');
+      if (sensitive && b.imported_by === ctx.user.user_id && !adminSelfOk_(ctx)) throw apiError_('FORBIDDEN');
       writeCells_('ImportBatches', b.__row, { status: 'COMMITTING', approved_by: ctx.user.user_id, committing_session_id: ctx.sid, commit_started_at: nowIso, updated_at: nowIso, record_version: (b.record_version || 1) + 1 });
     } else if (b.status === 'COMMITTING' || b.status === 'PARTIAL') {
       if (b.approved_by !== ctx.user.user_id) throw apiError_('FORBIDDEN');
@@ -10315,7 +10328,7 @@ function maintenanceAccept_(ctx) {
         if (p.confirm_usage) {
           findAll_('MaterialUsageLines', 'work_id', w.work_order_id).forEach(function (u) {
             if (u.work_type !== 'WORK_ORDER' || u.archived_at || u.status !== 'PENDING_CONFIRMATION') return;
-            if (u.recorded_by === ctx.user.user_id) { usageSkipped.push(u.usage_line_id); return; }
+            if (u.recorded_by === ctx.user.user_id && !adminSelfOk_(ctx)) { usageSkipped.push(u.usage_line_id); return; }
             var u2 = clone_(u); delete u2.__row;
             u2.status = 'CONFIRMED'; u2.confirmed_by = ctx.user.user_id; u2.confirmed_at = nowIso;
             cUpdate_(ctx, u2);
@@ -10342,7 +10355,7 @@ function maintenanceAccept_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: 'WORK_ORDER', entity_id: row.work_order_id, before_json: { status: w.status }, after_json: { status: row.status, next_due_date: row.next_due_date || undefined, usage_confirmed: usageDone.length || undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -10805,7 +10818,7 @@ function repairAccept_(ctx) {
         if (p.confirm_usage) {
           findAll_('MaterialUsageLines', 'work_id', r.repair_id).forEach(function (u) {
             if (u.work_type !== 'REPAIR' || u.archived_at || u.status !== 'PENDING_CONFIRMATION') return;
-            if (u.recorded_by === ctx.user.user_id) { usageSkipped.push(u.usage_line_id); return; }
+            if (u.recorded_by === ctx.user.user_id && !adminSelfOk_(ctx)) { usageSkipped.push(u.usage_line_id); return; }
             var u2 = clone_(u); delete u2.__row;
             u2.status = 'CONFIRMED'; u2.confirmed_by = ctx.user.user_id; u2.confirmed_at = nowIso;
             cUpdate_(ctx, u2);
@@ -10822,7 +10835,7 @@ function repairAccept_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: 'REPAIR', entity_id: row.repair_id, before_json: { status: r.status }, after_json: { status: row.status, acceptance_result: row.acceptance_result, usage_confirmed: usageDone.length || undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -11170,7 +11183,7 @@ function matreqApprove_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: wk.wt.entity, entity_id: r.work_id, before_json: { request_id: r.request_id, status: r.status }, after_json: { status: row.status, approved_qty: qmap },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -11332,7 +11345,7 @@ function usageConfirm_(ctx) {
       pick.forEach(function (u) {
         if (u.status !== 'PENDING_CONFIRMATION') { if (ids) throw validationError_([fieldError_('usage_lines[' + u.usage_line_id + ']', 'STATUS_INVALID')]); return; }
         if (u.recorded_by === ctx.user.user_id) {
-          if (ids) basis = assertNotSelf_(ctx, 'usage.confirm', [u.recorded_by]);
+          if (ids || adminSelfOk_(ctx)) basis = assertNotSelf_(ctx, 'usage.confirm', [u.recorded_by]);
           else { skipped.push(u.usage_line_id); return; }
         }
         var u2 = clone_(u); delete u2.__row;
@@ -11344,7 +11357,7 @@ function usageConfirm_(ctx) {
         writes: writes,
         result: { entity_type: wk.wt.entity, entity_id: p.work_id, record_version: null, confirmed: writes.map(function (x) { return x.row.usage_line_id; }), skipped: skipped,
           lines: writes.map(function (x) { return projectRow_(ctx, x.row, 'MaterialUsageLines'); }) },
-        audit: { entity_type: wk.wt.entity, entity_id: p.work_id, before_json: null, after_json: { usage_confirmed: writes.length, skipped: skipped.length || undefined }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+        audit: { entity_type: wk.wt.entity, entity_id: p.work_id, before_json: null, after_json: { usage_confirmed: writes.length, skipped: skipped.length || undefined }, auth_basis: selfBasis_(basis), reason: trimStr_(p.self_approval_reason) }
       };
     }
   });
@@ -12505,7 +12518,7 @@ function meterEventApprove_(ctx) {
         audit: {
           entity_type: 'METER', entity_id: ev.meter_id, before_json: { event_id: ev.event_id, status: ev.status },
           after_json: { event_id: ev.event_id, status: e2.status, new_segment_id: e2.new_segment_id || undefined },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -12961,7 +12974,7 @@ function tariffApprove_(ctx) {
         writes: writes,
         result: { entity_type: 'TARIFF', entity_id: row.tariff_id, status: row.status, record_version: row.record_version, record: projectRow_(ctx, row, 'UtilityTariffs') },
         record_version: row.record_version,
-        audit: { entity_type: 'TARIFF', entity_id: row.tariff_id, before_json: { status: t.status }, after_json: { status: row.status, closed: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: 'TARIFF', entity_id: row.tariff_id, before_json: { status: t.status }, after_json: { status: row.status, closed: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -13447,7 +13460,7 @@ function circuitVerify_(ctx) {
         writes: [{ sheet: sheet, mode: 'update', row: row }],
         result: { entity_type: kind, entity_id: row[key], record_version: row.record_version, record: projectRow_(ctx, row, sheet) },
         record_version: row.record_version,
-        audit: { entity_type: kind, entity_id: row[key], before_json: { verified_by: cur.verified_by }, after_json: { verified_by: row.verified_by }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+        audit: { entity_type: kind, entity_id: row[key], before_json: { verified_by: cur.verified_by }, after_json: { verified_by: row.verified_by }, auth_basis: selfBasis_(basis), reason: trimStr_(p.self_approval_reason) }
       };
     }
   });
@@ -13516,7 +13529,7 @@ function circuitDrawingApprove_(ctx) {
         writes: writes,
         result: { entity_type: 'DOCUMENT', entity_id: row.document_id, approval_status: row.approval_status, record_version: row.record_version, record: projectDoc_(ctx, row) },
         record_version: row.record_version,
-        audit: { entity_type: d.entity_type, entity_id: d.entity_id, before_json: { document_id: d.document_id, approval_status: d.approval_status }, after_json: { approval_status: row.approval_status, superseded: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined }
+        audit: { entity_type: d.entity_type, entity_id: d.entity_id, before_json: { document_id: d.document_id, approval_status: d.approval_status }, after_json: { approval_status: row.approval_status, superseded: writes.length - 1 || undefined }, reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis) }
       };
     }
   });
@@ -16811,7 +16824,7 @@ function annualPlanApprove_(ctx) {
         audit: {
           entity_type: 'ANNUAL_PLAN', entity_id: row.annual_plan_id, before_json: { status: cur.status },
           after_json: { status: row.status, code: row.annual_plan_code, year: row.year, revision: row.revision },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }

@@ -1,7 +1,7 @@
 // Lộ điện Đợt 3: nguồn → tủ → lộ → phụ tải; tủ nối hồ sơ Thiết bị (B2); kiểm khi lưu; truy đường cấp; xác minh; bản vẽ (3.13, 4.4.7, 6.9.2)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakePdfB64 } from '../helpers.mjs';
+import { freshServer, ownerClient, userClient, uuid, OWNER_PIN, fakePdfB64, noAdminSelf } from '../helpers.mjs';
 
 function setup() {
   const env = freshServer();
@@ -236,4 +236,22 @@ test('bản vẽ: KT tải lên (chờ duyệt, phiên bản 1, 2…); chỉ ng�
   const b = dn.call('sync.bootstrap', {});
   const docs = (b.data.records.DOCUMENT || []).map((d) => d.document_id);
   assert.ok(docs.includes(d2) && !docs.includes(d3));
+});
+
+test('d4.34: Quản trị tự xác minh tủ mình vừa nhập (nhật ký ADMIN_SELF); Trưởng bộ phận vẫn không tự xác minh; tắt admin_self_approval thì Quản trị cũng không', () => {
+  const { env, c, c3 } = setup();
+  const ver = (id) => env.rows('Panels').find((x) => x.panel_id === id).record_version;
+  const p1 = ok(panel(c, { name_vi: 'PP1 tủ phân phối' }));
+  const v = c.write('circuit.verify', { entity: 'PANEL', id: p1 }, { expected_version: ver(p1), reauth_token: c.reauth() });
+  assert.equal(v.ok, true, JSON.stringify(v));
+  const a = env.rows('AuditLogs').filter((x) => x.action === 'circuit.verify').pop();
+  assert.equal(a.auth_basis, 'ADMIN_SELF');
+  const p2 = ok(panel(c3, { name_vi: 'PP2' }));
+  assert.equal(c3.write('circuit.verify', { entity: 'PANEL', id: p2 }, { expected_version: ver(p2), reauth_token: c3.reauth() }).code, 'FORBIDDEN', 'cấp 3 vẫn không tự xác minh');
+  assert.equal(c.write('circuit.verify', { entity: 'PANEL', id: p2 }, { expected_version: ver(p2), reauth_token: c.reauth() }).ok, true, 'Quản trị xác minh tủ người khác nhập');
+  const b = c.call('sync.bootstrap', {});
+  assert.equal(b.data.settings.admin_self_approval, true, 'app nhận cờ để hiện nút');
+  noAdminSelf(env, c);
+  const p3 = ok(panel(c, { name_vi: 'PP3' }));
+  assert.equal(c.write('circuit.verify', { entity: 'PANEL', id: p3 }, { expected_version: ver(p3), reauth_token: c.reauth() }).code, 'FORBIDDEN');
 });

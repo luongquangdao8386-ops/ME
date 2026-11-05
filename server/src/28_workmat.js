@@ -243,7 +243,7 @@ function matreqApprove_(ctx) {
         record_version: row.record_version,
         audit: {
           entity_type: wk.wt.entity, entity_id: r.work_id, before_json: { request_id: r.request_id, status: r.status }, after_json: { status: row.status, approved_qty: qmap },
-          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined
+          reason: trimStr_(p.reason || p.self_approval_reason), auth_basis: selfBasis_(basis)
         }
       };
     }
@@ -405,7 +405,7 @@ function usageConfirm_(ctx) {
       pick.forEach(function (u) {
         if (u.status !== 'PENDING_CONFIRMATION') { if (ids) throw validationError_([fieldError_('usage_lines[' + u.usage_line_id + ']', 'STATUS_INVALID')]); return; }
         if (u.recorded_by === ctx.user.user_id) {
-          if (ids) basis = assertNotSelf_(ctx, 'usage.confirm', [u.recorded_by]);
+          if (ids || adminSelfOk_(ctx)) basis = assertNotSelf_(ctx, 'usage.confirm', [u.recorded_by]);
           else { skipped.push(u.usage_line_id); return; }
         }
         var u2 = clone_(u); delete u2.__row;
@@ -417,7 +417,7 @@ function usageConfirm_(ctx) {
         writes: writes,
         result: { entity_type: wk.wt.entity, entity_id: p.work_id, record_version: null, confirmed: writes.map(function (x) { return x.row.usage_line_id; }), skipped: skipped,
           lines: writes.map(function (x) { return projectRow_(ctx, x.row, 'MaterialUsageLines'); }) },
-        audit: { entity_type: wk.wt.entity, entity_id: p.work_id, before_json: null, after_json: { usage_confirmed: writes.length, skipped: skipped.length || undefined }, auth_basis: basis === 'SELF_APPROVAL_EXCEPTION' ? basis : undefined, reason: trimStr_(p.self_approval_reason) }
+        audit: { entity_type: wk.wt.entity, entity_id: p.work_id, before_json: null, after_json: { usage_confirmed: writes.length, skipped: skipped.length || undefined }, auth_basis: selfBasis_(basis), reason: trimStr_(p.self_approval_reason) }
       };
     }
   });
