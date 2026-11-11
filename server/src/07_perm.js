@@ -191,6 +191,9 @@ var ACTION_TABLE_ = [
   'system.getPublicState|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   // Bổ sung d4.12: app Checksheet lấy danh sách thiết bị (không phiên, khóa bằng mã kết nối FEED_KEY_CS)
   'feed.equipment|-|-|Y Y Y Y Y Y Y Y|public|1|R',
+  // Bổ sung d4.35: app ISO lấy "ngày có hồ sơ" theo mã biểu (không phiên, khóa bằng mã kết nối FEED_KEY_ISO); Quản trị xem trước bảng ánh xạ
+  'feed.isoEvidence|-|-|Y Y Y Y Y Y Y Y|public|1|R',
+  'iso.feed.preview|system|V|N N N N N N N Y|net|1|R',
   'sync.bootstrap|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.changes|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.push|-|-|Y Y Y Y Y Y Y Y|session|1|R',

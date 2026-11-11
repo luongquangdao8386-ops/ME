@@ -42,6 +42,42 @@ function rptHours_(a, b) {
   var x = tms_(a), y = tms_(b);
   return x === null || y === null || y < x ? null : Math.round((y - x) / 360000) / 10;
 }
+/** Phút từ a tới b (b trước a → null) */
+function rptMinutes_(a, b) {
+  var x = tms_(a), y = tms_(b);
+  return x === null || y === null || y < x ? null : Math.round((y - x) / 60000);
+}
+
+/**
+ * d4.35: Settings shift_starts "06:00,14:00,22:00" → [{no: 1, hhmm: '06:00', min: 360}, …] (tăng dần, 1–6 ca); sai → null.
+ * Ca kéo dài tới giờ bắt đầu ca sau; ca cuối qua nửa đêm tới giờ bắt đầu ca 1 hôm sau.
+ */
+function parseShiftStarts_(s) {
+  var parts = String(s || '').split(/[,;\s]+/).filter(Boolean);
+  if (!parts.length || parts.length > 6) return null;
+  var out = [];
+  for (var i = 0; i < parts.length; i++) {
+    var m = /^(\d{1,2})[:hH.](\d{2})$/.exec(parts[i]);
+    if (!m) return null;
+    var hh = +m[1], mi = +m[2];
+    if (hh > 23 || mi > 59) return null;
+    var min = hh * 60 + mi;
+    if (out.length && min <= out[out.length - 1].min) return null;
+    out.push({ no: i + 1, hhmm: pad2_(hh) + ':' + pad2_(mi), min: min });
+  }
+  return out;
+}
+
+/** Ca của một thời điểm (giờ Việt Nam): '1', '2'…; trước giờ bắt đầu ca 1 thì thuộc ca cuối (ca đêm hôm trước) */
+function shiftOf_(t, starts) {
+  var d = parseTime_(t);
+  if (!d || !starts || !starts.length) return '';
+  var p = vnParts_(d), min = p.hh * 60 + p.mi;
+  var no = starts[starts.length - 1].no;
+  starts.forEach(function (x) { if (min >= x.min) no = x.no; });
+  return String(no);
+}
+
 function rptDue_(due, today) {
   var dr = daysRemaining_(due, today);
   var lead = Number(setting_('lead_days') || 40);
@@ -141,8 +177,13 @@ var REPORT_DATASETS_ = {
     columns: [
       rc_('repair_code', 'code', 'Mã phiếu', '单号'), rc_('equipment_code', 'code', 'Mã thiết bị', '设备编号'), rc_('equipment_name', 'text', 'Thiết bị', '设备'),
       rc_('symptom', 'bi', 'Hiện tượng', '故障现象'), rc_('severity', 'enum', 'Mức độ', '严重程度', { enumKey: 'severity' }),
-      rc_('reported_at', 'time', 'Báo lúc', '报修时间'), rc_('status', 'enum', 'Trạng thái', '状态', { enumKey: 'repair_status' }),
+      rc_('reported_at', 'time', 'Báo lúc', '报修时间'),
+      // d4.35 (sổ dừng máy BM-CĐ-04-03): ca lúc máy dừng (không dừng thì lúc báo) theo Settings shift_starts
+      rc_('shift', 'text', 'Ca', '班次'),
+      rc_('status', 'enum', 'Trạng thái', '状态', { enumKey: 'repair_status' }),
       rc_('root_cause', 'text', 'Nguyên nhân gốc', '根本原因'), rc_('repair_start_at', 'time', 'Bắt đầu sửa', '开始维修'),
+      // d4.35: thời gian phản hồi = từ lúc báo tới lúc bắt đầu sửa (phút)
+      rc_('response_minutes', 'num', 'Phản hồi (phút)', '响应时间（分钟）'),
       rc_('repair_end_at', 'time', 'Kết thúc sửa', '维修结束'), rc_('restored_at', 'time', 'Hoạt động lại', '恢复运行'),
       rc_('repair_hours', 'num', 'Thời gian sửa (h)', '维修时长（h）'), rc_('downtime_hours', 'num', 'Dừng máy (h)', '停机时长（h）'),
       rc_('assignee', 'text', 'Người phụ trách', '负责人'),
@@ -150,6 +191,7 @@ var REPORT_DATASETS_ = {
       rc_('outside_cost', 'money', 'Dịch vụ ngoài (tham khảo)', '外部服务费（参考）', { cost: true, cur: 'currency' })
     ],
     build: function (ctx, f, L, cost) {
+      var shifts = parseShiftStarts_(setting_('shift_starts')) || parseShiftStarts_('06:00,14:00,22:00');
       var causes = {};
       Object.keys(L.lookups).forEach(function (k) { var x = L.lookups[k]; if (x.group_key === 'CAUSE') causes[x.code] = rptName_(x); });
       var rows = readRows_('Repairs').filter(function (r) {
@@ -160,6 +202,7 @@ var REPORT_DATASETS_ = {
         var o = {
           repair_code: r.repair_code, equipment_code: rptEq_(L, r.equipment_id), equipment_name: rptEqName_(L, r.equipment_id),
           symptom_vi: r.symptom_vi, symptom_zh: r.symptom_zh, severity: r.severity, reported_at: r.reported_at, status: r.status,
+          shift: shiftOf_(r.stopped_at || r.reported_at, shifts), response_minutes: rptMinutes_(r.reported_at, r.repair_start_at),
           root_cause: r.root_cause_code ? (r.root_cause_code + (causes[r.root_cause_code] ? ' · ' + causes[r.root_cause_code] : '')) : '',
           repair_start_at: r.repair_start_at || '', repair_end_at: r.repair_end_at || '', restored_at: r.restored_at || '',
           repair_hours: rptHours_(r.repair_start_at, r.repair_end_at), downtime_hours: rptHours_(r.stopped_at, r.restored_at),

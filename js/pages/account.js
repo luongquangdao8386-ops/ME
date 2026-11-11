@@ -75,6 +75,8 @@ export async function renderAccount(view, { shell }) {
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
   if (await can('report.logo.set')) admin.push(['admin.report_logo', '/admin/report-logo']);
   if (RELEASED_DOT >= 3 && await can('settings.edit')) admin.push(['admin.form_codes', '/admin/form-codes']);
+  // d4.35: kết nối app ISO (máy chủ ≥ d4.35 mới có iso.feed.preview)
+  if (await can('iso.feed.preview')) admin.push(['iso.title', '/admin/iso-map']);
   // d4.26: ngưỡng thất thoát đồng hồ tổng – nhánh (Trưởng bộ phận, Quản trị)
   if (RELEASED_DOT >= 3 && await can('meter.tolerance.set')) admin.push(['bal.tol_page', '/utilities/loss']);
   // Đợt 4: chỉ owner có quyền xóa sạch (1.4 §21.1)

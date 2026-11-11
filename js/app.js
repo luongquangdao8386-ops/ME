@@ -278,6 +278,8 @@ function registerRoutes() {
   route('/admin/report-logo', soonOr(3, lazy('./pages/admin.js', 'renderReportLogo')), { nav: 'account' });
   route('/admin/archive', soonOr(4, lazy('./pages/archive.js', 'renderArchive')), { nav: 'account' });
   route('/admin/form-codes', soonOr(3, lazy('./pages/admin.js', 'renderFormCodes')), { nav: 'account' });
+  // d4.35: Kết nối app ISO — bảng mã biểu ISO → nguồn ngày có hồ sơ (feed.isoEvidence)
+  route('/admin/iso-map', lazy('./pages/isomap.js', 'renderIsoMap'), { nav: 'account' });
   route('/admin/catalog', lazy('./pages/catalog.js', 'renderCatalog'), { nav: 'account' });
   // Đợt 4: Dữ liệu hệ thống — Xóa sạch (chỉ owner; trước route chung /admin/:page)
   route('/admin/system-data', soonOr(4, lazy('./pages/sysreset.js', 'renderSystemData')), { nav: 'account' });

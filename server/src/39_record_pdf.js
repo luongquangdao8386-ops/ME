@@ -87,6 +87,15 @@ function recPartsShort_(mats, usage, evs) {
 
 /* ---------------- Phiếu bảo trì ---------------- */
 
+/** d4.35: mã biểu mẫu của phiếu BT = mã ISO của mẫu checklist (bản mới nhất) nếu có, không thì mã chung WORK_ORDER (pdf_form_codes) */
+function woFormCode_(rec) {
+  if (rec.checklist_template_id && releasedDot_() >= 6) {
+    var c = trimStr_((latestChecklist_(rec.checklist_template_id).items[0] || {}).form_code);
+    if (c) return c;
+  }
+  return pdfFormCode_('WORK_ORDER');
+}
+
 function recWorkOrderPdf_(rec, L, cost) {
   var dir = L.users, mats = recMats_();
   var kv = [];
@@ -135,7 +144,7 @@ function recWorkOrderPdf_(rec, L, cost) {
   var evs = recPartEvents_(findAll_('EquipmentPartEvents', 'work_id', rec.work_order_id).filter(function (e) { return e.work_type === 'WORK_ORDER'; }));
   if (evs.length) tables.push(recPartTable_(mats, evs));
   return {
-    title: ['Phiếu bảo trì', '保养工单'], code: rec.work_order_code, kv: kv, tables: tables, costNote: !cost, formCode: pdfFormCode_('WORK_ORDER'),
+    title: ['Phiếu bảo trì', '保养工单'], code: rec.work_order_code, kv: kv, tables: tables, costNote: !cost, formCode: woFormCode_(rec),
     sign: [
       { label: lab_('rec.sign.worker'), name: recName_(dir, rec.assignee_user_id), date: fmtDateVN_(rec.end_at) },
       { label: lab_('rec.sign.acceptor'), name: recName_(dir, rec.approved_by), date: fmtDateVN_(rec.approved_at) },

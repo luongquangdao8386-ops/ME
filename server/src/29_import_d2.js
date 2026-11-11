@@ -9,6 +9,8 @@ IMPORT_TEMPLATES_.maintenance_plans = { module: 'maintenance', sheets: [
     ic_('template_key', 'text', 'ID mẫu checklist (mẫu có sẵn) hoặc khóa tự đặt (mẫu mới)', '检查表模板ID（已有）或自定键（新模板）', { req: 1, max: 60, keep: 1 }),
     ic_('revision', 'ver', 'Phiên bản mẫu (khi sửa mẫu có sẵn)', '模板版本（修改已有模板时）'),
     ic_('template_name_vi', 'text', 'Tên mẫu (Việt)', '模板名称（越）', { max: 200 }), ic_('template_name_zh', 'text', 'Tên mẫu (Trung)', '模板名称（中）', { max: 200 }),
+    // d4.35: mã biểu mẫu ISO của checklist (ghi ở dòng đầu của mẫu là đủ; trống = không mã)
+    ic_('form_code', 'text', 'Mã biểu mẫu ISO (vd BM-CĐ-03-03a)', 'ISO表单编号（如BM-CĐ-03-03a）', { max: 40, keep: 1 }),
     ic_('step_no', 'int', 'Bước số', '步骤号', { req: 1 }),
     ic_('label_vi', 'text', 'Nội dung bước (Việt)', '步骤内容（越）', { max: 200 }), ic_('label_zh', 'text', 'Nội dung bước (Trung)', '步骤内容（中）', { max: 200 }),
     ic_('result_type', 'enum', 'Kiểu kết quả', '结果类型', { options: RESULT_TYPES_ }),
@@ -97,6 +99,7 @@ function clReq_(v) { return v === '' || v === undefined || v === null ? true : v
 function sameChecklist_(cur, name, g) {
   var head = cur.items[0] || {};
   if (String(head.template_name_vi || '') !== String(name.vi || '') || String(head.template_name_zh || '') !== String(name.zh || '')) return false;
+  if (releasedDot_() >= 6 && !importSame_(trimStr_(head.form_code), clFormCode_(g))) return false;
   if (cur.items.length !== g.length) return false;
   var rows = g.slice().sort(function (a, b) { return Number(a.vals.step_no) - Number(b.vals.step_no); });
   return rows.every(function (x, i) {
@@ -212,6 +215,18 @@ function importRowCheckD2_(x) {
   }
 }
 
+/** Mã biểu mẫu ISO của một mẫu trong file: ô đầu tiên có giá trị (theo thứ tự dòng); trống hết = không mã */
+function clFormCode_(g) {
+  var rn = function (x) { return Number(x.ir ? x.ir.row_number : x.row_number) || 0; };
+  var rows = g.slice().sort(function (a, b) { return rn(a) - rn(b); });
+  for (var i = 0; i < rows.length; i++) {
+    var v = rows[i].vals || (rows[i].normalized_payload_json || {}).v || {};
+    var c = trimStr_(v.form_code);
+    if (c) return c;
+  }
+  return '';
+}
+
 /** Ghi một mẫu checklist (mọi dòng của mẫu) thành một phiên bản: maintenance.checklist.edit */
 function commitChecklistGroup_(r, group, run) {
   var rows = [r].concat(group || []);
@@ -235,6 +250,7 @@ function commitChecklistGroup_(r, group, run) {
   };
   if (name.vi) p.template_name_vi = name.vi;
   if (name.zh) p.template_name_zh = name.zh;
+  if (releasedDot_() >= 6) p.form_code = clFormCode_(byRow);
   return run('maintenance.checklist.edit', p, r.import_row_id, Number(r.expected_version || 0));
 }
 

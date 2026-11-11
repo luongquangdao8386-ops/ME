@@ -1205,6 +1205,15 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
 /* d4.21: Mã biểu mẫu trên PDF — mã mẫu báo cáo dài xuống dòng, cột ô nhập đủ rộng */
 .fc-table .code { overflow-wrap: anywhere; }
 .fc-table td:last-child { width: 40%; }
+/* d4.35: Kết nối app ISO — cột nguồn rộng nhất (tên nguồn song ngữ dài); iPhone cuộn ngang trong khung bảng */
+.iso-map { table-layout: fixed; min-width: 820px; }
+.iso-map th:nth-child(1) { width: 10.5rem; }
+.iso-map th:nth-child(3) { width: 11rem; }
+.iso-map th:nth-child(4) { width: 9.5rem; }
+.iso-map th:nth-child(5) { width: 3.25rem; }
+.iso-map .inp { width: 100%; min-width: 0; }
+.iso-map .iso-src-note { margin-top: 4px; }
+.iso-stat { font-size: 0.875rem; }
 .logo-big { display: block; max-width: min(100%, 320px); max-height: 200px; margin: 4px 0 10px; }
 .logo-page { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 12px 16px 14px; margin: 4px 0 10px; box-shadow: 0 1px 4px rgba(23,50,79,0.08); }
 .logo-page-lines { margin-top: 10px; }

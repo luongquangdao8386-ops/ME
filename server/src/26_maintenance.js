@@ -283,8 +283,9 @@ function generateDueWorkOrders_() {
 
 /**
  * maintenance.checklist.edit: tạo mẫu (expected_version 0) hoặc phiên bản mới (expected_version = revision hiện tại).
- * {template_id, template_name_vi/zh, items: [{step_no?, label_vi/zh, result_type, unit, min_value, max_value, required,
+ * {template_id, template_name_vi/zh, form_code?, items: [{step_no?, label_vi/zh, result_type, unit, min_value, max_value, required,
  *  safety_note_vi/zh}], active?: false (ngừng mẫu, cần lý do)}. Phiên bản cũ giữ nguyên để phiếu cũ đọc lại đúng.
+ * d4.35: form_code = mã biểu mẫu ISO của checklist (vd BM-CĐ-03-03a); không gửi thì giữ mã đang có; chỉ ghi khi schema ≥ 1.5.6.
  */
 function maintenanceChecklistEdit_(ctx) {
   var p = ctx.req.payload || {};
@@ -315,6 +316,7 @@ function maintenanceChecklistEdit_(ctx) {
     }
     if (it.required !== undefined && typeof it.required !== 'boolean') errs.push(fieldError_(f + '.required', 'INVALID_VALUE'));
   });
+  var formCode = checklistFormCode_(p, name0, errs);
   if (ev !== cur.revision) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
   if (errs.length) {
     if (ev !== cur.revision && cur.revision) throw apiError_('VERSION_CONFLICT', { entity_type: 'CHECKLIST', server_version: cur.revision });
@@ -343,6 +345,7 @@ function maintenanceChecklistEdit_(ctx) {
           template_name_vi: trName.values.template_name_vi, template_name_zh: trName.values.template_name_zh, active: true,
           i18n_meta: Object.assign({}, tr.meta, trName.meta)
         };
+        if (formCode !== null) row.form_code = formCode;
         return cNew_(ctx, row);
       });
       return {
@@ -354,6 +357,19 @@ function maintenanceChecklistEdit_(ctx) {
       };
     }
   });
+}
+
+/**
+ * Mã biểu mẫu ISO của checklist (d4.35): '' = không mã; ≤ 40 ký tự, không xuống dòng, gộp khoảng trắng.
+ * Không gửi → giữ mã của phiên bản hiện tại. Schema chưa có cột (chưa migrateSchema 1.5.6) → null (không ghi).
+ */
+function checklistFormCode_(p, head, errs) {
+  if (releasedDot_() < 6) return null;
+  if (p.form_code === undefined || p.form_code === null) return head ? trimStr_(head.form_code) : '';
+  if (typeof p.form_code !== 'string') { errs.push(fieldError_('form_code', 'INVALID_VALUE')); return ''; }
+  var c = trimStr_(p.form_code).replace(/\s+/g, ' ');
+  if (c.length > 40 || /[\r\n]/.test(p.form_code)) { errs.push(fieldError_('form_code', 'INVALID_VALUE')); return ''; }
+  return c;
 }
 
 /** Ngừng một mẫu: mọi dòng của mẫu active = false; không ngừng khi kế hoạch đang dùng còn hoạt động */

@@ -93,7 +93,7 @@ var SHEETS = {
       'last_work_order_id last_done_date last_done_hours plan_group_id' },
   ChecklistTemplates: { book: 'B', dot: 2, key: 'template_item_id', c: true, i18n: true,
     cols: 'template_item_id template_id revision step_no label_vi label_zh result_type unit min_value max_value required ' +
-      'safety_note_vi safety_note_zh template_name_vi template_name_zh active' },
+      'safety_note_vi safety_note_zh template_name_vi template_name_zh active form_code' },
   WorkOrders: { book: 'B', dot: 2, key: 'work_order_id', c: true, i18n: true,
     cols: 'work_order_id work_order_code plan_id equipment_id due_date assignee_user_id status start_at end_at downtime_start_at ' +
       'downtime_end_at labor_minutes labor_cost other_cost result_vi result_zh approved_by approved_at next_due_date submitted_by ' +

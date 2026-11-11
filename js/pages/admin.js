@@ -417,7 +417,7 @@ export async function renderStatus(view, { shell }) {
       <div class="table-wrap"><table class="tbl"><tbody>${checks}</tbody></table></div></section>
     <section class="card"><h2>${bi('adm.status.settings')}</h2>
       <div class="table-wrap"><table class="tbl settings"><tbody>${d.settings.map((s) => `<tr><td>${esc(s.description_vi)} · ${esc(s.description_zh)}<div class="muted small"><code>${esc(s.key)}</code></div></td>
-        <td>${settingValue(s)}</td><td>${s.key === 'pdf_form_codes' ? `<a class="btn small" href="#/admin/form-codes">${ICON.edit}${bi('btn.edit')}</a>`
+        <td>${settingValue(s)}</td><td>${s.key === 'pdf_form_codes' || s.key === 'iso_form_map' ? `<a class="btn small" href="#/admin/${s.key === 'iso_form_map' ? 'iso-map' : 'form-codes'}">${ICON.edit}${bi('btn.edit')}</a>`
           : s.readonly ? badge('adm.status.readonly') : `<button type="button" class="btn small" data-set="${esc(s.key)}">${ICON.edit}${bi('btn.edit')}</button>`}</td></tr>`).join('')}</tbody></table></div></section>`;
   $$('[data-set]', view).forEach((b) => b.addEventListener('click', async () => {
     const s = d.settings.find((x) => x.key === b.dataset.set);

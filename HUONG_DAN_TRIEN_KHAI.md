@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.24 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app)
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.35 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app · … · d4.35 cửa đọc cho app ISO, mã biểu ISO của checklist, sổ dừng máy có cột Ca và Phản hồi — cần dán Code.gs và `migrateSchema` (Phần AA))
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -15,6 +15,8 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 - Hai app cùng một mã; app tự chọn máy chủ theo địa chỉ trang. Một iPhone cài được cả hai biểu tượng, dữ liệu không lẫn nhau.
 - Bàn thử PoC, tem thử và các hàm `poc…` chỉ chạy ở THỬ. THẬT không có ô nhập link máy chủ ở màn Đăng nhập.
 - Không nhập dữ liệu thật vào THỬ; không in tem thật từ THỬ.
+
+**Bản d4.35 (cửa đọc cho app ISO · mã biểu ISO của checklist · sổ dừng máy BM-CĐ-04-03 có cột Ca và Phản hồi) — CẦN dán Code.gs + Phiên bản mới + `migrateSchema` (schema 1.5.6):** app ISO đọc được từ M&E "mã biểu nào có hồ sơ vào ngày nào" (chỉ đọc, mỗi giờ) để biểu in từ M&E tự có ✓ bên ISO; mẫu checklist có ô **Mã biểu mẫu ISO** (vd BM-CĐ-03-03a); báo cáo **Sự cố và sửa chữa** (sổ dừng máy) thêm cột **Ca** và **Phản hồi (phút)**. Làm theo **Phần AA** (bên dưới).
 
 **Bản d4.34 (Quản trị tự duyệt được) — CẦN dán Code.gs + Phiên bản mới (KHÔNG migrateSchema):** tài khoản cấp **Quản trị** được tự duyệt / nghiệm thu / xác minh việc của chính mình (chứng nhận kiểm định, gia hạn hợp đồng, nghiệm thu dịch vụ, phiếu bảo trì, phiếu sửa chữa, đề nghị vật tư, lượng dùng, linh kiện theo máy, sự kiện đồng hồ, biểu giá, xác minh tủ/lộ, bản vẽ, kế hoạch năm, lô Excel nhạy cảm). Nhật ký ghi rõ "ADMIN_SELF". **Trưởng bộ phận và các cấp khác giữ nguyên** quy tắc không tự duyệt. Trước khi dán Code.gs mới, app vẫn chạy như cũ (không hiện nút tự duyệt). Muốn tắt: Tài khoản → Quản trị → Trạng thái hệ thống → cấu hình **Quản trị được tự duyệt việc của mình** = tắt.
 
@@ -63,6 +65,38 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 
 **Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần AA — Bản 1.0.0-d4.35: nối app ISO (cửa đọc `feed.isoEvidence`), mã biểu ISO của checklist, cột Ca / Phản hồi ở sổ dừng máy
+
+**Có gì mới**
+- **Cửa chỉ-đọc cho app ISO** (`feed.isoEvidence`, hợp đồng ở Phần K hướng dẫn của repo ISO): app ISO hỏi mỗi giờ "mã biểu nào có hồ sơ vào ngày nào" trong 400 ngày gần nhất. Chỉ trả **mã biểu, ngày, số hồ sơ** — không tên thiết bị, giá, người, ảnh. Khóa bằng **mã kết nối riêng** `FEED_KEY_ISO` (khác mã của Checksheet), tạo bằng hàm **`adminCreateFeedKeyIso`**.
+- **Tài khoản → Quản trị → Kết nối app ISO** (chỉ Quản trị): bảng **Mã biểu ISO → lấy ngày có hồ sơ từ đâu** (mặc định đúng bảng Phần K của app ISO: 02-01/02-02 thiết bị, 03-01/03-02 kế hoạch bảo trì, 03-03 phiếu bảo trì nghiệm thu, 04-01 ngày báo sự cố, 04-02/04-03 ngày hoàn thành sửa chữa, 05-06 dịch vụ hợp đồng, 06-05 kiểm định, 05-01 vật tư, 06-01 kiểm định loại Hiệu chuẩn, 08-01 chỉ số điện nước, 09-09 kiểm định dụng cụ an toàn, 14-01 báo cáo bảo trì / sửa chữa đã lưu). Mỗi dòng hiện **số ngày có hồ sơ, ngày gần nhất** — đúng như app ISO sẽ nhận. Sửa được: đổi nguồn, thêm/xóa dòng, **Xem trước**, **Lưu** (PIN). Dòng `iso_form_map` ở Trạng thái hệ thống dẫn sang trang này.
+- **Bảo trì → Mẫu checklist → ô Mã biểu mẫu ISO**: phiếu bảo trì dùng mẫu này (khi nghiệm thu) được tính cho **mã của checklist** (vd 9 checklist BM-CĐ-03-03a…i, BM-CĐ-07-08, 07-09); checklist không có mã thì tính cho BM-CĐ-03-03. PDF phiếu bảo trì in mã của checklist thay mã chung. Đổi mã = phiên bản mới của mẫu (như sửa mẫu). Excel mẫu kế hoạch: sheet `checklists` có cột `form_code`.
+- **Sổ dừng máy BM-CĐ-04-03** (Báo cáo → **Sự cố và sửa chữa**, xem trước, PDF, Excel) thêm 2 cột: **Ca** — ca lúc máy dừng (máy không dừng thì lúc báo), theo giờ bắt đầu các ca ở Cấu hình `shift_starts` (mặc định `06:00,14:00,22:00` = Ca 1, 2, 3; ca cuối qua nửa đêm: 02:00 thuộc ca 3 hôm trước); **Phản hồi (phút)** — từ lúc báo tới lúc bắt đầu sửa.
+
+**Đưa lên máy chủ** (THỬ trước: `ME_MayChu_THU`, link raw nhánh `claude/beautiful-darwin-29uitm`; THẬT sau khi nói "phát hành THẬT": `ME_MayChu_THAT`, link raw nhánh `main`). Làm ngoài giờ ghi phiếu, trên máy tính:
+1. App → **Tài khoản → Quản trị → Sao lưu** → **Sao lưu ngay** → chờ "Đã kiểm chứng".
+2. <https://script.google.com> → dự án máy chủ → tệp **Code.gs** → Ctrl+A → Delete → mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C → dán → **Lưu** (Ctrl+S).
+3. Chọn hàm **`healthCheck`** → **Chạy** (không hỏi quyền mới). Dòng `schema_version` báo CẢNH BÁO `1.5.5 (1.5.6)` là đúng lúc này.
+4. **Triển khai → Quản lý các bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → mô tả `THỬ d4.35` (THẬT: `THẬT d4.35`) → **Triển khai**. Link `/exec` giữ nguyên.
+5. **Sau cùng** chọn hàm **`migrateSchema`** → **Chạy** → Nhật ký: `migrateSchema xong. Thêm: ChecklistTemplates(form_code). schema_version=1.5.6`.
+6. Chạy lại **`healthCheck`**: `schema_version` = 1.5.6 ĐẠT; dòng mới **`iso_feed` = OFF** (chưa có mã kết nối).
+7. Mở app → **Tài khoản → Thông tin** ghi `1.0.0-d4.35` (màn báo lỗi thì bấm **Tải lại bản mới**; máy tính Ctrl+Shift+R).
+
+**Nối app ISO** (app ISO chỉ có THẬT → nối với M&E **THẬT**; THỬ chỉ để xem trước trang Kết nối):
+1. Trình soạn Apps Script của **`ME_MayChu_THAT`** → chọn hàm **`adminCreateFeedKeyIso`** → **Chạy** → **Nhật ký thực thi** có dòng "Mã kết nối cho app ISO: …" → chép **cả dãy ký tự** sau dấu hai chấm (khoảng 43 ký tự). Chạy lại lúc nào cũng in lại đúng mã đó. **Không gửi mã qua chat.**
+2. Chép **link `/exec`** của `ME_MayChu_THAT` (Triển khai → Quản lý các bản triển khai → URL ứng dụng web).
+3. App **ISO** trên máy tính → **Tài khoản → Quản trị → Kết nối M&E / Checksheet** → thẻ **App M&E** → dán link `/exec` và mã → **Thử kết nối** → khung xanh "Kết nối được: N dòng ngày, ghép được M biểu" → **Lưu** → PIN.
+4. App **M&E** → **Tài khoản → Quản trị → Kết nối app ISO**: khung xanh "Đã tạo mã kết nối"; cột **400 ngày gần nhất** có số ngày ở các mã đã có hồ sơ. `healthCheck` bên M&E: `iso_feed` = ON.
+5. Mã biểu bên app ISO báo "không có trong danh mục" hoặc "biểu in từ app chưa nhận ngày nào" → sửa mã ở trang **Kết nối app ISO** (bảng) hoặc ở **Mẫu checklist** (ô Mã biểu mẫu ISO) cho khớp danh mục ISO.
+
+**Việc nên làm sau khi nối**
+- **Bảo trì → Mẫu checklist**: mở từng mẫu → điền **Mã biểu mẫu ISO** đúng như danh mục (vd BM-CĐ-03-03a cho checklist máy nén khí) → Lưu.
+- **Tài khoản → Quản trị → Trạng thái hệ thống → Cấu hình** → dòng **Giờ bắt đầu các ca** (`shift_starts`) → Sửa → giờ bắt đầu ca của nhà máy, cách nhau dấu phẩy, tăng dần (vd hai ca 12 giờ: `07:00,19:00`) → PIN.
+- **Tài khoản → Quản trị → Mã biểu mẫu trên PDF**: dòng **Sự cố và sửa chữa** (`RPT_REPAIRS`) điền `BM-CĐ-04-03` nếu muốn PDF sổ dừng máy in mã biểu.
+- Lộ mã: xóa thuộc tính `FEED_KEY_ISO` (Cài đặt dự án → Thuộc tính tập lệnh) → chạy lại `adminCreateFeedKeyIso` → nhập mã mới bên app ISO.
+
+---
 
 ## Phần Z — Đưa d4.22 lên THỬ (`ME_MayChu_THU`)
 

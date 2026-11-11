@@ -2,7 +2,7 @@
 // gửi nghiệm thu (C7, C8, 5.1.1); kế hoạch lặp lại (ngày/tháng/giờ chạy), mẫu checklist có phiên bản; WEB-MT-01 (1.4 §5.2, phụ lục 4.4.3)
 import { bi, biText, esc, fmtDate, fmtDateTime, fmtNumber, badge, biName, nameText, uuid, isoNowVN, L } from '../core.js';
 import { ICON, toast, dialog, h, $, $$, setViewHtml, wireSearch, freshFilters, listChunk, wireMore } from '../ui.js';
-import { isWide } from '../shell.js';
+import { isWide, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, weekStart, weekday, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
@@ -439,7 +439,7 @@ export async function renderChecklists(view, ctx) {
     <p class="muted small">${bi('mt.checklist_help')}</p></div>
     ${list.length ? `<div class="cards">${list.map((c) => `<a class="card rec-card" href="#/maintenance/checklists/${esc(c.template_id)}">
       <div class="rec-top"><strong>${tplName(c)}</strong>${badge('plan_active.' + (c.active ? 'TRUE' : 'FALSE'))}</div>
-      <div class="muted small">${bi('mt.revision')} ${c.revision} · ${bi('mt.steps_n', { N: c.items.length })} · ${bi('mt.used_by_plans', { N: plans.filter((p) => p.checklist_template_id === c.template_id && p.active !== false).length })}</div></a>`).join('')}</div>`
+      <div class="muted small">${c.head.form_code ? `<span class="code cl-fc">${esc(c.head.form_code)}</span> · ` : ''}${bi('mt.revision')} ${c.revision} · ${bi('mt.steps_n', { N: c.items.length })} · ${bi('mt.used_by_plans', { N: plans.filter((p) => p.checklist_template_id === c.template_id && p.active !== false).length })}</div></a>`).join('')}</div>`
       : `<div class="card empty-state"><p class="muted">${bi('mt.no_checklists')}</p></div>`}`;
 }
 
@@ -469,12 +469,15 @@ export async function renderChecklistForm(view, ctx) {
   if (!isNew && !cl) { view.innerHTML = `<div class="card">${bi('err.not_found')}</div>`; return; }
   if (!canEdit || !navigator.onLine) {
     if (!cl) { view.innerHTML = `<div class="card">${bi(navigator.onLine ? 'err.forbidden' : 'sync.need_network')}</div>`; return; }
-    view.innerHTML = `<section class="card"><h2>${tplName(cl)}</h2><p class="muted small">${bi('mt.revision')} ${cl.revision}</p><ol class="list steps">${cl.items.map((it) => `<li>${biName(it, 'label')} <span class="muted small">${bi('result_type.' + it.result_type)}${it.result_type === 'NUMBER' ? ` · ${rangeText(it)}` : ''}</span>${it.safety_note_vi || it.safety_note_zh ? `<div class="small t-amber-text">${biName(it, 'safety_note')}</div>` : ''}</li>`).join('')}</ol>${!navigator.onLine ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}</section>`;
+    view.innerHTML = `<section class="card"><h2>${tplName(cl)}</h2><p class="muted small">${cl.head.form_code ? `${bi('mt.form_code')}: <span class="code">${esc(cl.head.form_code)}</span> · ` : ''}${bi('mt.revision')} ${cl.revision}</p><ol class="list steps">${cl.items.map((it) => `<li>${biName(it, 'label')} <span class="muted small">${bi('result_type.' + it.result_type)}${it.result_type === 'NUMBER' ? ` · ${rangeText(it)}` : ''}</span>${it.safety_note_vi || it.safety_note_zh ? `<div class="small t-amber-text">${biName(it, 'safety_note')}</div>` : ''}</li>`).join('')}</ol>${!navigator.onLine ? `<p class="muted small">${bi('sync.need_network')}</p>` : ''}</section>`;
     return;
   }
   const items = cl ? cl.items : [{ result_type: 'PASS_FAIL', required: true }];
   view.innerHTML = `<form class="card form-card" novalidate>
     ${bilingualInputs('template_name', cl ? cl.head : null, { labelKey: 'mt.checklist_name' })}
+    ${RELEASED_DOT >= 6 ? `<label class="lbl" for="cl-form-code">${bi('mt.form_code')}</label>
+      <input class="inp code" id="cl-form-code" maxlength="40" autocomplete="off" placeholder="BM-CĐ-03-03a" value="${esc(cl ? cl.head.form_code || '' : '')}">
+      <p class="muted small">${bi('mt.form_code_help')}</p>` : ''}
     ${cl ? `<p class="muted small">${bi('mt.revision_note', { N: cl.revision + 1 })}</p>` : ''}
     <div id="cl-steps">${items.map(stepRow).join('')}</div>
     <div class="row"><button type="button" class="btn small" id="cl-add">${ICON.plus}<span>${bi('mt.step_add')}</span></button></div>
@@ -525,6 +528,8 @@ export async function renderChecklistForm(view, ctx) {
     if (!name.template_name_vi && !name.template_name_zh) { showErrors(form, [{ field: 'template_name', key: 'field.required' }]); return; }
     if (bad) return;
     const p = { template_id: cl ? cl.template_id : uuid(), ...name, items: out };
+    const fc = $('#cl-form-code', form);
+    if (fc) p.form_code = fc.value.trim().replace(/\s+/g, ' ');
     const btn = $('#fm-save', form);
     busy(btn, true);
     const res = await writeOnline('maintenance.checklist.edit', p, { expected_version: cl ? cl.revision : 0 });

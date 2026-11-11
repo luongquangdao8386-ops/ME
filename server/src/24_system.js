@@ -157,6 +157,7 @@ function parseSettingInput_(def, v) {
   if (type === 'BOOL') { if (typeof v !== 'boolean') throw bad(); return v; }
   if (type === 'ENUM') { if ((SETTINGS_ENUMS_[key] || []).indexOf(v) < 0) throw bad(); return v; }
   if (type === 'JSON' && key === 'pdf_form_codes') return parseFormCodes_(v, bad);
+  if (type === 'JSON' && key === 'iso_form_map') return parseIsoFormMap_(v, bad);
   if (type === 'JSON') {
     var arr = typeof v === 'string' ? JSON.parse(v) : v;
     if (!Array.isArray(arr)) throw bad();
@@ -172,6 +173,7 @@ function parseSettingInput_(def, v) {
   if (key === 'app_base_url' && s && !/^https:\/\/[^\s]+\/$/.test(s)) throw bad();
   if (key === 'min_client_version' && !/^\d+\.\d+\.\d+$/.test(s)) throw bad();
   if (key === 'default_currency' && !/^[A-Z]{3}$/.test(s)) throw bad();
+  if (key === 'shift_starts') { var sh = parseShiftStarts_(s); if (!sh) throw bad(); return sh.map(function (x) { return x.hhmm; }).join(','); }
   if (s.length > 500) throw bad();
   return s;
 }
@@ -373,6 +375,8 @@ function healthRows_() {
   add('app_base_url', !!base, base, base ? '' : 'Chưa điền app_base_url (link trong email)');
   // d4.12: mã kết nối cho app Checksheet (chỉ báo có/không, không in mã)
   add('checksheet_feed', true, prop_('FEED_KEY_CS') ? 'ON' : 'OFF', prop_('FEED_KEY_CS') ? '' : 'Chưa nối Checksheet (chạy adminCreateFeedKey khi cần)');
+  // d4.35: mã kết nối cho app ISO (feed.isoEvidence)
+  add('iso_feed', true, prop_('FEED_KEY_ISO') ? 'ON' : 'OFF', prop_('FEED_KEY_ISO') ? '' : 'Chưa nối app ISO (chạy adminCreateFeedKeyIso khi cần)');
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;

@@ -19,13 +19,13 @@ test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePer
   assert.deepEqual(sec.getSheets().map((s) => s.getName()).sort(), ['AuthAttempts', 'RolePermissions', 'Sessions', 'UserScopes', 'Users']);
   assert.ok(biz.getSheetByName('Glossary'));
   assert.equal(biz.getSheetByName('Sheet1'), null);
-  assert.equal(g.SETTINGS_DEFAULTS.length, 57, '51 + 2 khóa logo báo cáo (d4.11) + mã biểu mẫu kế hoạch năm (d4.18) + mã biểu mẫu theo loại PDF (d4.21) + ngưỡng thất thoát (d4.26) + Quản trị tự duyệt (d4.34)');
+  assert.equal(g.SETTINGS_DEFAULTS.length, 59, '51 + 2 khóa logo báo cáo (d4.11) + mã biểu mẫu kế hoạch năm (d4.18) + mã biểu mẫu theo loại PDF (d4.21) + ngưỡng thất thoát (d4.26) + Quản trị tự duyệt (d4.34) + bảng mã biểu ISO, giờ bắt đầu ca (d4.35)');
   const settings = env.rows('Settings');
-  assert.equal(settings.length, 57, 'khóa của Đợt 1–3 + logo báo cáo + mã biểu mẫu kế hoạch năm + mã biểu mẫu theo loại PDF');
+  assert.equal(settings.length, 59, 'khóa của Đợt 1–3 + logo báo cáo + mã biểu mẫu kế hoạch năm + mã biểu mẫu theo loại PDF + ISO, ca');
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
-  assert.equal(st.schema_version, '1.5.5');
+  assert.equal(st.schema_version, '1.5.6');
   assert.equal(st.perm_version, 1);
   assert.equal(st.dataset_epoch, env.props.getProperty('DATASET_EPOCH'));
   assert.match(env.props.getProperty('DATASET_EPOCH'), /^[0-9a-f-]{36}$/);
@@ -50,7 +50,7 @@ test('setup chạy lại không làm gì; migrateSchema chạy nhiều lần v�
   env.g.migrateSchema();
   env.g.migrateSchema();
   assert.equal(env.rows('RolePermissions').length, 60);
-  assert.equal(env.rows('Settings').length, 57);
+  assert.equal(env.rows('Settings').length, 59);
   assert.equal(env.rows('ReportDefinitions').length, 9, 'mẫu tích hợp không nạp trùng (8 + nhật ký dịch vụ nhà thầu d4.21)');
   const keys = env.rows('SystemState').map((r) => r.state_key);
   assert.equal(new Set(keys).size, keys.length, 'không trùng khóa SystemState');

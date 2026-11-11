@@ -1,7 +1,7 @@
 // Service Worker của M&E — phạm vi thư mục của trang (/ME/ THẬT, /ME-thu/ THỬ); chỉ quản lý cache của chính trang này
 // (me-shell-* ở /ME/, me_thu-shell-* ở /ME-thu/ — cùng quy tắc storageNs trong js/core.js), không xóa cache của trang kia.
-const VERSION = '1.0.0-d4.34';
-const BUILD_HASH = 'b91f0e6ebf0c'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const VERSION = '1.0.0-d4.35';
+const BUILD_HASH = '7e0647c7e3f7'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';
@@ -16,7 +16,7 @@ const FILES = [
   'js/pages/home.js', 'js/pages/alerts.js', 'js/pages/account.js', 'js/pages/drafts.js', 'js/pages/misc.js', 'js/pages/equipment.js', 'js/pages/materials.js', 'js/pages/docs.js', 'js/pages/inspections.js', 'js/pages/contracts.js', 'js/pages/gmail.js', 'js/pages/admin.js', 'js/pages/catalog.js', 'js/pages/excel.js', 'js/xlsx.js', 'js/excel-link.js',
   'js/work.js', 'js/meter-balance.js', 'js/pages/work.js', 'js/pages/maintenance.js', 'js/mtyear-model.js', 'js/pages/mtyear.js', 'js/pages/plangroup.js', 'js/pages/mtannual.js', 'js/pages/repairs.js', 'js/pages/workmat.js', 'js/pages/partreplace.js',
   'js/meters.js', 'js/chart.js', 'js/report-link.js', 'js/report-logo.js', 'js/pages/utilities.js', 'js/pages/circuits.js', 'js/pages/reports.js',
-  'js/pages/sysreset.js', 'js/pages/archive.js',
+  'js/pages/sysreset.js', 'js/pages/archive.js', 'js/pages/isomap.js',
   'vendor/jsQR-1.4.0.js', 'vendor/qrcode-generator-2.0.4.mjs',
   'assets/brand/logo57-tile.svg', 'assets/bg/factory.jpg', 'assets/bg/home.jpg', 'assets/icons/apple-touch-icon.png', 'assets/icons/icon-192.png', 'assets/icons/icon-512.png'
 ];

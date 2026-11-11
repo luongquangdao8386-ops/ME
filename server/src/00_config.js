@@ -5,20 +5,37 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.34';
+var SERVER_VERSION = '1.0.0-d4.35';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.5';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
-                               // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18)
+var SCHEMA_VERSION = '1.5.6';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
+                               // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18);
+                               // 1.5.6 = mã biểu ISO của mẫu checklist: ChecklistTemplates.form_code ("đợt" 6, d4.35)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 5;       // đợt đang phát hành (5 = kế hoạch bảo trì năm theo nhóm + duyệt, ngoài đặc tả, người dùng yêu cầu 29/10/2026)
+var RELEASED_DOT = 6;       // đợt đang phát hành (5 = kế hoạch bảo trì năm theo nhóm + duyệt, 29/10/2026; 6 = mã biểu ISO của checklist, 11/11/2026)
 
 /** schema_version của dữ liệu → đợt dữ liệu đã có đủ sheet (migrateSchema ghi schema_version) */
-var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4, '1.5.5': 5 };
+var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4, '1.5.5': 5, '1.5.6': 6 };
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */
 var SYSTEM_USER = 'SYSTEM';
+
+/**
+ * d4.35: bảng ánh xạ mã biểu ISO → nguồn "ngày có hồ sơ" cho cửa đọc feed.isoEvidence của app ISO (HUONG_DAN Phần K repo ISO).
+ * Nguồn (42_iso_feed.js ISO_SOURCES_): EQUIPMENT_EDIT, PLAN_EDIT, ANNUAL_PLAN, WO_ACCEPTED, REPAIR_REPORTED, REPAIR_COMPLETED,
+ * REPAIR_DOWNTIME, CONTRACT_SERVICE, INSPECTION[:loại], MATERIAL_EDIT, METER_READING[:ELECTRICITY|WATER], REPORT_SAVED[:mã mẫu].
+ * Checklist có mã biểu riêng (BM-CĐ-03-03a…i, 07-08, 07-09) tự tính theo mã của checklist, không cần dòng ở đây.
+ */
+var ISO_FORM_MAP_DEFAULT_ = {
+  'BM-CĐ-02-01': 'EQUIPMENT_EDIT', 'BM-CĐ-02-02': 'EQUIPMENT_EDIT',
+  'BM-CĐ-03-01': 'PLAN_EDIT', 'BM-CĐ-03-02': 'PLAN_EDIT',
+  'BM-CĐ-03-03': 'WO_ACCEPTED',
+  'BM-CĐ-04-01': 'REPAIR_REPORTED', 'BM-CĐ-04-02': 'REPAIR_COMPLETED', 'BM-CĐ-04-03': 'REPAIR_COMPLETED',
+  'BM-CĐ-05-06': 'CONTRACT_SERVICE', 'BM-CĐ-06-05': 'INSPECTION',
+  'BM-CĐ-05-01': 'MATERIAL_EDIT', 'BM-CĐ-06-01': 'INSPECTION:Hiệu chuẩn,校准', 'BM-CĐ-08-01': 'METER_READING',
+  'BM-CĐ-09-09': 'INSPECTION:Dụng cụ an toàn,安全工器具', 'BM-CĐ-14-01': 'REPORT_SAVED:RPT_MAINTENANCE,RPT_REPAIRS'
+};
 
 /**
  * Settings mặc định — 50 khóa (3.14; thêm doc_mobile_upload_max_bytes sau PoC).
@@ -89,7 +106,11 @@ var SETTINGS_DEFAULTS = [
   // Sửa ở Tài khoản → Quản trị → Mã biểu mẫu trên PDF; trống thì không in
   ['pdf_form_codes', 'JSON', {}, true, 5, 'Mã biểu mẫu in trên PDF (theo loại PDF)', 'PDF表单编号（按PDF类型）'],
   // d4.26: ngưỡng thất thoát đồng hồ tổng – nhánh (%): chung theo loại + riêng từng đồng hồ tổng; sửa bằng meter.tolerance.set, không sửa ở đây
-  ['meter_loss_tolerance', 'JSON', { ELECTRICITY: 3, WATER: 5, meters: {} }, true, 3, 'Ngưỡng thất thoát đồng hồ tổng – nhánh (%)', '总表与分表损耗允许范围（%）']
+  ['meter_loss_tolerance', 'JSON', { ELECTRICITY: 3, WATER: 5, meters: {} }, true, 3, 'Ngưỡng thất thoát đồng hồ tổng – nhánh (%)', '总表与分表损耗允许范围（%）'],
+  // d4.35: mã biểu ISO → nguồn ngày có hồ sơ cho app ISO (feed.isoEvidence); sửa ở Tài khoản → Quản trị → Kết nối app ISO
+  ['iso_form_map', 'JSON', ISO_FORM_MAP_DEFAULT_, false, 1, 'Mã biểu ISO → nguồn ngày có hồ sơ (app ISO)', 'ISO表单编号 → 记录日期来源（ISO应用）'],
+  // d4.35: giờ bắt đầu các ca (sổ dừng máy BM-CĐ-04-03 cột Ca); ca kéo dài tới giờ bắt đầu ca sau, ca cuối qua nửa đêm
+  ['shift_starts', 'STRING', '06:00,14:00,22:00', false, 2, 'Giờ bắt đầu các ca (Ca 1, Ca 2…), cách nhau dấu phẩy', '各班次开始时间（1班、2班…），用逗号分隔']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */
