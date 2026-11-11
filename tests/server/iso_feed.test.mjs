@@ -312,3 +312,26 @@ test('nâng máy chủ 1.5.5 → 1.5.6: migrateSchema thêm cột ChecklistTempl
   assert.ok(keys.includes('iso_form_map') && keys.includes('shift_starts'));
   assert.equal(g.readState_().map.schema_version, '1.5.6');
 });
+
+test('Excel mẫu kế hoạch: điền form_code cho nhiều mẫu checklist một lượt (xuất → điền dòng đầu mỗi mẫu → nhập), mẫu không đổi bỏ qua', () => {
+  const ctx = setup();
+  const { env, c } = ctx;
+  const crypto = globalThis.crypto;
+  const t1 = checklist(ctx), t2 = checklist(ctx), t3 = checklist(ctx);
+  const ex = ok(c.call('export.xlsx', { template_key: 'maintenance_plans' }));
+  const rows = ex.data.sheets.flatMap((s) => s.rows.map((r, i) => ({ sheet: s.name, row_number: i + 3,
+    values: Object.fromEntries(s.keys.map((k, j) => [k, r[j]]).filter(([k]) => k !== 'i18n_machine_fields')) })));
+  const codes = { [t1]: 'BM-CĐ-03-03a', [t2]: 'BM-CĐ-03-03b' };
+  rows.forEach((x) => { if (x.sheet === 'checklists' && codes[x.values.template_key]) x.values.form_code = codes[x.values.template_key]; });
+  const batch = uuid();
+  const pv = c.write('import.preview', { import_batch_id: batch, template_key: 'maintenance_plans', chunk_index: 0, chunk_count: 1, total_rows: rows.length, source_sha256: crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, ''), rows });
+  assert.equal(pv.data.status, 'READY', JSON.stringify(pv.data.errors));
+  assert.equal(pv.data.update_count, 2, 'chỉ 2 mẫu có mã mới');
+  const rt = c.call('auth.reauth', { pin: OWNER_PIN }).data.reauth_token;
+  assert.equal(c.call('import.commit', { import_batch_id: batch }, { operation_id: uuid(), reauth_token: rt }).data.status, 'COMMITTED');
+  const head = (t) => env.rows('ChecklistTemplates').filter((r) => r.template_id === t).sort((a, b) => b.revision - a.revision)[0];
+  assert.equal(head(t1).form_code, 'BM-CĐ-03-03a');
+  assert.equal(head(t1).revision, 2);
+  assert.equal(head(t2).form_code, 'BM-CĐ-03-03b');
+  assert.equal(head(t3).revision, 1, 'mẫu không điền mã: không tạo phiên bản');
+});
