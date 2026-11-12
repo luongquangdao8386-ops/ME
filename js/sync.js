@@ -92,6 +92,22 @@ export function takeWriteChanges(cursor) {
 }
 
 /**
+ * d4.36: mã phiên bản ảnh nền đăng nhập / trang chủ (sync.changes `bg_revs`, máy chủ cũ không gửi) → cài đặt của phiên + bản bootstrap
+ * trên máy; js/bg.js (syncBg sau lần đồng bộ) tải ảnh mới khi đổi.
+ */
+async function noteBgRevs(revs, boot) {
+  if (!revs || typeof revs !== 'object' || !session.settings) return;
+  const upd = {};
+  for (const [slot, rev] of Object.entries(revs)) {
+    const k = 'bg_' + String(slot).toLowerCase() + '_rev', v = String(rev || '');
+    if (session.settings[k] !== v || (boot && (boot.settings || {})[k] !== v)) upd[k] = v;
+  }
+  if (!Object.keys(upd).length) return;
+  Object.assign(session.settings, upd);
+  if (boot) { boot.settings = { ...(boot.settings || {}), ...upd }; await setMeta('bootstrap', boot); }
+}
+
+/**
  * Lấy thay đổi theo cursor; perm_version đổi thì bootstrap lại.
  * first: kết quả sync.changes đã gọi sẵn từ đúng cursor đang lưu (lần hỏi máy chủ khi mở app) → không gọi lại trang đầu.
  */
@@ -129,6 +145,7 @@ export async function pullChanges({ first = null, onPage } = {}) {
         if (boot) { boot.settings = { ...(boot.settings || {}), __today_offset_days: off }; await setMeta('bootstrap', boot); }
       }
     }
+    await noteBgRevs(r.data.bg_revs, boot);
     if (!r.data.has_more) break;
   }
   await setMeta('last_sync', isoNowVN());

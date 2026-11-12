@@ -7,9 +7,12 @@ import { renderLogin, renderChangePin, renderUnlock, renderBoot, toast, dialog, 
 import { app, enterApp, syncNow } from './app.js';
 import { stopRouter } from './router.js';
 import { invalidate } from './data.js';
+import { applyBg, forgetBg } from './bg.js';
 
 const root = document.getElementById('app');
 applyEnvTitle(ls.get('env'));
+// Ảnh nền riêng (Quản trị → Ảnh nền) đã giữ trên máy: gắn ngay cho màn chờ / đăng nhập (js/early.js đã gắn lớp trước khi vẽ)
+const bgReady = applyBg().catch(() => {});
 
 // Ghi lại vi phạm CSP (NT1-08, P-15)
 window.__meCsp = [];
@@ -207,7 +210,7 @@ async function start() {
   if (hash.startsWith('#/labels') && await isTestServer()) { await loadSession(); const { renderLabels } = await import('./poc.js'); return renderLabels(root); }
   await loadSession();
   // Trang đã đổi máy chủ (THỬ → THẬT): dữ liệu của máy chủ cũ không dùng được nữa
-  if (await checkServerBinding()) { applyEnvTitle(''); return showLogin(bi('auth.server_changed')); }
+  if (await checkServerBinding()) { await bgReady; await forgetBg(); applyEnvTitle(''); return showLogin(bi('auth.server_changed')); }
   const boot = await getMeta('bootstrap');
   if (boot) { session.settings = boot.settings || {}; if (!session.user) session.user = boot.user; }
   // Máy dùng chung mà không còn phiên: xóa cache nghiệp vụ của người trước (2.5)

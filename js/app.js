@@ -1,6 +1,7 @@
 // Điều khiển app sau đăng nhập: khung, định tuyến, đồng bộ nền, quét QR (phụ lục 1.5 mục 6.3)
 import { bi, esc, session, resMsg } from './core.js';
 import { getMeta, pullChanges, queueItems, flushQueue, takeWriteChanges } from './sync.js';
+import { syncBg } from './bg.js';
 import { mountShell, isWide, MODULES, setReleasedDot, RELEASED_DOT } from './shell.js';
 import { route, match, currentPath, queryParams, navigate, back, startRouter, refresh, lastNavKind } from './router.js';
 import { invalidate, boot as bootData } from './data.js';
@@ -105,6 +106,7 @@ async function runSync() {
   app.offline = false;
   if (r.ok && app.maintenance) { app.maintenance = false; toast(bi('sys.maintenance_over'), 'ok'); }
   await updateSyncStatus();
+  if (r.ok) syncBg(); // ảnh nền riêng (Quản trị → Ảnh nền) đổi thì tải ở nền
   if (!r.ok) {
     if (app.onSessionError && await app.onSessionError(r)) return { ...r, handled: true, committed: f.committed };
     return { ...r, committed: f.committed };
@@ -280,6 +282,7 @@ function registerRoutes() {
   route('/admin/form-codes', soonOr(3, lazy('./pages/admin.js', 'renderFormCodes')), { nav: 'account' });
   // d4.35: Kết nối app ISO — bảng mã biểu ISO → nguồn ngày có hồ sơ (feed.isoEvidence)
   route('/admin/iso-map', lazy('./pages/isomap.js', 'renderIsoMap'), { nav: 'account' });
+  route('/admin/backgrounds', lazy('./pages/bg.js', 'renderBackgrounds'), { nav: 'account' });
   route('/admin/catalog', lazy('./pages/catalog.js', 'renderCatalog'), { nav: 'account' });
   // Đợt 4: Dữ liệu hệ thống — Xóa sạch (chỉ owner; trước route chung /admin/:page)
   route('/admin/system-data', soonOr(4, lazy('./pages/sysreset.js', 'renderSystemData')), { nav: 'account' });
@@ -315,7 +318,7 @@ export async function enterApp(root, { offline = false, maintenance = false } = 
   startRouter(renderRoute);
   await renderRoute();
   // Vào app khi có mạng (mở app, đăng nhập lại, đổi người dùng): gửi nháp của người này ở nền (4.7)
-  if (!offline) sendMineInBackground();
+  if (!offline) { sendMineInBackground(); syncBg(); }
 }
 
 async function hasMineQueued() {

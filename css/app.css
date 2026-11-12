@@ -1422,3 +1422,23 @@ a.chip { text-decoration: none; display: inline-flex; align-items: center; }
   .hl-scroll { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px 18px;
     -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 28px), transparent); }
 }
+
+/* Ảnh nền riêng (d4.36, Quản trị → Ảnh nền; chép cách làm app ISO 1.0.0-d3.3): js/early.js gắn lớp bg-login / bg-home trước khi vẽ,
+   js/bg.js đặt biến --bg-login / --bg-home (URL blob của ảnh giữ trên máy). Biến chưa có (đang nạp) → không có ảnh, chỉ màu nền —
+   không chớp ảnh mặc định. Vị trí ảnh (center 40% / 45% / 60% web) giữ như ảnh mặc định. */
+html.bg-login .boot-photo, html.bg-login .login-hero { background-image: var(--bg-login); background-color: #DCE3EA; }
+html.bg-home .home-hero { background-image: var(--bg-home); background-color: #DCE3EA; }
+.bg-card .card-head { justify-content: space-between; }
+.bg-card .card-head h3 { margin: 0; }
+/* Nút Chọn ảnh là <label> (ô chọn tệp): bỏ cỡ chữ / lề chung của label để cao bằng nút Dùng ảnh mặc định */
+.bg-card label.btn { font-size: 1rem; margin: 0; cursor: pointer; }
+.bg-prev { position: relative; width: 100%; max-width: 390px; border-radius: 12px; overflow: hidden; margin: 8px 0 12px; border: 1px solid var(--line);
+  background-color: #DCE3EA; background-repeat: no-repeat; background-size: cover; padding: 12px; }
+.bg-prev.login { aspect-ratio: 39 / 34; background-position: center 40%; }
+.bg-prev.home { aspect-ratio: 16 / 9.3; background-position: center 45%; }
+.bg-prev .brand { padding: 5px 10px 5px 5px; gap: 8px; }
+.bg-prev.home .brand { background: none; -webkit-backdrop-filter: none; backdrop-filter: none; padding: 0; }
+.bg-prev .brand-logo { width: 40px; height: 40px; }
+.bg-prev .brand-name { font-size: 20px; }
+.bg-prev .brand-sub { font-size: 13px; }
+.modal .bg-prev { max-width: 100%; }

@@ -23,6 +23,8 @@ var HANDLERS_ = {
   'feed.equipment': function (req) { return feedEquipment_(req); },
   'feed.isoEvidence': function (req) { return feedIsoEvidence_(req); },
   'iso.feed.preview': function (ctx) { return isoFeedPreview_(ctx); },
+  'bg.get': function (ctx) { return bgGet_(ctx); },
+  'bg.set': function (ctx) { return bgSet_(ctx); },
   'sync.bootstrap': function (ctx) { return syncBootstrap_(ctx); },
   'sync.changes': function (ctx) { return syncChanges_(ctx); },
   'sync.push': function (ctx) { return syncPush_(ctx); },

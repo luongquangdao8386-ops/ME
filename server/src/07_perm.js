@@ -194,6 +194,9 @@ var ACTION_TABLE_ = [
   // Bổ sung d4.35: app ISO lấy "ngày có hồ sơ" theo mã biểu (không phiên, khóa bằng mã kết nối FEED_KEY_ISO); Quản trị xem trước bảng ánh xạ
   'feed.isoEvidence|-|-|Y Y Y Y Y Y Y Y|public|1|R',
   'iso.feed.preview|system|V|N N N N N N N Y|net|1|R',
+  // Bổ sung d4.36: ảnh nền màn đăng nhập / trang chủ — mọi người đã đăng nhập lấy ảnh; Quản trị thay (PIN)
+  'bg.get|-|-|Y Y Y Y Y Y Y Y|session|1|R',
+  'bg.set|system|E|N N N N N N N Y|pin|1|W',
   'sync.bootstrap|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.changes|-|-|Y Y Y Y Y Y Y Y|session|1|R',
   'sync.push|-|-|Y Y Y Y Y Y Y Y|session|1|R',

@@ -74,6 +74,8 @@ export async function renderAccount(view, { shell }) {
   if (await can('audit.view')) admin.push(['admin.audit', '/admin/audit']);
   if (await can('system.status')) admin.push(['admin.status', '/admin/status']);
   if (await can('report.logo.set')) admin.push(['admin.report_logo', '/admin/report-logo']);
+  // d4.36: ảnh nền màn đăng nhập / trang chủ (máy chủ ≥ d4.36 mới có bg.set)
+  if (await can('bg.set')) admin.push(['admin.bg', '/admin/backgrounds']);
   if (RELEASED_DOT >= 3 && await can('settings.edit')) admin.push(['admin.form_codes', '/admin/form-codes']);
   // d4.35: kết nối app ISO (máy chủ ≥ d4.35 mới có iso.feed.preview)
   if (await can('iso.feed.preview')) admin.push(['iso.title', '/admin/iso-map']);

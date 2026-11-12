@@ -5,7 +5,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.35';
+var SERVER_VERSION = '1.0.0-d4.36';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.6';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18);
@@ -110,7 +110,13 @@ var SETTINGS_DEFAULTS = [
   // d4.35: mã biểu ISO → nguồn ngày có hồ sơ cho app ISO (feed.isoEvidence); sửa ở Tài khoản → Quản trị → Kết nối app ISO
   ['iso_form_map', 'JSON', ISO_FORM_MAP_DEFAULT_, false, 1, 'Mã biểu ISO → nguồn ngày có hồ sơ (app ISO)', 'ISO表单编号 → 记录日期来源（ISO应用）'],
   // d4.35: giờ bắt đầu các ca (sổ dừng máy BM-CĐ-04-03 cột Ca); ca kéo dài tới giờ bắt đầu ca sau, ca cuối qua nửa đêm
-  ['shift_starts', 'STRING', '06:00,14:00,22:00', false, 2, 'Giờ bắt đầu các ca (Ca 1, Ca 2…), cách nhau dấu phẩy', '各班次开始时间（1班、2班…），用逗号分隔']
+  ['shift_starts', 'STRING', '06:00,14:00,22:00', false, 2, 'Giờ bắt đầu các ca (Ca 1, Ca 2…), cách nhau dấu phẩy', '各班次开始时间（1班、2班…），用逗号分隔'],
+  // d4.36: ảnh nền màn đăng nhập / trang chủ (Quản trị → Ảnh nền, 43_bg.js): ID tệp trên Drive và mã phiên bản ('' = ảnh mặc định trong app);
+  // sửa bằng bg.set, không sửa ở đây
+  ['bg_login_file_id', 'STRING', '', false, 1, 'Tệp ảnh nền màn đăng nhập (Drive)', '登录页背景图片文件（云端硬盘）'],
+  ['bg_login_rev', 'STRING', '', true, 1, 'Phiên bản ảnh nền màn đăng nhập (trống = ảnh mặc định)', '登录页背景图片版本（空=默认图片）'],
+  ['bg_home_file_id', 'STRING', '', false, 1, 'Tệp ảnh nền trang chủ (Drive)', '首页背景图片文件（云端硬盘）'],
+  ['bg_home_rev', 'STRING', '', true, 1, 'Phiên bản ảnh nền trang chủ (trống = ảnh mặc định)', '首页背景图片版本（空=默认图片）']
 ];
 
 /** Khóa SystemState ban đầu (3.14). Bộ đếm `code_seq.*`, `table_rev.*` thêm khi dùng. */

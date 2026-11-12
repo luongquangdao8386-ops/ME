@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.35 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app · … · d4.35 cửa đọc cho app ISO, mã biểu ISO của checklist, sổ dừng máy có cột Ca và Phản hồi — cần dán Code.gs và `migrateSchema` (Phần AA))
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.36 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app · … · d4.35 cửa đọc cho app ISO, mã biểu ISO của checklist, sổ dừng máy có cột Ca và Phản hồi — cần dán Code.gs và `migrateSchema` (Phần AA) · d4.36 Quản trị tự thay ảnh nền màn đăng nhập và trang chủ — cần dán Code.gs, không cần `migrateSchema` (Phần AB))
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -65,6 +65,30 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 
 **Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần AB — Bản 1.0.0-d4.36: Quản trị tự thay ảnh nền màn đăng nhập và trang chủ
+
+**Có gì mới** (giống app ISO bản 1.0.0-d3.3)
+- **Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ** (chỉ Quản trị cấp 4): hai khung **Màn đăng nhập** (ảnh ở đầu màn đăng nhập và màn chờ lúc mở app) và **Trang chủ** (ảnh sau logo, tên, ngày). Mỗi khung: xem trước đúng phần ảnh hiện trên iPhone, nút **Chọn ảnh / Thay ảnh khác**, nút **Dùng ảnh mặc định** (về ảnh có sẵn trong app). Đổi ảnh hỏi PIN.
+- Ảnh chụp iPhone dùng được ngay: app tự thu nhỏ còn khoảng 1600 px (JPEG) trước khi gửi. Ảnh lưu **riêng tư trên Drive của máy chủ M&E** (thư mục dữ liệu app), **không đưa lên repo/trang công khai**; mỗi máy chủ (THỬ, THẬT) giữ ảnh riêng.
+- Mọi máy nhận ảnh mới ở **lần đồng bộ kế tiếp** rồi giữ trong bộ nhớ của trình duyệt trên máy → màn đăng nhập dùng ảnh mới cả khi chưa đăng nhập, mở app không chớp ảnh cũ. Máy **chưa đăng nhập lần nào** (hoặc vừa xóa dữ liệu trình duyệt) thấy ảnh mặc định tới khi đăng nhập.
+- Bộ nhớ riêng của M&E (`me.bg` / cache `me-bg`; trang THỬ `me_thu.bg` / `me_thu-bg`) — không đụng app ISO, THỬ và THẬT không lẫn ảnh.
+- Trạng thái hệ thống có dòng **Ảnh nền đăng nhập, trang chủ** (ảnh riêng / ảnh mặc định); Nhật ký thao tác ghi mỗi lần đổi (`bg.set`).
+
+**Đưa lên máy chủ** (THỬ trước: `ME_MayChu_THU`, link raw nhánh `claude/tender-hamilton-5ff7ki`; THẬT sau khi nói "phát hành THẬT": `ME_MayChu_THAT`, link raw nhánh `main`). **Không cần `migrateSchema`.**
+1. <https://script.google.com> → dự án máy chủ → tệp **Code.gs** → Ctrl+A → Delete → mở link raw `https://raw.githubusercontent.com/luongquangdao8386-ops/ME/<nhánh>/apps-script/Code.gs` → Ctrl+A → Ctrl+C → dán → **Lưu** (Ctrl+S).
+2. **Triển khai → Quản lý các bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → mô tả `THỬ d4.36` (THẬT: `THẬT d4.36`) → **Triển khai**. Link `/exec` giữ nguyên.
+3. Mở app → Ctrl+Shift+R (máy tính) → **Tài khoản → Thông tin** ghi máy chủ `1.0.0-d4.36`. Chưa dán Code.gs mà mở trang Ảnh nền thì app báo "Máy chủ chưa lên bản có Ảnh nền".
+
+**Thay ảnh** (iPhone hoặc máy tính, tài khoản Quản trị):
+1. **Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ**.
+2. Khung **Màn đăng nhập** → **Chọn ảnh** → chọn ảnh (nên ảnh ngang, nhà máy ở giữa) → xem trước → **Dùng ảnh này** → PIN → nhãn đổi thành **Ảnh riêng**.
+3. Khung **Trang chủ** → làm như trên (PIN còn hạn 5 phút thì không hỏi lại) → về **Trang chủ** thấy ảnh mới ngay.
+4. Kiểm: **Đăng xuất** → màn đăng nhập ảnh mới; tắt hẳn app rồi mở lại → màn chờ, màn đăng nhập ảnh mới ngay từ đầu.
+5. Máy khác (iPhone người dùng): mở app → đăng nhập/đồng bộ một lần → lần sau màn đăng nhập ảnh mới.
+6. Quay về ảnh cũ: bấm **Dùng ảnh mặc định** ở khung tương ứng → xác nhận → PIN.
+
+---
 
 ## Phần AA — Bản 1.0.0-d4.35: nối app ISO (cửa đọc `feed.isoEvidence`), mã biểu ISO của checklist, cột Ca / Phản hồi ở sổ dừng máy
 

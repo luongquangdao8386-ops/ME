@@ -207,7 +207,9 @@ function syncChanges_(ctx) {
   return {
     changes: changes, next_cursor: String(nextCursor), has_more: hasMore,
     perm_version: sysStateCached_().perm_version || 1, sync_cursor: String(nextCursor), server_today: todayVN_(), server_version: SERVER_VERSION,
-    released_dot: releasedDot_()
+    released_dot: releasedDot_(),
+    // d4.36: ảnh nền đăng nhập / trang chủ đổi → app tải ảnh mới (không phải tải lại toàn bộ dữ liệu)
+    bg_revs: bgRevs_()
   };
 }
 

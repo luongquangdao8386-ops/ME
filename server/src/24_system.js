@@ -116,7 +116,8 @@ function auditAuth_(ctx) {
 /* ---------------- Cấu hình ---------------- */
 
 /** Khóa không sửa trong app: mốc A7 cố định, kho làm sau, khóa của đợt sau */
-var SETTINGS_READONLY_ = { email_stages: 1, overdue_repeat_days: 1, lead_days: 1, warehouse_connected: 1, report_logo_file_id: 1, report_logo_rev: 1, meter_loss_tolerance: 1 };
+var SETTINGS_READONLY_ = { email_stages: 1, overdue_repeat_days: 1, lead_days: 1, warehouse_connected: 1, report_logo_file_id: 1, report_logo_rev: 1, meter_loss_tolerance: 1,
+  bg_login_file_id: 1, bg_login_rev: 1, bg_home_file_id: 1, bg_home_rev: 1 };
 var SETTINGS_BOUNDS_ = {
   session_days: [1, 90], session_warn_days: [0, 30], change_pin_session_minutes: [5, 60], reauth_window_minutes: [1, 30], temp_pin_hours: [1, 168],
   max_sessions_per_user: [1, 50], login_fail_limit: [3, 20], login_fail_window_minutes: [1, 120], login_lock_minutes: [1, 1440],
@@ -377,6 +378,8 @@ function healthRows_() {
   add('checksheet_feed', true, prop_('FEED_KEY_CS') ? 'ON' : 'OFF', prop_('FEED_KEY_CS') ? '' : 'Chưa nối Checksheet (chạy adminCreateFeedKey khi cần)');
   // d4.35: mã kết nối cho app ISO (feed.isoEvidence)
   add('iso_feed', true, prop_('FEED_KEY_ISO') ? 'ON' : 'OFF', prop_('FEED_KEY_ISO') ? '' : 'Chưa nối app ISO (chạy adminCreateFeedKeyIso khi cần)');
+  // d4.36: ảnh nền màn đăng nhập / trang chủ (Quản trị → Ảnh nền)
+  add('bg', true, 'Đăng nhập: ' + (setting_('bg_login_rev') ? 'ảnh riêng' : 'ảnh mặc định') + ' · Trang chủ: ' + (setting_('bg_home_rev') ? 'ảnh riêng' : 'ảnh mặc định'));
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;
