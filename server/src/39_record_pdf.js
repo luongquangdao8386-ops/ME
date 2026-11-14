@@ -228,11 +228,17 @@ function recEquipmentPdf_(rec, L, ctx) {
   add('field.model', rec.model);
   add('field.serial', rec.serial);
   add('field.manufacture_year', rec.manufacture_year);
+  add('field.in_service_year', rec.in_service_year);
   add('field.install_date', fmtDateVN_(rec.install_date));
   add('field.warranty_end', fmtDateVN_(rec.warranty_end));
   if (rec.vendor_id) { var v = findOne_('Vendors', 'vendor_id', rec.vendor_id); if (v) add('field.vendor', [v.vendor_code, v.name].filter(Boolean).join(' · ')); }
   add('field.status', lab_('equipment_status.' + rec.status));
   if (rec.criticality) add('field.criticality', lab_('criticality.' + rec.criticality));
+  // d4.37: thiết bị nghiêm ngặt, số đăng ký (biểu 02-01, 06-05) — chỉ khi dữ liệu có cột (schema 1.5.7)
+  if (releasedDot_() >= 7) {
+    add('field.strict_safety', lab_('yes_no.' + (rec.strict_safety === true ? 'YES' : 'NO')));
+    add('field.registration_no', rec.registration_no);
+  }
   add('field.owner', recName_(dir, rec.owner_user_id));
 
   var tables = [];
@@ -248,13 +254,14 @@ function recEquipmentPdf_(rec, L, ctx) {
   var reqs = findAll_('InspectionRequirements', 'equipment_id', id).filter(function (r) { return !r.archived_at && r.active !== false; });
   var today = todayVN_();
   if (reqs.length) tables.push({ title: lab_('rec.inspections'), numbered: false,
-    head: [lab_('field.inspection_type'), lab_('rec.col.interval'), lab_('field.certificate_number'), lab_('field.inspection_date'), lab_('field.valid_to'), lab_('rec.col.days_left')],
-    types: ['text', 'num', 'code', 'date', 'date', 'num'],
+    head: [lab_('field.inspection_type'), lab_('rec.col.interval'), lab_('field.certificate_number'), lab_('field.inspection_vendor'), lab_('field.inspection_date'), lab_('field.valid_to'), lab_('rec.col.days_left')],
+    types: ['text', 'num', 'code', 'text', 'date', 'date', 'num'],
     rows: reqs.map(function (r) {
       var t = types[r.inspection_type_id] || {};
       var cur = insp.filter(function (i) { return i.inspection_id === r.current_inspection_id; })[0] || {};
       var dr = daysRemaining_(r.current_due_date, today);
-      return [recBi_(t, 'name'), recNum_(t.default_interval_months), cur.certificate_number || '', fmtDateVN_(cur.inspection_date), fmtDateVN_(r.current_due_date), dr === null ? '' : fmtNumSrv_(dr)];
+      var iv = cur.vendor_id ? findOne_('Vendors', 'vendor_id', cur.vendor_id) : null;
+      return [recBi_(t, 'name'), recNum_(t.default_interval_months), cur.certificate_number || '', iv ? iv.name || iv.vendor_code : '', fmtDateVN_(cur.inspection_date), fmtDateVN_(r.current_due_date), dr === null ? '' : fmtNumSrv_(dr)];
     }) });
 
   var parts = findAll_('EquipmentParts', 'equipment_id', id).filter(function (x) { return !x.archived_at && !x.removed_at; });

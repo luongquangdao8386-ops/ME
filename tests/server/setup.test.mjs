@@ -25,7 +25,7 @@ test('setup tạo 54 sheet Đợt 1–5, Settings, SystemState, 60 dòng RolePer
   assert.ok(settings.every((s) => s.description_vi && s.description_zh));
   assert.equal(env.rows('RolePermissions').length, 60);
   const st = g.readState_().map;
-  assert.equal(st.schema_version, '1.5.6');
+  assert.equal(st.schema_version, '1.5.7');
   assert.equal(st.perm_version, 1);
   assert.equal(st.dataset_epoch, env.props.getProperty('DATASET_EPOCH'));
   assert.match(env.props.getProperty('DATASET_EPOCH'), /^[0-9a-f-]{36}$/);

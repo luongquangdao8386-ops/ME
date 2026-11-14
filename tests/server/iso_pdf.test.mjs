@@ -199,7 +199,7 @@ test('PDF lý lịch thiết bị (thay BM-CĐ-02-02): A4 ngang, thông tin chun
   assert.deepEqual(Array.from(tiles.rows[0].cells, (x) => vi(x.children[0].text) + '=' + x.children[1].text),
     ['Số lần bảo trì=1', 'Bảo trì gần nhất=20/10/2026', 'Số lần sửa chữa=1', 'Tổng giờ dừng máy do sửa chữa=' + tiles.rows[0].cells[3].children[1].text]);
   const ins = tableAfter(d, 'Kiểm định – hiệu chuẩn');
-  assert.deepEqual(row(ins, 1).slice(1, 5), ['12', 'CN-1', '01/10/2026', '30/09/2027']);
+  assert.deepEqual(row(ins, 1).slice(1, 5), ['12', 'CN-1', '', '01/10/2026'] /* d4.37: cột Đơn vị kiểm định (chưa chọn) */);
   const parts = tableAfter(d, 'Linh kiện gắn máy');
   assert.equal(row(parts, 1)[2], 'Vòng bi 6205');
   const hist = tableAfter(d, 'B. Lịch sử');

@@ -142,7 +142,7 @@ function certBlock(i, vendors) {
     ${kv('in.next_due', esc(fmtDate(i.next_due_date)))}
     ${kv('field.result', badge('inspection_result.' + i.result))}
     ${kv('in.restriction', i.restriction_vi || i.restriction_zh ? biName(i, 'restriction') : '')}
-    ${kv('field.vendor', v ? esc(v.vendor_code + ' · ' + v.name) : '')}
+    ${kv('field.inspection_vendor', v ? esc(v.vendor_code + ' · ' + v.name) : '')}
     ${i.cost !== undefined && i.cost !== '' && i.cost !== null ? kv('in.cost', `${fmtNumber(i.cost)} ${esc(i.currency || 'VND')}`) : ''}
   </div>`;
 }
@@ -292,7 +292,7 @@ export async function renderSubmitForm(view, ctx) {
       ${dateInput('valid_to', 'field.valid_to', draft.valid_to || '')}
       ${dateInput('next_due_date', 'in.next_due', draft.next_due_date || '')}
       ${textInput('certificate_number', 'field.certificate_number', draft.certificate_number || '', { maxlength: 80 })}
-      ${selectInput('vendor_id', 'field.vendor', vendors.map((v) => [v.vendor_id, `${esc(v.vendor_code)} · ${esc(v.name)}`]), draft.vendor_id || '')}
+      ${selectInput('vendor_id', 'field.inspection_vendor', vendors.map((v) => [v.vendor_id, `${esc(v.vendor_code)} · ${esc(v.name)}`]), draft.vendor_id || '')}
       ${showCost ? numberInput('cost', 'in.cost', draft.cost || '', { hint: 'VND' }) : ''}
       ${bilingualInputs('restriction', draft, { required: false, labelKey: 'in.restriction', area: true, maxlength: 500, suggest: 'inspections' })}
     </div>

@@ -1,4 +1,4 @@
-# Hướng dẫn triển khai M&E — bản 1.0.0-d4.36 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app · … · d4.35 cửa đọc cho app ISO, mã biểu ISO của checklist, sổ dừng máy có cột Ca và Phản hồi — cần dán Code.gs và `migrateSchema` (Phần AA) · d4.36 Quản trị tự thay ảnh nền màn đăng nhập và trang chủ — cần dán Code.gs, không cần `migrateSchema` (Phần AB))
+# Hướng dẫn triển khai M&E — bản 1.0.0-d4.37 (cả 4 đợt đang chạy THẬT từ 21/10/2026 · d4.12 nối app Checksheet · d4.13 lịch tháng mới, tab Thuật ngữ nhanh · d4.14–d4.15 thanh nút dưới to hơn, ô Quét QR nổi · d4.16–d4.17 Kế hoạch bảo trì năm · d4.18 kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm — cần dán Code.gs và `migrateSchema` · d4.19 PDF kế hoạch năm 2 phần + xem việc từng tháng · d4.20 Enter = xác nhận trong hộp thoại PIN · d4.21 in thay biểu mẫu ISO: phiếu BT/SC, lý lịch thiết bị, lịch tháng, nhật ký dịch vụ nhà thầu, mã biểu mẫu trên PDF — cần dán Code.gs, không cần `migrateSchema` · d4.22 báo cáo tháng Điện nước có các ngày, biểu đồ mới, mỗi báo cáo gọn một mặt A4, lịch không còn mục Chỉ số — cần dán Code.gs, không cần `migrateSchema` · d4.23 menu trái trên máy tính có màu nhẹ — chỉ đổi app · d4.24 phối màu "Xanh biển": trang chủ chia 3 khu màu nhẹ — chỉ đổi app · … · d4.35 cửa đọc cho app ISO, mã biểu ISO của checklist, sổ dừng máy có cột Ca và Phản hồi — cần dán Code.gs và `migrateSchema` (Phần AA) · d4.36 Quản trị tự thay ảnh nền màn đăng nhập và trang chủ — cần dán Code.gs, không cần `migrateSchema` (Phần AB) · d4.37 cột còn thiếu để in thay biểu BM-CĐ-02-01 và 06-05 — cần dán Code.gs và `migrateSchema` (Phần AC))
 
 Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E** (không dùng tài khoản đang chạy app Cơ Điện).
 
@@ -65,6 +65,34 @@ Làm trên **máy tính**, trong **hồ sơ Chrome của tài khoản Google M&E
 **Bản d4.19 (PDF kế hoạch năm hai phần: Tổng quan năm dạng chấm theo tháng + Việc từng tháng có nội dung checklist, an toàn, người làm, thời gian, ô Đã làm/Ký; chọn in Cả năm / Chỉ tổng quan / Một tháng; tab Kế hoạch năm có hàng T1…T12 "Xem việc từng tháng") cũng cần dán Code.gs mới.** Chưa làm Phần V/W thì làm luôn với mã d4.19 (số bản trong các bước đọc là **1.0.0-d4.19**). Đã làm Phần V/W với d4.18 rồi: chỉ dán Code.gs mới → Lưu → **Phiên bản mới** (`THỬ d4.19` / `THẬT d4.19`), **không** cần chạy lại `migrateSchema`. Bản chốt lưu từ d4.19 có sẵn nội dung từng việc; bản chốt cũ thì PDF lấy nội dung từ kế hoạch hiện tại.
 
 **Bản d4.18 (kế hoạch cho cả loại máy + chốt/duyệt kế hoạch năm) phải nâng máy chủ:** làm **Phần V** (THỬ) → thử theo **Phần V2** → ưng thì nói **"phát hành THẬT"** → **Phần W** (THẬT). Lần này **có** dán `Code.gs`, cấp quyền nếu Google hỏi, **Phiên bản mới**, và **sau cùng** chạy `migrateSchema` (thêm cột `plan_group_id` vào Kế hoạch bảo trì và sheet `AnnualPlans`, schema **1.5.5**). Trước khi `migrateSchema`, app mới vẫn chạy như d4.17 (chưa có nút "Kế hoạch cho cả loại", chưa có khung chốt/duyệt).
+
+## Phần AC — Bản 1.0.0-d4.37: in thay biểu BM-CĐ-02-01 (danh mục thiết bị) và BM-CĐ-06-05 (danh mục & kế hoạch kiểm định)
+
+**Có gì mới**
+- **Hồ sơ thiết bị** (Thiết bị → hồ sơ → **Sửa**, hoặc **Thêm thiết bị**) có 3 ô mới: **Năm đưa vào sử dụng**, ô tick **Thiết bị nghiêm ngặt về an toàn** (Có — thuộc danh mục máy, thiết bị có yêu cầu nghiêm ngặt về an toàn lao động), **Số đăng ký thiết bị** (số đăng ký với cơ quan quản lý). Hồ sơ, **Lý lịch thiết bị** (PDF) hiện đủ 3 ô.
+- **Excel thiết bị** (Thiết bị → Excel → Xuất / Tải mẫu / Nhập): sheet `equipment` thêm cột `in_service_year` (ngay sau Năm sản xuất), `strict_safety` (ghi **Có / Không**; để trống = Không) và `registration_no` (giữ dạng chữ, số 0 đầu không mất).
+- **Báo cáo → Hồ sơ và linh kiện thiết bị** (in thay **BM-CĐ-02-01**): cột theo thứ tự biểu — Mã thiết bị · Tên · Loại · Model · Hãng · Số serial · **Năm đưa vào sử dụng** · **Công suất (kW)** · Khu vực · Người phụ trách · Mức quan trọng · **Thiết bị nghiêm ngặt (Có/Không)** · Tình trạng; hai cột riêng của app (Linh kiện gắn máy, Sự cố đang mở) để cuối. Ô tóm tắt thêm **Thiết bị nghiêm ngặt: N**.
+  - **Năm đưa vào sử dụng** chưa nhập thì lấy năm của **Ngày lắp đặt**.
+  - **Công suất (kW)** lấy từ thông số **Công suất điện** ở tab **Thông số** của thiết bị (đơn vị W tự chia 1 000, HP tự đổi ra kW). Chưa có thông số thì ô trống. Nhập nhiều máy một lượt: Excel thiết bị → sheet `equipment_specs`, `spec_key` = `electrical_power`, `value_num` = số, `unit` = `kW`.
+- **Báo cáo → Kiểm định** (in thay **BM-CĐ-06-05**): cột theo thứ tự biểu — Mã thiết bị · Thiết bị · **Số đăng ký thiết bị** · Khu vực · Loại kiểm định · Ngày kiểm định · Hiệu lực đến · **Đơn vị kiểm định** · Số chứng nhận · Tình trạng hồ sơ; cột riêng của app (Còn ngày, Trạng thái hạn, Mã yêu cầu, Chi phí) để cuối.
+  - **Số đăng ký** lấy từ hồ sơ thiết bị; **Đơn vị kiểm định** lấy từ chứng nhận đang hiệu lực (ô **Đơn vị kiểm định** khi nộp chứng nhận — trước đây ô này tên "Nhà cung cấp"). Đơn vị kiểm định phải có trong **Danh mục chung → Nhà cung cấp**.
+- PDF, Excel và bản xem trước của hai báo cáo đều có các cột mới. Mẫu báo cáo nào Quản trị **đã sửa cột** trước đây thì cột mới không tự hiện: Báo cáo → **Xuất mẫu** (mở danh sách mẫu báo cáo) → bấm mẫu → tick thêm cột mới → **Lưu**.
+
+**Đưa lên THẬT** (`ME_MayChu_THAT`, link raw nhánh `main`). Làm ngoài giờ ghi phiếu, trên máy tính:
+1. App → **Tài khoản → Quản trị → Sao lưu** → **Sao lưu ngay** → chờ "Đã kiểm chứng".
+2. <https://script.google.com> → dự án **ME_MayChu_THAT** → tệp **Code.gs** → Ctrl+A → Delete → mở <https://raw.githubusercontent.com/luongquangdao8386-ops/ME/main/apps-script/Code.gs> → Ctrl+A → Ctrl+C → dán → **Lưu** (Ctrl+S).
+3. Chọn hàm **`healthCheck`** → **Chạy**. Dòng `schema_version` báo CẢNH BÁO `1.5.6 (1.5.7)` là đúng lúc này.
+4. **Triển khai → Quản lý các bản triển khai** → bút chì → Phiên bản: **Phiên bản mới** → mô tả `THẬT d4.37` → **Triển khai**. Link `/exec` giữ nguyên.
+5. **Sau cùng** chọn hàm **`migrateSchema`** → **Chạy** → Nhật ký: `migrateSchema xong. Thêm: Equipment(in_service_year,strict_safety,registration_no). schema_version=1.5.7`.
+6. Chạy lại **`healthCheck`**: `schema_version` = 1.5.7 ĐẠT.
+7. Mở app → Ctrl+Shift+R → **Tài khoản → Thông tin** ghi `1.0.0-d4.37` (iPhone: đóng hẳn app rồi mở lại). Trước bước 5, form thiết bị chưa có 3 ô mới và mẫu Excel chưa có 3 cột — bình thường.
+
+**Điền dữ liệu**
+1. Nhiều máy: **Thiết bị → Excel → Xuất Excel** → điền cột `in_service_year`, `strict_safety` (Có/Không), `registration_no`; công suất điền ở sheet `equipment_specs` (thêm dòng `equipment_key` = mã thiết bị, `spec_key` = `electrical_power`, `value_num`, `unit` = `kW`) → **Nhập Excel** → xem trước → **Nhập dữ liệu**.
+2. Từng máy: hồ sơ → **Sửa** → 3 ô mới → **Lưu**; công suất ở tab **Thông số → Thêm thông số → Công suất điện**.
+3. Kiểm: **Báo cáo → Hồ sơ và linh kiện thiết bị → Xem** → PDF / Xuất Excel; **Báo cáo → Kiểm định → Xem** → PDF / Xuất Excel. Mã biểu mẫu in ở góc phải: Tài khoản → Quản trị → **Mã biểu mẫu trên PDF** → `RPT_EQUIPMENT` = `BM-CĐ-02-01`, `RPT_INSPECTIONS` = `BM-CĐ-06-05`.
+
+---
 
 ## Phần AB — Bản 1.0.0-d4.36: Quản trị tự thay ảnh nền màn đăng nhập và trang chủ
 

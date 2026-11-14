@@ -216,9 +216,12 @@ async function renderPane(pane, id, tab, ctx) {
       ${kv('field.category', cat ? biName(cat) : '')}
       ${kv('field.manufacturer', esc(eq.manufacturer || ''))}
       ${kv('field.manufacture_year', esc(eq.manufacture_year || ''))}
+      ${kv('field.in_service_year', esc(eq.in_service_year || ''))}
       ${kv('field.install_date', esc(fmtDate(eq.install_date)))}
       ${kv('field.warranty_end', esc(fmtDate(eq.warranty_end)))}
       ${kv('field.criticality', eq.criticality ? bi('criticality.' + eq.criticality) : '')}
+      ${RELEASED_DOT >= 7 ? kv('field.strict_safety', bi('yes_no.' + (eq.strict_safety === true ? 'YES' : 'NO'))) : ''}
+      ${kv('field.registration_no', esc(eq.registration_no || ''))}
       ${kv('field.owner', esc(eq.owner_name || ''))}
       ${kv('field.vendor', vendor ? esc(vendor.vendor_code + ' · ' + vendor.name) : '')}
     </div></details>
@@ -439,7 +442,10 @@ export async function handleWriteError(r) {
 
 /* ======================= Biểu mẫu thêm/sửa ======================= */
 
-const EQ_FIELDS = ['equipment_code', 'category_id', 'location_id', 'vendor_id', 'manufacturer', 'model', 'serial', 'manufacture_year', 'install_date', 'warranty_end', 'status', 'criticality', 'owner_user_id'];
+// d4.37: in_service_year, strict_safety, registration_no (biểu ISO 02-01, 06-05) chỉ hiện khi máy chủ đã migrateSchema 1.5.7 (đợt 7);
+// ô không có trên form → readField trả undefined → không gửi
+const EQ_FIELDS = ['equipment_code', 'category_id', 'location_id', 'vendor_id', 'manufacturer', 'model', 'serial', 'manufacture_year', 'in_service_year', 'install_date', 'warranty_end', 'status', 'criticality', 'strict_safety', 'registration_no', 'owner_user_id'];
+const YEAR_FIELDS = ['manufacture_year', 'in_service_year'];
 
 export async function renderEquipmentForm(view, ctx) {
   const { shell, params } = ctx;
@@ -462,6 +468,7 @@ export async function renderEquipmentForm(view, ctx) {
     if (r.ok) users = r.data.items;
   }
   if (rec.owner_user_id && !users.some((u) => u.user_id === rec.owner_user_id)) users.push({ user_id: rec.owner_user_id, employee_code: '', display_name: rec.owner_name || rec.owner_user_id });
+  const d7 = RELEASED_DOT >= 7;
   const mineHint = (f) => (mine && Object.prototype.hasOwnProperty.call(mine, f) && String(mine[f] ?? '') !== String(rec[f] ?? '') ? `${bi('form.my_value')}: <strong>${esc(mine[f])}</strong>` : '');
   view.innerHTML = `<form class="card form-card" novalidate>
     ${draft ? `<p class="banner info">${bi('form.draft_restored')} <button type="button" class="btn tiny" id="fd-discard">${bi('form.discard_draft')}</button></p>` : ''}
@@ -476,21 +483,25 @@ export async function renderEquipmentForm(view, ctx) {
       ${textInput('model', 'field.model', vals.model, { maxlength: 120, hint: mineHint('model') })}
       ${textInput('serial', 'field.serial', vals.serial, { maxlength: 120, hint: mineHint('serial') })}
       ${numberInput('manufacture_year', 'field.manufacture_year', vals.manufacture_year ? String(vals.manufacture_year) : '', { integer: true, hint: mineHint('manufacture_year') })}
+      ${d7 ? numberInput('in_service_year', 'field.in_service_year', vals.in_service_year ? String(vals.in_service_year) : '', { integer: true, hint: mineHint('in_service_year') }) : ''}
       ${dateInput('install_date', 'field.install_date', vals.install_date, { hint: mineHint('install_date') })}
       ${dateInput('warranty_end', 'field.warranty_end', vals.warranty_end, { hint: mineHint('warranty_end') })}
       ${selectInput('status', 'field.status', STATUSES.filter((s) => s !== 'RETIRED').map((s) => [s, bi('equipment_status.' + s)]), vals.status, { empty: null, hint: mineHint('status') })}
       ${selectInput('criticality', 'field.criticality', CRIT.map((c) => [c, bi('criticality.' + c)]), vals.criticality, { hint: mineHint('criticality') })}
+      ${d7 ? fieldWrap('strict_safety', 'field.strict_safety', `<label class="check"><input type="checkbox" id="f-strict_safety" ${vals.strict_safety === true ? 'checked' : ''}><span>${bi('field.strict_safety_on')}</span></label>`, { hint: mineHint('strict_safety') }) : ''}
+      ${d7 ? textInput('registration_no', 'field.registration_no', vals.registration_no, { maxlength: 60, hint: mineHint('registration_no') || bi('field.registration_hint') }) : ''}
       ${selectInput('owner_user_id', 'field.owner', users.map((u) => [u.user_id, esc(`${u.employee_code ? u.employee_code + ' · ' : ''}${u.display_name}`)]), vals.owner_user_id, { hint: mineHint('owner_user_id') })}
     </div>
+    ${d7 ? `<p class="muted small" id="eq-power-note">${bi('field.power_from_spec')}</p>` : ''}
     <p class="form-err err" role="alert"></p>
     <div class="row form-actions"><button type="button" class="btn" id="fm-cancel">${bi('btn.cancel')}</button><button type="submit" class="btn primary" id="fm-save">${bi('btn.save')}</button></div>
   </form>`;
   const form = $('form', view);
-  // manufacture_year hiện không nhóm hàng nghìn (năm không nhóm, 5.4.1)
-  const yr = $('#f-manufacture_year', form);
-  if (yr) yr.value = vals.manufacture_year ? String(vals.manufacture_year) : '';
+  // Ô năm hiện không nhóm hàng nghìn (năm không nhóm, 5.4.1)
+  const years = YEAR_FIELDS.map((f) => [f, $('#f-' + f, form)]).filter(([, el]) => el);
+  years.forEach(([f, el]) => { el.value = vals[f] ? String(vals[f]) : ''; });
   wireForm(form);
-  if (yr) yr.addEventListener('blur', () => { yr.value = yr.value.replace(/\s/g, ''); });
+  years.forEach(([, el]) => el.addEventListener('blur', () => { el.value = el.value.replace(/\s/g, ''); }));
   const collect = () => {
     const out = { name_vi: readField(form, 'name_vi'), name_zh: readField(form, 'name_zh') };
     EQ_FIELDS.forEach((f) => { out[f] = readField(form, f); });
@@ -508,7 +519,11 @@ export async function renderEquipmentForm(view, ctx) {
     if (!v.name_vi && !v.name_zh) errs.push({ field: 'name', key: 'field.one_lang' });
     if (v.install_date === null) errs.push({ field: 'install_date', key: 'field.invalid_date' });
     if (v.warranty_end === null) errs.push({ field: 'warranty_end', key: 'field.invalid_date' });
-    if (Number.isNaN(v.manufacture_year) || (v.manufacture_year !== null && (v.manufacture_year < 1900 || v.manufacture_year > 2100))) errs.push({ field: 'manufacture_year', key: 'field.year_invalid' });
+    YEAR_FIELDS.forEach((f) => {
+      const y = v[f];
+      if (y === undefined) return;
+      if (Number.isNaN(y) || (y !== null && (y < 1900 || y > 2100))) errs.push({ field: f, key: 'field.year_invalid' });
+    });
     if (errs.length) { showErrors(form, errs); return; }
     const payload = {};
     if (isNew) {
@@ -519,7 +534,8 @@ export async function renderEquipmentForm(view, ctx) {
       Object.entries(v).forEach(([k, x]) => {
         const cur = rec[k] === null || rec[k] === undefined ? '' : rec[k];
         const nx = x === null || x === undefined ? '' : x;
-        if (String(cur) !== String(nx)) payload[k] = nx === '' && k === 'manufacture_year' ? '' : nx;
+        if (k === 'strict_safety' && x !== undefined) { if ((rec.strict_safety === true) !== (x === true)) payload[k] = x === true; return; }
+        if (String(cur) !== String(nx)) payload[k] = nx;
       });
       if (payload.equipment_code === rec.equipment_code) delete payload.equipment_code;
     }

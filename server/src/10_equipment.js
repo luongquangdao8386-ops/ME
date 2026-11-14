@@ -3,7 +3,19 @@
 var EQUIPMENT_STATUS_ = ['RUNNING', 'STOPPED', 'UNDER_REPAIR', 'UNDER_MAINTENANCE', 'STANDBY', 'RETIRED'];
 var CRITICALITY_ = ['HIGH', 'MEDIUM', 'LOW'];
 var EQUIPMENT_FIELDS_ = ['category_id', 'location_id', 'vendor_id', 'manufacturer', 'model', 'serial',
-  'manufacture_year', 'install_date', 'warranty_end', 'status', 'criticality', 'owner_user_id'];
+  'manufacture_year', 'install_date', 'warranty_end', 'status', 'criticality', 'owner_user_id',
+  'in_service_year', 'strict_safety', 'registration_no'];
+/** d4.37: trường của biểu ISO 02-01/06-05 — chỉ ghi khi dữ liệu đã migrateSchema 1.5.7 ("đợt" 7); trước đó bỏ qua, không báo lỗi */
+var EQUIPMENT_FIELDS_D7_ = ['in_service_year', 'strict_safety', 'registration_no'];
+
+/** Bỏ trường đợt 7 khi schema chưa nâng; chuẩn hóa năm (số) và thiết bị nghiêm ngặt (đúng/sai) */
+function equipmentFieldsNorm_(p) {
+  if (releasedDot_() < 7) { EQUIPMENT_FIELDS_D7_.forEach(function (f) { delete p[f]; }); return; }
+  if (p.in_service_year !== undefined && p.in_service_year !== null && p.in_service_year !== '' && !isNaN(Number(p.in_service_year))) p.in_service_year = Number(p.in_service_year);
+  if (p.strict_safety === 'true' || p.strict_safety === 'TRUE') p.strict_safety = true;
+  if (p.strict_safety === 'false' || p.strict_safety === 'FALSE' || p.strict_safety === '' || p.strict_safety === null) p.strict_safety = false;
+  if (p.registration_no !== undefined && p.registration_no !== null) p.registration_no = trimStr_(p.registration_no);
+}
 
 /** Kiểm trường thiết bị (ngoài tên); đẩy lỗi vào errs */
 function validateEquipmentFields_(p, errs) {
@@ -12,13 +24,16 @@ function validateEquipmentFields_(p, errs) {
   ['install_date', 'warranty_end'].forEach(function (f) {
     if (p[f] !== undefined && p[f] !== '' && !isDateStr_(p[f])) errs.push(fieldError_(f, 'INVALID_DATE'));
   });
-  if (p.manufacture_year !== undefined && p.manufacture_year !== '' && p.manufacture_year !== null) {
-    var y = Number(p.manufacture_year);
-    if (!(y >= 1900 && y <= 2100 && Math.floor(y) === y)) errs.push(fieldError_('manufacture_year', 'INVALID_VALUE'));
-  }
+  ['manufacture_year', 'in_service_year'].forEach(function (f) {
+    if (p[f] === undefined || p[f] === '' || p[f] === null) return;
+    var y = Number(p[f]);
+    if (!(y >= 1900 && y <= 2100 && Math.floor(y) === y)) errs.push(fieldError_(f, 'INVALID_VALUE'));
+  });
+  if (p.strict_safety !== undefined && typeof p.strict_safety !== 'boolean') errs.push(fieldError_('strict_safety', 'INVALID_VALUE'));
   ['manufacturer', 'model', 'serial'].forEach(function (f) {
     if (p[f] !== undefined && String(p[f]).length > 120) errs.push(fieldError_(f, 'INVALID_VALUE'));
   });
+  if (p.registration_no !== undefined && (String(p.registration_no).length > 60 || /[\r\n]/.test(String(p.registration_no)))) errs.push(fieldError_('registration_no', 'INVALID_VALUE'));
   ['name_vi', 'name_zh'].forEach(function (f) {
     if (p[f] !== undefined && String(p[f]).length > 200) errs.push(fieldError_(f, 'INVALID_VALUE'));
   });
@@ -39,6 +54,7 @@ function equipmentCreate_(ctx) {
   var errs = [];
   if (!isUuidV4_(p.equipment_id)) errs.push(fieldError_('equipment_id', 'ID_INVALID'));
   requireOneLang_(errs, p, null, 'name');
+  equipmentFieldsNorm_(p);
   validateEquipmentFields_(p, errs);
   if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
   if (errs.length) throw validationError_(errs);
@@ -58,6 +74,8 @@ function equipmentCreate_(ctx) {
       EQUIPMENT_FIELDS_.forEach(function (f) { row[f] = p[f] !== undefined ? p[f] : ''; });
       if (!row.status) row.status = 'RUNNING';
       if (row.manufacture_year !== '' && row.manufacture_year !== null) row.manufacture_year = Number(row.manufacture_year);
+      if (releasedDot_() >= 7) row.strict_safety = row.strict_safety === true;
+      else EQUIPMENT_FIELDS_D7_.forEach(function (f) { delete row[f]; });
       cNew_(ctx, row);
       return {
         writes: [
@@ -80,6 +98,7 @@ function equipmentEdit_(ctx) {
   if (!cur0) throw apiError_('NOT_FOUND');
   var errs = [];
   requireOneLang_(errs, p, cur0, 'name');
+  equipmentFieldsNorm_(p);
   validateEquipmentFields_(p, errs);
   if (errs.length) throw validationError_(errs);
   var tr = applyTranslations_('Equipment', ['name'], p, cur0);

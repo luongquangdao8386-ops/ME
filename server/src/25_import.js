@@ -53,8 +53,12 @@ var IMPORT_TEMPLATES_ = {
       ic_('category_code', 'ref', 'Mã loại thiết bị', '设备类别编码', { ref: 'LookupValues', group: 'EQUIPMENT_CATEGORY', to: 'category_id' }),
       ic_('location_code', 'ref', 'Mã khu vực', '区域编号', { ref: 'Locations', to: 'location_id' }), ic_('vendor_code', 'ref', 'Mã nhà cung cấp', '供应商编号', { ref: 'Vendors', to: 'vendor_id' }),
       ic_('manufacturer', 'text', 'Hãng', '品牌', { max: 120 }), ic_('model', 'text', 'Model', '型号', { max: 120, keep: 1 }), ic_('serial', 'text', 'Số serial', '序列号', { max: 120, keep: 1 }),
-      ic_('manufacture_year', 'int', 'Năm sản xuất', '生产年份'), ic_('install_date', 'date', 'Ngày lắp đặt', '安装日期'), ic_('warranty_end', 'date', 'Hết bảo hành', '保修到期'),
+      ic_('manufacture_year', 'int', 'Năm sản xuất', '生产年份', { min: 1900, maxv: 2100 }),
+      ic_('in_service_year', 'int', 'Năm đưa vào sử dụng', '投入使用年份', { min: 1900, maxv: 2100, dot: 7 }),
+      ic_('install_date', 'date', 'Ngày lắp đặt', '安装日期'), ic_('warranty_end', 'date', 'Hết bảo hành', '保修到期'),
       ic_('status', 'enum', 'Tình trạng', '状态', { options: EQUIPMENT_STATUS_ }), ic_('criticality', 'enum', 'Mức quan trọng', '重要程度', { options: CRITICALITY_ }),
+      ic_('strict_safety', 'bool', 'Thiết bị nghiêm ngặt về an toàn (Có/Không)', '安全严格要求设备（是/否）', { dot: 7 }),
+      ic_('registration_no', 'text', 'Số đăng ký thiết bị', '设备登记号', { max: 60, keep: 1, dot: 7 }),
       ic_('owner_code', 'ref', 'Mã NV phụ trách', '负责人员工编号', { ref: 'Users', to: 'owner_user_id' }), ic_('record_version', 'ver', 'Phiên bản bản ghi', '记录版本')] },
     { name: 'equipment_specs', table: 'EquipmentSpecs', entity: 'EQUIPMENT_SPEC', id: 'spec_id', cols: [
       ic_('spec_id', 'id', 'ID (trống = thêm mới)', 'ID（空=新增）'),
@@ -119,7 +123,19 @@ function importTemplate_(key) {
   var t = IMPORT_TEMPLATES_[key];
   if (!t) throw validationError_([fieldError_('template_key', 'INVALID_VALUE')]);
   if (t.dot && t.dot > releasedDot_()) throw apiError_('FEATURE_NOT_ENABLED');
-  return t;
+  // d4.37: cột của đợt sau (vd. năm đưa vào sử dụng, schema 1.5.7) chỉ có khi dữ liệu đã migrateSchema
+  var dot = releasedDot_();
+  var late = t.sheets.some(function (sh) { return sh.cols.some(function (c) { return c.dot && c.dot > dot; }); });
+  if (!late) return t;
+  var t2 = {};
+  Object.keys(t).forEach(function (k) { t2[k] = t[k]; });
+  t2.sheets = t.sheets.map(function (sh) {
+    var s2 = {};
+    Object.keys(sh).forEach(function (k) { s2[k] = sh[k]; });
+    s2.cols = sh.cols.filter(function (c) { return !c.dot || c.dot <= dot; });
+    return s2;
+  });
+  return t2;
 }
 
 /**
@@ -232,6 +248,7 @@ function normCell_(c, raw) {
     var n = parseImportNum_(raw);
     if (n === '') return { v: '' };
     if (isNaN(n) || ((c.type === 'int' || c.type === 'ver') && Math.floor(n) !== n)) return { err: 'INVALID_VALUE' };
+    if ((c.min !== undefined && n < c.min) || (c.maxv !== undefined && n > c.maxv)) return { err: 'INVALID_VALUE' };
     return { v: n };
   }
   if (c.type === 'date') {

@@ -32,7 +32,9 @@ var SHEETS = {
     cols: 'qr_key entity_type entity_id code label_vi label_zh active dataset_epoch' },
   Equipment: { book: 'B', dot: 1, key: 'equipment_id', c: true, i18n: true,
     cols: 'equipment_id equipment_code name_vi name_zh category_id location_id vendor_id manufacturer model serial ' +
-      'manufacture_year install_date warranty_end status criticality owner_user_id' },
+      'manufacture_year install_date warranty_end status criticality owner_user_id ' +
+      // d4.37 (schema 1.5.7): cột biểu ISO BM-CĐ-02-01 (năm đưa vào sử dụng, thiết bị nghiêm ngặt) và 06-05 (số đăng ký)
+      'in_service_year:INT strict_safety:BOOL registration_no:STRING' },
   EquipmentSpecs: { book: 'B', dot: 1, key: 'spec_id', c: true, i18n: true,
     cols: 'spec_id equipment_id spec_key label_vi label_zh value_num value_text unit sort_order' },
   Materials: { book: 'B', dot: 1, key: 'material_id', c: true, i18n: true,

@@ -5,17 +5,19 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.36';
+var SERVER_VERSION = '1.0.0-d4.37';
 var API_CONTRACT_VERSION = '1.0';
-var SCHEMA_VERSION = '1.5.6';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
+var SCHEMA_VERSION = '1.5.7';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18);
-                               // 1.5.6 = mã biểu ISO của mẫu checklist: ChecklistTemplates.form_code ("đợt" 6, d4.35)
+                               // 1.5.6 = mã biểu ISO của mẫu checklist: ChecklistTemplates.form_code ("đợt" 6, d4.35);
+                               // 1.5.7 = cột biểu ISO 02-01/06-05: Equipment.in_service_year, strict_safety, registration_no ("đợt" 7, d4.37)
 var TZ = 'Asia/Ho_Chi_Minh';
 var TZ_OFFSET_MIN = 7 * 60; // Việt Nam không có giờ mùa hè
-var RELEASED_DOT = 6;       // đợt đang phát hành (5 = kế hoạch bảo trì năm theo nhóm + duyệt, 29/10/2026; 6 = mã biểu ISO của checklist, 11/11/2026)
+var RELEASED_DOT = 7;       // đợt đang phát hành (5 = kế hoạch bảo trì năm theo nhóm + duyệt, 29/10/2026; 6 = mã biểu ISO của checklist, 11/11/2026;
+                            // 7 = năm đưa vào sử dụng / thiết bị nghiêm ngặt / số đăng ký của thiết bị, 14/11/2026)
 
 /** schema_version của dữ liệu → đợt dữ liệu đã có đủ sheet (migrateSchema ghi schema_version) */
-var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4, '1.5.5': 5, '1.5.6': 6 };
+var SCHEMA_DOTS_ = { '1.5.0': 1, '1.5.1': 1, '1.5.2': 2, '1.5.3': 3, '1.5.4': 4, '1.5.5': 5, '1.5.6': 6, '1.5.7': 7 };
 var NAME_PREFIX = 'ME_';    // tên spreadsheet, thư mục Drive
 
 /** Bản ghi do máy chủ tạo thay mặt hệ thống (dịch nền, trigger). */

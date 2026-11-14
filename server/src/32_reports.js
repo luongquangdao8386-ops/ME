@@ -91,22 +91,48 @@ function countBy_(rows, key) {
 }
 function sumItem_(labelVi, labelZh, value, o) { var s = o || {}; s.label_vi = labelVi; s.label_zh = labelZh; s.value = value; return s; }
 
+/** d4.37: thông số Công suất điện → kW (kW giữ nguyên, W ÷ 1000, HP × 0,7457 rồi làm tròn 2 số lẻ); không có số → null */
+function powerKw_(v, unit) {
+  if (v === '' || v === null || v === undefined || isNaN(Number(v))) return null;
+  var n = Number(v), u = String(unit || 'kW');
+  if (u === 'W') return n / 1000;
+  if (u === 'HP') return Math.round(n * 74.57 + 1e-9) / 100;
+  return n;
+}
+
+/** d4.37: năm đưa vào sử dụng; chưa nhập thì lấy năm của Ngày lắp đặt */
+function inServiceYear_(e) {
+  if (e.in_service_year !== '' && e.in_service_year !== null && e.in_service_year !== undefined) return String(e.in_service_year);
+  return /^\d{4}-/.test(String(e.install_date || '')) ? String(e.install_date).slice(0, 4) : '';
+}
+
 /* ---------------- Tập dữ liệu (8 mẫu tích hợp) ---------------- */
 
 var REPORT_DATASETS_ = {
   EQUIPMENT: {
     module: 'equipment', view: 'equipment.view', chart: 'BAR', filters: ['location_id', 'status'],
+    // d4.37: thứ tự theo biểu BM-CĐ-02-01 (Danh mục máy móc, thiết bị & hạ tầng) + 3 cột của biểu: năm đưa vào sử dụng,
+    // công suất (kW) (từ thông số Công suất điện), thiết bị nghiêm ngặt; hai cột riêng của app (linh kiện, sự cố đang mở) để cuối
     columns: [
       rc_('equipment_code', 'code', 'Mã thiết bị', '设备编号'), rc_('name', 'bi', 'Tên thiết bị', '设备名称'),
-      rc_('location', 'text', 'Khu vực', '区域'), rc_('category', 'text', 'Loại', '类别'), rc_('manufacturer', 'text', 'Hãng', '品牌'),
-      rc_('model', 'code', 'Model', '型号'), rc_('serial', 'code', 'Số serial', '序列号'),
-      rc_('status', 'enum', 'Tình trạng', '状态', { enumKey: 'equipment_status' }), rc_('criticality', 'enum', 'Mức quan trọng', '重要程度', { enumKey: 'criticality' }),
-      rc_('owner', 'text', 'Người phụ trách', '负责人'), rc_('parts_count', 'num', 'Linh kiện gắn máy', '关联配件数'),
-      rc_('open_repairs', 'num', 'Sự cố đang mở', '未结故障')
+      rc_('category', 'text', 'Loại', '类别'), rc_('model', 'code', 'Model', '型号'), rc_('manufacturer', 'text', 'Hãng', '品牌'),
+      rc_('serial', 'code', 'Số serial', '序列号'),
+      rc_('in_service_year', 'text', 'Năm đưa vào sử dụng', '投入使用年份'), rc_('power_kw', 'num', 'Công suất (kW)', '功率（kW）'),
+      rc_('location', 'text', 'Khu vực', '区域'), rc_('owner', 'text', 'Người phụ trách', '负责人'),
+      rc_('criticality', 'enum', 'Mức quan trọng', '重要程度', { enumKey: 'criticality' }),
+      rc_('strict_safety', 'enum', 'Thiết bị nghiêm ngặt (Có/Không)', '严格要求设备（是/否）', { enumKey: 'yes_no' }),
+      rc_('status', 'enum', 'Tình trạng', '状态', { enumKey: 'equipment_status' }),
+      rc_('parts_count', 'num', 'Linh kiện gắn máy', '关联配件数'), rc_('open_repairs', 'num', 'Sự cố đang mở', '未结故障')
     ],
     build: function (ctx, f, L) {
-      var parts = {}, reps = {};
+      var parts = {}, reps = {}, power = {};
       readRows_('EquipmentParts').forEach(function (x) { if (!x.archived_at && !x.removed_at) parts[x.equipment_id] = (parts[x.equipment_id] || 0) + 1; });
+      readRows_('EquipmentSpecs').forEach(function (x) {
+        if (x.archived_at || x.spec_key !== 'electrical_power') return;
+        var kw = powerKw_(x.value_num, x.unit);
+        if (kw !== null) power[x.equipment_id] = kw;
+      });
+      var d7 = releasedDot_() >= 7;
       if (releasedDot_() >= 2) readRows_('Repairs').forEach(function (r) { if (!r.archived_at && REPAIR_OPEN_[r.status]) reps[r.equipment_id] = (reps[r.equipment_id] || 0) + 1; });
       var rows = readRows_('Equipment').filter(function (e) {
         return !e.archived_at && rptInLoc_(L, e.location_id, f.location_id) && (!f.status || e.status === f.status);
@@ -116,13 +142,18 @@ var REPORT_DATASETS_ = {
           equipment_code: e.equipment_code, name_vi: e.name_vi, name_zh: e.name_zh, location: rptLoc_(L, e.location_id),
           category: cat ? rptName_(cat) : '', manufacturer: e.manufacturer || '', model: e.model || '', serial: e.serial || '',
           status: e.status, criticality: e.criticality || '', owner: rptUser_(L, e.owner_user_id), parts_count: parts[e.equipment_id] || 0,
-          open_repairs: reps[e.equipment_id] || 0
+          open_repairs: reps[e.equipment_id] || 0,
+          in_service_year: inServiceYear_(e), power_kw: power[e.equipment_id] === undefined ? '' : power[e.equipment_id],
+          strict_safety: d7 ? (e.strict_safety === true ? 'YES' : 'NO') : ''
         };
       }).sort(function (a, b) { return String(a.equipment_code).localeCompare(String(b.equipment_code)); });
       var by = countBy_(rows, 'status');
+      var strict = rows.filter(function (r) { return r.strict_safety === 'YES'; }).length;
       return {
         rows: rows,
-        summary: [sumItem_('Tổng thiết bị', '设备总数', rows.length)].concat(Object.keys(by).map(function (k) { return sumItem_('', '', by[k], { enumKey: 'equipment_status', enum: k }); })),
+        summary: [sumItem_('Tổng thiết bị', '设备总数', rows.length)]
+          .concat(d7 ? [sumItem_('Thiết bị nghiêm ngặt', '严格要求设备', strict)] : [])
+          .concat(Object.keys(by).map(function (k) { return sumItem_('', '', by[k], { enumKey: 'equipment_status', enum: k }); })),
         chart: { type: 'BAR', series: Object.keys(by).map(function (k) { return { enumKey: 'equipment_status', key: k, value: by[k] }; }) }
       };
     }
@@ -462,12 +493,17 @@ var REPORT_DATASETS_ = {
   },
   INSPECTIONS: {
     module: 'inspections', view: 'inspection.view', chart: 'BAR', filters: ['location_id', 'due'],
+    // d4.37: thứ tự theo biểu BM-CĐ-06-05 (Danh mục & kế hoạch kiểm định thiết bị nghiêm ngặt) + 2 cột của biểu: số đăng ký
+    // thiết bị (hồ sơ thiết bị), đơn vị kiểm định (chứng nhận đang hiệu lực); cột riêng của app (còn ngày, trạng thái hạn, mã yêu cầu, chi phí) để cuối
     columns: [
-      rc_('requirement_code', 'code', 'Mã yêu cầu', '要求编号'), rc_('type', 'bi', 'Loại kiểm định', '检验类型'),
-      rc_('equipment_code', 'code', 'Mã thiết bị', '设备编号'), rc_('equipment_name', 'text', 'Thiết bị', '设备'), rc_('location', 'text', 'Khu vực', '区域'),
-      rc_('current_due_date', 'date', 'Hiệu lực đến', '有效期至'), rc_('days_remaining', 'num', 'Còn (ngày)', '剩余天数'),
-      rc_('due_state', 'enum', 'Trạng thái hạn', '期限状态', { enumKey: 'due_filter' }), rc_('record_status', 'enum', 'Tình trạng hồ sơ', '记录状态', { enumKey: 'record_status' }),
-      rc_('certificate_number', 'code', 'Số chứng nhận', '证书编号'), rc_('inspection_date', 'date', 'Ngày kiểm định', '检验日期'),
+      rc_('equipment_code', 'code', 'Mã thiết bị', '设备编号'), rc_('equipment_name', 'text', 'Thiết bị', '设备'),
+      rc_('registration_no', 'code', 'Số đăng ký thiết bị', '设备登记号'), rc_('location', 'text', 'Khu vực', '区域'),
+      rc_('type', 'bi', 'Loại kiểm định', '检验类型'),
+      rc_('inspection_date', 'date', 'Ngày kiểm định', '检验日期'), rc_('current_due_date', 'date', 'Hiệu lực đến', '有效期至'),
+      rc_('vendor', 'text', 'Đơn vị kiểm định', '检验单位'), rc_('certificate_number', 'code', 'Số chứng nhận', '证书编号'),
+      rc_('record_status', 'enum', 'Tình trạng hồ sơ', '记录状态', { enumKey: 'record_status' }),
+      rc_('days_remaining', 'num', 'Còn (ngày)', '剩余天数'), rc_('due_state', 'enum', 'Trạng thái hạn', '期限状态', { enumKey: 'due_filter' }),
+      rc_('requirement_code', 'code', 'Mã yêu cầu', '要求编号'),
       rc_('cost', 'money', 'Chi phí lần gần nhất', '最近一次费用', { cost: true, cur: 'currency' })
     ],
     build: function (ctx, f, L, cost) {
@@ -476,6 +512,8 @@ var REPORT_DATASETS_ = {
       var types = {};
       readRows_('InspectionTypes').forEach(function (t) { types[t.inspection_type_id] = t; });
       var lead = Number(setting_('lead_days') || 40);
+      var vendors = {};
+      readRows_('Vendors').forEach(function (v) { vendors[v.vendor_id] = v; });
       var rows = readRows_('InspectionRequirements').filter(function (r) {
         var e = L.eqs[r.equipment_id] || {};
         return !r.archived_at && r.active !== false && rptInLoc_(L, r.location_id || e.location_id, f.location_id);
@@ -487,7 +525,9 @@ var REPORT_DATASETS_ = {
           requirement_code: r.requirement_code, type_vi: t.name_vi || '', type_zh: t.name_zh || '', equipment_code: rptEq_(L, r.equipment_id),
           equipment_name: rptEqName_(L, r.equipment_id), location: rptLoc_(L, r.location_id || (L.eqs[r.equipment_id] || {}).location_id),
           current_due_date: r.current_due_date || '', days_remaining: d.days === null ? '' : d.days, due_state: d.state,
-          record_status: requirementRecordStatus_(r, insp), certificate_number: cur.certificate_number || '', inspection_date: cur.inspection_date || ''
+          record_status: requirementRecordStatus_(r, insp), certificate_number: cur.certificate_number || '', inspection_date: cur.inspection_date || '',
+          registration_no: (L.eqs[r.equipment_id] || {}).registration_no || '',
+          vendor: cur.vendor_id && vendors[cur.vendor_id] ? (vendors[cur.vendor_id].name || vendors[cur.vendor_id].vendor_code) : ''
         };
         if (cost) { o.cost = cur.cost === null || cur.cost === undefined ? '' : cur.cost; o.currency = cur.currency || ''; }
         return o;
