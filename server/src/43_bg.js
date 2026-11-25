@@ -28,6 +28,15 @@ function bgBlob_(slot) {
 
 function bgRev_(slot) { return String(setting_(BG_SLOTS_[slot] + '_rev') || ''); }
 
+/** Dòng Trạng thái hệ thống của một ô: ảnh mặc định / ảnh riêng / ảnh riêng mà tệp trên Drive đã mất (không đọc nội dung tệp) */
+function bgHealthText_(slot) {
+  if (!bgRev_(slot)) return 'ảnh mặc định';
+  var id = setting_(BG_SLOTS_[slot] + '_file_id');
+  var ok = false;
+  try { ok = !!id && !DriveApp.getFileById(String(id)).isTrashed(); } catch (e) { ok = false; }
+  return ok ? 'ảnh riêng' : 'ảnh riêng — tệp trên Drive đã mất';
+}
+
 /** Mã phiên bản ảnh của cả hai ô (sync.changes gửi kèm; '' = ảnh mặc định) */
 function bgRevs_() { return { LOGIN: bgRev_('LOGIN'), HOME: bgRev_('HOME') }; }
 

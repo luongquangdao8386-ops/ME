@@ -2,7 +2,7 @@
 // mở app) và trang chủ, hoặc dùng lại ảnh mặc định. Ảnh thu nhỏ trên máy (như ảnh hồ sơ, cạnh dài ≤ photo_max_edge_px, JPEG) rồi gửi
 // bg.set (cấp 4, PIN); máy chủ giữ riêng tư trên Drive (43_bg.js). Mọi máy nhận ảnh mới ở lần đồng bộ kế tiếp (js/bg.js); màn đăng nhập
 // của một máy chỉ đổi khi máy đó đã đăng nhập ít nhất một lần.
-import { api, bi, esc, resMsg, blobToB64 } from '../core.js';
+import { api, bi, esc, resMsg, blobToB64, session } from '../core.js';
 import { ICON, dialog, toast, brandHtml } from '../ui.js';
 import { can } from '../data.js';
 import { writeWithPin, busy } from '../form.js';
@@ -15,7 +15,12 @@ const preview = (slot, url) => `<div class="bg-prev ${slot.toLowerCase()}" style
 
 export async function renderBackgrounds(view, { shell }) {
   shell.setScreen({ title: 'admin.bg', back: '/account' });
-  if (!(await can('bg.set'))) { view.innerHTML = `<div class="card empty-state" id="bg-old"><p class="muted">${bi('bg.server_old')}</p></div>`; return; }
+  if (!(await can('bg.set'))) {
+    // Máy chủ đã có Ảnh nền (cài đặt bg_login_rev gửi xuống) mà không có quyền → báo không có quyền, không báo "máy chủ cũ"
+    const hasBg = Object.prototype.hasOwnProperty.call(session.settings || {}, 'bg_login_rev');
+    view.innerHTML = `<div class="card empty-state" id="bg-old"><p class="muted">${bi(hasBg ? 'err.forbidden' : 'bg.server_old')}</p></div>`;
+    return;
+  }
   if (!navigator.onLine) { view.innerHTML = `<div class="card empty-state">${ICON.sync}<p class="muted">${bi('sync.need_network')}</p></div>`; return; }
   view.innerHTML = '<div class="spinner" role="status"></div>';
   // Lấy ảnh đang dùng của từng ô từ máy chủ (máy này có thể chưa đồng bộ ảnh mới)

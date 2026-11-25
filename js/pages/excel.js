@@ -1,7 +1,7 @@
 // Nhập/xuất Excel (CM-03, 1.4 §11, phụ lục 6.5.1): tải mẫu, chọn tệp → xem trước theo khúc → lỗi theo dòng → gửi duyệt / nhập dữ liệu; xuất theo quyền
 import { api, bi, biText, esc, badge, fmtDateTime, fmtNumber, uuid, resMsg, session, BUILD_VERSION } from '../core.js';
 import { $, $$, ICON, toast, dialog } from '../ui.js';
-import { can, roleLevel, adminSelf } from '../data.js';
+import { can, roleLevel, adminSelf, today } from '../data.js';
 import { writeOnline, writeWithPin, busy, evBtn } from '../form.js';
 import { afterCommit } from '../app.js';
 import { loadXlsx, readImportFile, buildSheet, aoaSheet, workbookFile } from '../xlsx.js';
@@ -30,7 +30,8 @@ const SHEETS = {
 const CHUNK = 150;
 const state = { batch: null, summary: null, progress: '' };
 
-const stamp = () => new Date().toISOString().slice(0, 10).replace(/-/g, '');
+// Ngày trong tên tệp theo giờ Việt Nam (toISOString là giờ UTC: xuất lúc 0h–7h sáng ra ngày hôm trước)
+const stamp = () => today().replace(/-/g, '');
 const needNet = () => `<p class="muted">${bi('sync.need_network')}</p>`;
 
 /** Tệp xuất: sheet dữ liệu (dòng 1 khóa, dòng 2 nhãn, từ dòng 3) + Điều kiện lọc + _meta (nhập lại được) */

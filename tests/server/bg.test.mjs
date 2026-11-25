@@ -87,6 +87,9 @@ test('ảnh nền: Quản trị + PIN; kiểm tệp; lưu / lấy / thay / dùng
   // Tệp trên Drive bị xóa tay: bg.get trả ảnh mặc định, không lỗi
   env.drive._files.get(setting(env, 'bg_home_file_id')).trashed = true;
   assert.deepEqual(ok(c1.call('bg.get', { slot: 'HOME' })).data, { slot: 'HOME', rev: '' });
+  h = ok(c.call('system.status', {})).data.checks.find((x) => x.key === 'bg');
+  assert.equal(h.status, 'WARN', 'tệp ảnh mất → Trạng thái hệ thống cảnh báo');
+  assert.equal(h.value, 'Đăng nhập: ảnh mặc định · Trang chủ: ảnh riêng — tệp trên Drive đã mất');
   // Nhật ký: 4 lần đổi (lưu, thay, trang chủ, bỏ); Cấu hình không sửa tay
   const logs = env.rows('AuditLogs').filter((l) => l.action === 'bg.set');
   assert.equal(logs.length, 4);

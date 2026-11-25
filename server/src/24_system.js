@@ -379,7 +379,9 @@ function healthRows_() {
   // d4.35: mã kết nối cho app ISO (feed.isoEvidence)
   add('iso_feed', true, prop_('FEED_KEY_ISO') ? 'ON' : 'OFF', prop_('FEED_KEY_ISO') ? '' : 'Chưa nối app ISO (chạy adminCreateFeedKeyIso khi cần)');
   // d4.36: ảnh nền màn đăng nhập / trang chủ (Quản trị → Ảnh nền)
-  add('bg', true, 'Đăng nhập: ' + (setting_('bg_login_rev') ? 'ảnh riêng' : 'ảnh mặc định') + ' · Trang chủ: ' + (setting_('bg_home_rev') ? 'ảnh riêng' : 'ảnh mặc định'));
+  // Tệp ảnh trên Drive bị xóa tay → app tự về ảnh mặc định; dòng này báo để Quản trị chọn lại
+  var bgL = bgHealthText_('LOGIN'), bgH = bgHealthText_('HOME'), bgLost = /mất/.test(bgL + bgH);
+  add('bg', !bgLost, 'Đăng nhập: ' + bgL + ' · Trang chủ: ' + bgH, bgLost ? 'Chọn lại ảnh ở Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ' : '');
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;

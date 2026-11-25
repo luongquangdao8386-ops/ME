@@ -137,6 +137,9 @@ test('iPhone: Quản trị thay ảnh nền màn đăng nhập + trang chủ →
     await go(p2, '#/account');
     await p2.waitForSelector('#ac-logout');
     assert.equal(await p2.locator('a[href="#/admin/backgrounds"]').count(), 0);
+    await go(p2, '#/admin/backgrounds');
+    await p2.waitForSelector('#bg-old');
+    assert.match(await p2.textContent('#bg-old'), /Không có quyền/, 'không báo nhầm "máy chủ chưa lên bản"');
     await logout(p2);
     assert.match(await bgOf(p2, '.login-hero'), /^url\("blob:/);
 

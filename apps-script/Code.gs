@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d4.37
+ * M&E · 机电管理 — Code.gs 1.0.0-d4.38
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.37';
+var SERVER_VERSION = '1.0.0-d4.38';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.7';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18);
@@ -8233,7 +8233,9 @@ function healthRows_() {
   // d4.35: mã kết nối cho app ISO (feed.isoEvidence)
   add('iso_feed', true, prop_('FEED_KEY_ISO') ? 'ON' : 'OFF', prop_('FEED_KEY_ISO') ? '' : 'Chưa nối app ISO (chạy adminCreateFeedKeyIso khi cần)');
   // d4.36: ảnh nền màn đăng nhập / trang chủ (Quản trị → Ảnh nền)
-  add('bg', true, 'Đăng nhập: ' + (setting_('bg_login_rev') ? 'ảnh riêng' : 'ảnh mặc định') + ' · Trang chủ: ' + (setting_('bg_home_rev') ? 'ảnh riêng' : 'ảnh mặc định'));
+  // Tệp ảnh trên Drive bị xóa tay → app tự về ảnh mặc định; dòng này báo để Quản trị chọn lại
+  var bgL = bgHealthText_('LOGIN'), bgH = bgHealthText_('HOME'), bgLost = /mất/.test(bgL + bgH);
+  add('bg', !bgLost, 'Đăng nhập: ' + bgL + ' · Trang chủ: ' + bgH, bgLost ? 'Chọn lại ảnh ở Tài khoản → Quản trị → Ảnh nền đăng nhập, trang chủ' : '');
   var over = permissionMatrix_().filter(function (r) { return r.over_ceiling || r.missing; });
   add('permissions_ceiling', !over.length, over.length, over.map(function (r) { return r.role_level + '|' + r.module; }).join(', '));
   var docBad = 0, checked = 0;
@@ -18685,6 +18687,15 @@ function bgBlob_(slot) {
 }
 
 function bgRev_(slot) { return String(setting_(BG_SLOTS_[slot] + '_rev') || ''); }
+
+/** Dòng Trạng thái hệ thống của một ô: ảnh mặc định / ảnh riêng / ảnh riêng mà tệp trên Drive đã mất (không đọc nội dung tệp) */
+function bgHealthText_(slot) {
+  if (!bgRev_(slot)) return 'ảnh mặc định';
+  var id = setting_(BG_SLOTS_[slot] + '_file_id');
+  var ok = false;
+  try { ok = !!id && !DriveApp.getFileById(String(id)).isTrashed(); } catch (e) { ok = false; }
+  return ok ? 'ảnh riêng' : 'ảnh riêng — tệp trên Drive đã mất';
+}
 
 /** Mã phiên bản ảnh của cả hai ô (sync.changes gửi kèm; '' = ảnh mặc định) */
 function bgRevs_() { return { LOGIN: bgRev_('LOGIN'), HOME: bgRev_('HOME') }; }
