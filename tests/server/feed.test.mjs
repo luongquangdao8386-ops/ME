@@ -19,7 +19,7 @@ test('feed.equipment: chưa có mã / sai mã → FORBIDDEN; đúng mã → khu 
   // chạy lại không đổi mã
   env.g.adminCreateFeedKey();
   assert.equal(env.props.getProperty('FEED_KEY_CS'), key);
-  assert.equal(feedReq(env, key.slice(0, -1) + 'A').code, 'FORBIDDEN');
+  assert.equal(feedReq(env, key.slice(0, -1) + (key.endsWith('A') ? 'B' : 'A')).code, 'FORBIDDEN');
   // Khu vực + thiết bị
   const loc = uuid();
   let r = owner.write('location.edit', { location_id: loc, location_code: 'KV-A', name_vi: 'Xưởng A', type: 'WORKSHOP' });

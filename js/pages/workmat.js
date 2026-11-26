@@ -216,8 +216,8 @@ async function materialOptions(equipmentId) {
 }
 
 function matSelectHtml(opts, value, q = '') {
-  const ql = q.trim().toLowerCase();
-  const f = (list) => list.filter(([, t]) => !ql || t.toLowerCase().includes(ql));
+  const ql = q.trim().normalize('NFC').toLowerCase();
+  const f = (list) => list.filter(([, t]) => !ql || t.normalize('NFC').toLowerCase().includes(ql));
   const o = (list) => list.map(([v, t]) => `<option value="${esc(v)}"${v === value ? ' selected' : ''}>${esc(t)}</option>`).join('');
   return `<option value="">${esc(biText('field.choose'))}</option>
     ${f(opts.parts).length ? `<optgroup label="${esc(biText('mat.machine_parts'))}">${o(f(opts.parts))}</optgroup>` : ''}
@@ -472,7 +472,7 @@ export async function requestsTabHtml(q = '') {
   const mats = await mapOf('MATERIAL');
   const ql = q.trim().toLowerCase();
   const list = (await recs('MATERIAL_REQUEST')).filter((r) => !r.archived_at).map((r) => ({ r, w: idx(r.work_type, r.work_id), ls: lines.filter((l) => l.request_id === r.request_id && !l.archived_at) }))
-    .filter((x) => !ql || [x.r.request_code, x.w.code, x.w.eq, ...x.ls.map((l) => (mats.get(l.material_id) || {}).material_code)].join(' ').toLowerCase().includes(ql))
+    .filter((x) => !ql || [x.r.request_code, x.w.code, x.w.eq, ...x.ls.map((l) => (mats.get(l.material_id) || {}).material_code)].join(' ').normalize('NFC').toLowerCase().includes(ql))
     .sort((a, b) => String(b.r.requested_at).localeCompare(String(a.r.requested_at)));
   if (!list.length) return `<div class="card empty-state"><p class="muted">${bi('field.no_records')}</p></div>`;
   if (isWide()) {
@@ -493,7 +493,7 @@ export async function usageTabHtml(q = '', materialId = '') {
   const showCost = (await costModules()).length > 0;
   const ql = q.trim().toLowerCase();
   const list = (await recs('MATERIAL_USAGE')).filter((u) => !u.archived_at && (!materialId || u.material_id === materialId)).map((u) => ({ u, w: idx(u.work_type, u.work_id), m: mats.get(u.material_id) || {} }))
-    .filter((x) => !ql || [x.w.code, x.w.eq, x.m.material_code, x.m.name_vi, x.m.name_zh].join(' ').toLowerCase().includes(ql))
+    .filter((x) => !ql || [x.w.code, x.w.eq, x.m.material_code, x.m.name_vi, x.m.name_zh].join(' ').normalize('NFC').toLowerCase().includes(ql))
     .sort((a, b) => String(b.u.recorded_at).localeCompare(String(a.u.recorded_at)));
   if (!list.length) return `<div class="card empty-state"><p class="muted">${bi('field.no_records')}</p></div>`;
   if (isWide() || materialId) {

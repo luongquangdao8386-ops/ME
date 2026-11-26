@@ -313,7 +313,7 @@ export async function renderMeterList(view, ctx) {
   const t0 = today(), n0 = nowMs();
   const ql = ML.q.trim().toLowerCase();
   const list = ld.meters.filter((m) => (!ML.type || m.utility_type === ML.type) && (!ML.loc || m.location_id === ML.loc) &&
-    (!ql || [m.meter_code, m.name_vi, m.name_zh, m.serial].join(' ').toLowerCase().includes(ql)));
+    (!ql || [m.meter_code, m.name_vi, m.name_zh, m.serial].join(' ').normalize('NFC').toLowerCase().includes(ql)));
   const info = (m) => {
     const reads = ld.byMeter.get(m.meter_id) || [];
     const last = lastValidBefore(reads);

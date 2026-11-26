@@ -55,7 +55,7 @@ export function wireSearch(root, sel, onText, again) {
   el._searchWired = true;
   let tm = null;
   el.addEventListener('input', () => {
-    el._search.onText(el.value);
+    el._search.onText(el.value.normalize('NFC')); // d4.41: gõ dấu tách rời (NFD) vẫn tìm được
     clearTimeout(tm);
     tm = setTimeout(async () => {
       const pos = el.selectionStart;

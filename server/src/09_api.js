@@ -205,6 +205,22 @@ var FEED_ACTIONS_ = { 'feed.equipment': 1, 'feed.isoEvidence': 1 };
  */
 var MAINTENANCE_ALLOW_ = { 'system.health': 1, 'system.getPublicState': 1, 'auth.logout': 1, 'auth.login': 1, 'system.reset.status': 1, 'system.reset.resume': 1 };
 
+/**
+ * Rà soát d4.41: chữ tiếng Việt có hai dạng mã nhìn giống hệt — dựng sẵn (NFC, iPhone/bàn phím thường) và dấu tách rời (NFD, vd Unikey
+ * "Unicode tổ hợp"). Lưu lẫn hai dạng thì ô tìm kiếm không thấy, xuất Excel rồi nhập lại báo "Cập nhật" giả. Mọi chuỗi trong payload đưa về
+ * NFC trước khi xử lý (bỏ qua nội dung tệp base64 *_b64 và chuỗi rất dài).
+ */
+function nfcDeep_(v, depth) {
+  if (depth > 6 || v === null || v === undefined) return v;
+  if (typeof v === 'string') return v.length > 20000 || /^[\x00-\x7F]*$/.test(v) ? v : v.normalize('NFC');
+  if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) v[i] = nfcDeep_(v[i], depth + 1); return v; }
+  if (typeof v === 'object') {
+    Object.keys(v).forEach(function (k) { if (!/_b64$/.test(k)) v[k] = nfcDeep_(v[k], depth + 1); });
+    return v;
+  }
+  return v;
+}
+
 function doPost(e) {
   var t0 = Date.now();
   var res;
@@ -216,6 +232,7 @@ function doPost(e) {
     if (!req || typeof req !== 'object' || Array.isArray(req)) {
       res = envelope_({}, { ok: false, code: 'VALIDATION_ERROR', errors: [fieldError_('body', 'INVALID_VALUE')] });
     } else {
+      if (req.payload && typeof req.payload === 'object') req.payload = nfcDeep_(req.payload, 0);
       res = apiDispatch_(req);
     }
   } catch (err2) {

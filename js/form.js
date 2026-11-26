@@ -178,7 +178,8 @@ export function readField(root, id) {
   if (el.dataset.date === 'native') return el.value || '';
   if (el.dataset.num) { const r = parseNumberInput(el.value, { integer: el.dataset.num === 'int' }); return r.error ? NaN : r.value; }
   if (el.type === 'checkbox') return el.checked;
-  return el.value.trim();
+  // d4.41: chữ dấu tách rời (NFD) → dạng dựng sẵn (NFC), cùng dạng với chữ gõ trên iPhone
+  return el.value.trim().normalize('NFC');
 }
 
 /** Ô số mơ hồ ("12,350") phải bấm Đúng một lần trước khi lưu (5.4.2) */

@@ -15,5 +15,8 @@ Kết quả ghi ra thư mục tạm (`$S` = scratchpad), không ghi vào repo. S
 | Biểu mẫu trống + mất mạng | `node tools/review/forms-offline.mjs $S/fo.json $S/shots2` | biểu mẫu mới phải `stay`, không `CREATED`; mất mạng không `CONSOLE`/`TIMEOUT` |
 | App ↔ máy chủ tính kỳ điện nước | `node tools/review/parity.mjs` | `bad 0` |
 | Lưu không đổi gì có gửi không | `node tools/review/noop.mjs` | `version N → N`, không `writes` |
+| Excel xuất → nhập lại (máy chủ, mọi mẫu) | `node tools/review/excel-roundtrip.mjs` | `mẫu 16 lỗi 0` |
+| Excel tệp .xlsx thật qua trình duyệt (mọi mẫu) | `node tools/review/excel-ui.mjs $S/xl` | `mẫu 14 lỗi 0` |
+| Giả lập 16 tháng sinh phiếu bảo trì | `node tools/review/time-sim.mjs` (~5 phút) | mọi kế hoạch `ĐẠT`, `lỗi làm phiếu 0` |
 
 Móc giả lập ở `tests/review-hooks.mjs` (mặc định tắt). Khi thêm biểu mẫu sửa mới: gọi `sameAsRecord` (js/form.js) trước khi gửi.

@@ -69,7 +69,7 @@ async function listRows() {
   const q = filt.q.toLowerCase();
   return rows.filter((e) => (!filt.status || e.status === filt.status) && (!filt.location || e.location_id === filt.location) &&
       (!filt.category || e.category_id === filt.category) &&
-      (!q || [e.equipment_code, e.name_vi, e.name_zh, e.model, e.serial, e.manufacturer].join(' ').toLowerCase().includes(q)))
+      (!q || [e.equipment_code, e.name_vi, e.name_zh, e.model, e.serial, e.manufacturer].join(' ').normalize('NFC').toLowerCase().includes(q)))
     .sort((a, b) => String(a.equipment_code).localeCompare(String(b.equipment_code)));
 }
 

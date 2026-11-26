@@ -35,7 +35,7 @@ async function listRows() {
   if (!filt.inactive) rows = rows.filter((m) => m.active !== false);
   const q = filt.q.toLowerCase();
   return rows.filter((m) => (!filt.group || m.group_key === filt.group) && (!filt.kind || m.item_kind === filt.kind) && (!filt.comp || m.is_equipment_component) &&
-    (!q || [m.material_code, m.name_vi, m.name_zh, m.part_number, m.model].join(' ').toLowerCase().includes(q)))
+    (!q || [m.material_code, m.name_vi, m.name_zh, m.part_number, m.model].join(' ').normalize('NFC').toLowerCase().includes(q)))
     .sort((a, b) => String(a.material_code).localeCompare(String(b.material_code)));
 }
 
@@ -487,8 +487,8 @@ export async function linkDialog(eq, part, preselect = '') {
     sel.addEventListener('change', showUnit);
     const q = $('#pl-q', wrap);
     q.addEventListener('input', () => {
-      const t = q.value.toLowerCase();
-      [...sel.options].forEach((o) => { o.hidden = t && !o.textContent.toLowerCase().includes(t); });
+      const t = q.value.normalize('NFC').toLowerCase();
+      [...sel.options].forEach((o) => { o.hidden = t && !o.textContent.normalize('NFC').toLowerCase().includes(t); });
       $('#pl-empty', wrap).hidden = [...sel.options].some((o) => !o.hidden);
     });
   }

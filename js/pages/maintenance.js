@@ -140,7 +140,7 @@ async function woTab(wide) {
   const ql = st.q.trim().toLowerCase();
   const base = all.filter((w) => {
     const e = eqs.get(w.equipment_id);
-    return !ql || [w.work_order_code, w.title_vi, w.title_zh, e && e.equipment_code, e && e.name_vi, e && e.name_zh].join(' ').toLowerCase().includes(ql);
+    return !ql || [w.work_order_code, w.title_vi, w.title_zh, e && e.equipment_code, e && e.name_vi, e && e.name_zh].join(' ').normalize('NFC').toLowerCase().includes(ql);
   });
   const count = (k) => base.filter((w) => !WO_FILTERS[k] || WO_FILTERS[k].includes(w.status)).length;
   const t = today();
@@ -178,7 +178,7 @@ async function plansTab(wide, can_) {
   const ql = st.q.trim().toLowerCase();
   const all = (await recs('MAINTENANCE_PLAN')).filter((p) => {
     const e = eqs.get(p.equipment_id);
-    return !ql || [p.plan_code, p.title_vi, p.title_zh, e && e.equipment_code, e && e.name_vi].join(' ').toLowerCase().includes(ql);
+    return !ql || [p.plan_code, p.title_vi, p.title_zh, e && e.equipment_code, e && e.name_vi].join(' ').normalize('NFC').toLowerCase().includes(ql);
   });
   const list = all.filter((p) => st.planFilter === 'ALL' || (st.planFilter === 'ACTIVE' ? p.active !== false : p.active === false))
     .sort((a, b) => String(a.next_due_date || '9999').localeCompare(String(b.next_due_date || '9999')) || String(a.plan_code).localeCompare(String(b.plan_code)));

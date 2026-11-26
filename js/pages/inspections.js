@@ -66,7 +66,7 @@ export async function renderInspectionList(view, ctx) {
   const q = filt.q.toLowerCase();
   const base = all.filter((x) => (!filt.type || x.r.inspection_type_id === filt.type) && (!filt.location || locOf(x.r) === filt.location) &&
     (!filt.month || String(x.r.current_due_date || '').startsWith(filt.month)) &&
-    (!q || [x.r.requirement_code, nameText(types.get(x.r.inspection_type_id)), (eqs.get(x.r.equipment_id) || {}).equipment_code, nameText(eqs.get(x.r.equipment_id))].join(' ').toLowerCase().includes(q)));
+    (!q || [x.r.requirement_code, nameText(types.get(x.r.inspection_type_id)), (eqs.get(x.r.equipment_id) || {}).equipment_code, nameText(eqs.get(x.r.equipment_id))].join(' ').normalize('NFC').toLowerCase().includes(q)));
   const rank = { OVERDUE: 0, DUE_TODAY: 1, DUE_SOON: 2, MISSING: 3, NOT_DUE: 4 };
   const rows = base.filter((x) => filt.state === 'ALL' || x.due.state === filt.state)
     .sort((a, b) => rank[a.due.state] - rank[b.due.state] || (a.due.days ?? 0) - (b.due.days ?? 0) || String(a.r.requirement_code).localeCompare(String(b.r.requirement_code)));

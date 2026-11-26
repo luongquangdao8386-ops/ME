@@ -61,7 +61,7 @@ export async function renderContractList(view, ctx) {
   });
   const q = filt.q.toLowerCase();
   const base = rows.filter((x) => (filt.life === 'ALL' || x.c.lifecycle_status === filt.life) &&
-    (!q || [x.c.contract_code, x.c.contract_number, x.c.title_vi, x.c.title_zh, x.v && x.v.name, ...x.eqList.map((e) => e.equipment_code)].join(' ').toLowerCase().includes(q)));
+    (!q || [x.c.contract_code, x.c.contract_number, x.c.title_vi, x.c.title_zh, x.v && x.v.name, ...x.eqList.map((e) => e.equipment_code)].join(' ').normalize('NFC').toLowerCase().includes(q)));
   const states = ['ALL', 'OVERDUE', 'DUE_TODAY', 'DUE_SOON', 'NOT_DUE'];
   const count = (st) => base.filter((x) => st === 'ALL' || (x.due && x.due.state === st)).length;
   const list = base.filter((x) => filt.state === 'ALL' || (x.due && x.due.state === filt.state))

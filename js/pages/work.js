@@ -29,7 +29,7 @@ export async function renderWork(view, ctx) {
   const kinds = filt.kind === 'ALL' ? ['WO', 'REPAIR'] : [filt.kind];
   let items = await workItems({ mine: filt.scope === 'MINE', kinds });
   const q = filt.q.trim().toLowerCase();
-  if (q) items = items.filter((x) => [x.code, x.eq && x.eq.equipment_code, x.eq && x.eq.name_vi, x.eq && x.eq.name_zh, x.rec.title_vi, x.rec.title_zh, x.rec.symptom_vi, x.rec.symptom_zh].join(' ').toLowerCase().includes(q));
+  if (q) items = items.filter((x) => [x.code, x.eq && x.eq.equipment_code, x.eq && x.eq.name_vi, x.eq && x.eq.name_zh, x.rec.title_vi, x.rec.title_zh, x.rec.symptom_vi, x.rec.symptom_zh].join(' ').normalize('NFC').toLowerCase().includes(q));
   const count = (g) => items.filter((x) => x.group === g).length;
   const toolbar = `<div class="toolbar">
     <div class="search"><span>${ICON.search}</span><input id="wk-q" type="search" value="${esc(filt.q)}" placeholder="${esc(biText('wk.search_placeholder'))}" autocomplete="off"></div>

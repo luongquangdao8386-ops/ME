@@ -62,7 +62,7 @@ export async function renderRepairList(view, ctx) {
   const base = (await repairsAll(ops)).filter((r) => {
     if (st.sev && r.severity !== st.sev) return false;
     const e = eqs.get(r.equipment_id);
-    return !ql || [r.repair_code, r.symptom_vi, r.symptom_zh, e && e.equipment_code, e && e.name_vi, e && e.name_zh].join(' ').toLowerCase().includes(ql);
+    return !ql || [r.repair_code, r.symptom_vi, r.symptom_zh, e && e.equipment_code, e && e.name_vi, e && e.name_zh].join(' ').normalize('NFC').toLowerCase().includes(ql);
   });
   const count = (k) => base.filter((r) => !FILTERS[k] || FILTERS[k].includes(r.status)).length;
   const sevRank = (r) => SEVERITIES.indexOf(r.severity);
