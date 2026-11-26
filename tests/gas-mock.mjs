@@ -1,5 +1,6 @@
 // Giả lập các dịch vụ Google Apps Script đủ để chạy apps-script/Code.gs trên Node (chỉ dùng cho test).
 import crypto from 'node:crypto';
+import { reviewHooks } from './review-hooks.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -625,7 +626,11 @@ export function loadServer(opts = {}) {
     g, clock, drive, ssApp, props: props._store, cache: cache._cache, lockState, mail, logs, mt,
     /** Gửi request như client: doPost → JSON */
     post(req) {
+      // Móc rà soát (tests/review-hooks.mjs): chỉ bật khi đặt ME_SYNC_AUDIT / ME_MUT
+      if (env.__hooks === undefined) env.__hooks = reviewHooks(env, { g, logs, ssApp, drive, props, cache, mail, lockState });
+      if (env.__hooks) env.__hooks.before(req);
       const out = g.doPost({ postData: { contents: typeof req === 'string' ? req : JSON.stringify(req) } });
+      if (env.__hooks) env.__hooks.after(req);
       return JSON.parse(out.getContent());
     },
     get(params) { return JSON.parse(g.doGet({ parameter: params }).getContent()); },
