@@ -6,7 +6,7 @@ import { isWide, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, today, addDays, weekStart, weekday, daysBetween } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
-import {
+import { sameAsRecord,
   selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, assistedFields,
   oneLang, busy, evBtn, loadFormDraft, saveFormDraft, clearFormDraft, parseNumberInput
 } from '../form.js';
@@ -415,6 +415,7 @@ export async function renderPlanForm(view, ctx) {
     if (errs.length) { showErrors(form, errs); return; }
     if (as.bases.length) p.i18n_assisted = as.bases;
     if (p.estimated_minutes === null) p.estimated_minutes = '';
+    if (!isNew && sameAsRecord(p, rec, ['plan_id'])) { toast(bi('form.no_change')); navigate(`/maintenance/plans/${rec.plan_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const res = await writeOnline('maintenance.plan.edit', p, { expected_version: isNew ? 0 : rec.record_version });

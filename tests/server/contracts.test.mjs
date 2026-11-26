@@ -143,3 +143,20 @@ test('contract.close: PIN, bắt lý do, ENDED/NOT_RENEWED, dự thảo đang m�
   // Đóng rồi không ghi dịch vụ được nữa
   assert.equal(hd.write('contract.service.record', { service_id: uuid(), contract_id: id, performed_at: '2026-12-01', result_vi: 'x' }).errors[0].field, 'contract_id');
 });
+
+test('rà soát d4.40: danh sách thiết bị / dịch vụ gửi sai kiểu → lỗi dữ liệu (không phải lỗi máy chủ), cả tạo và sửa dự thảo', () => {
+  const { env, c } = setup();
+  for (const bad of ['NaN', {}, -1, '2026-02-30']) {
+    const r = c.write('contract.create', { contract_id: uuid(), title_vi: 'HĐ thử', start_date: '2026-01-01', end_date: '2026-12-31', equipment: bad });
+    assert.equal(r.code, 'VALIDATION_ERROR', JSON.stringify(r));
+    assert.deepEqual(r.errors.map((e) => e.field), ['equipment']);
+  }
+  const r2 = c.write('contract.create', { contract_id: uuid(), title_vi: 'HĐ thử', start_date: '2026-01-01', end_date: '2026-12-31', services: 'x' });
+  assert.deepEqual(r2.errors.map((e) => e.field), ['services']);
+  const id = uuid();
+  assert.equal(c.write('contract.create', { contract_id: id, title_vi: 'HĐ thử', start_date: '2026-01-01', end_date: '2026-12-31' }).ok, true);
+  const ver = env.rows('Contracts').find((x) => x.contract_id === id).record_version;
+  const r3 = c.write('contract.edit', { contract_id: id, equipment: { a: 1 } }, { expected_version: ver });
+  assert.equal(r3.code, 'VALIDATION_ERROR');
+  assert.ok(!env.logs.some((l) => /INTERNAL_ERROR/.test(l)));
+});

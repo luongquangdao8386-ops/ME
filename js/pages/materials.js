@@ -7,7 +7,7 @@ import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, canSync, boot, invalidate, roleLevel, adminSelf } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang,
   loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
@@ -322,6 +322,7 @@ export async function renderMaterialForm(view, ctx) {
       });
       if (payload.material_code === rec.material_code) delete payload.material_code;
     }
+    if (!isNew && sameAsRecord(payload, rec, ['material_id'])) { await clearFormDraft(draftKey); toast(bi('form.no_change')); navigate(`/materials/${rec.material_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline(isNew ? 'material.create' : 'material.edit', payload, { expected_version: isNew ? 0 : rec.record_version });

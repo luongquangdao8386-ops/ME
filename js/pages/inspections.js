@@ -9,7 +9,7 @@ import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
 import { processPhoto, uploadDoc } from '../media.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, assistedFields,
   loadFormDraft, saveFormDraft, clearFormDraft, busy, evBtn, unconfirmedAmbiguous, fieldWrap
 } from '../form.js';
@@ -427,6 +427,7 @@ export async function renderRequirementForm(view, ctx) {
     if (!payload.inspection_type_id) errs.push({ field: 'inspection_type_id', key: 'field.required' });
     if (!payload.equipment_id && !payload.location_id) errs.push({ field: loc ? 'location_id' : 'equipment_id', key: 'field.required' });
     if (errs.length) { showErrors(form, errs); return; }
+    if (!isNew && sameAsRecord(payload, rec, ['requirement_id'])) { toast(bi('form.no_change')); navigate(`/inspections/${rec.requirement_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const res = await writeOnline('inspection.requirement.edit', payload, { expected_version: isNew ? 0 : rec.record_version });
@@ -486,6 +487,7 @@ export async function renderTypes(view, ctx) {
       if (!as.ok) errs.push(...as.errors);
       if (errs.length) { showErrors(wrap, errs); return; }
       if (as.bases.length) payload.i18n_assisted = as.bases;
+      if (t && sameAsRecord(payload, t, ['inspection_type_id'])) { wrap.remove(); toast(bi('form.no_change')); return; }
       busy(evBtn(ev), true);
       const res = await writeOnline('inspection.type.edit', payload, { expected_version: t ? t.record_version : 0 });
       busy(evBtn(ev), false);

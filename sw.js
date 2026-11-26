@@ -1,7 +1,7 @@
 // Service Worker của M&E — phạm vi thư mục của trang (/ME/ THẬT, /ME-thu/ THỬ); chỉ quản lý cache của chính trang này
 // (me-shell-* ở /ME/, me_thu-shell-* ở /ME-thu/ — cùng quy tắc storageNs trong js/core.js), không xóa cache của trang kia.
-const VERSION = '1.0.0-d4.39';
-const BUILD_HASH = '6fd0a21ddac5'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
+const VERSION = '1.0.0-d4.40';
+const BUILD_HASH = '4816ea987e0d'; // tools/build.mjs ghi mã băm nội dung các tệp vỏ app
 const NS = (() => {
   const m = /^\/([^/]+)\//.exec(self.location.pathname);
   const seg = m ? m[1].toLowerCase().replace(/[^a-z0-9]+/g, '_') : '';

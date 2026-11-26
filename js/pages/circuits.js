@@ -8,7 +8,7 @@ import { recs, byId, mapOf, can, invalidate, adminSelf } from '../data.js';
 import { upsertLocal } from '../sync.js';
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, busy, evBtn, unconfirmedAmbiguous, oneLang
 } from '../form.js';
 import { uploadDoc, downloadDoc, shareFileNow, isTouchMobile } from '../media.js';
@@ -668,6 +668,7 @@ export async function renderPanelForm(view, ctx) {
     const bad = ['supply_voltage', 'rated_current'].filter((k) => Number.isNaN(p[k]));
     if (bad.length) { showErrors(form, bad.map((f) => ({ field: f, key: 'field.invalid' }))); return; }
     ['supply_voltage', 'rated_current'].forEach((k) => { if (p[k] === null) p[k] = ''; });
+    if (pn && sameAsRecord(p, pn, ['entity', 'panel_id'])) { toast(bi('form.no_change')); navigate(`/circuits/p/${pn.panel_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline('circuit.edit', p, { expected_version: pn ? pn.record_version : 0 });
@@ -739,6 +740,7 @@ export async function renderCircuitForm(view, ctx) {
     if (!p.panel_id) errs.push({ field: 'panel_id', key: 'field.required' });
     ['voltage', 'breaker_rating_a', 'cable_length_m'].forEach((k) => { if (Number.isNaN(p[k])) errs.push({ field: k, key: 'field.invalid' }); else if (p[k] === null) p[k] = ''; });
     if (errs.length) { showErrors(form, errs); return; }
+    if (c && sameAsRecord(p, c, ['entity', 'circuit_id'])) { toast(bi('form.no_change')); navigate(`/circuits/c/${c.circuit_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline('circuit.edit', p, { expected_version: c ? c.record_version : 0 });

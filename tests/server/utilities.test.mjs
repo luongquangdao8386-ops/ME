@@ -415,3 +415,11 @@ test('d4.33: xem kỳ 1 ngày = hôm nay, đồng hồ đã có số hôm trư�
   assert.equal(y.status, 'MISSING_READING');
   assert.equal(y.missing_side, 'OPENING');
 });
+
+test('rà soát d4.40: biểu giá mới để trống đơn giá (app gửi null) → báo Bắt buộc nhập, không phải Giá trị không hợp lệ', () => {
+  const { c3 } = setup();
+  const r = c3.write('tariff.edit', { tariff_id: uuid(), utility_type: 'ELECTRICITY', effective_from: '2026-01-01', unit_price: null, pricing_type: 'FLAT' });
+  assert.equal(r.code, 'VALIDATION_ERROR');
+  assert.deepEqual(r.errors.filter((e) => e.field === 'unit_price').map((e) => e.code), ['REQUIRED']);
+  assert.deepEqual(c3.write('tariff.edit', { tariff_id: uuid(), utility_type: 'ELECTRICITY', effective_from: '2026-01-01', unit_price: -5, pricing_type: 'FLAT' }).errors.map((e) => e.code), ['INVALID_VALUE']);
+});

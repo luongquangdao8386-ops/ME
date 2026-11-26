@@ -7,7 +7,7 @@ import { isWide, comingSoon, RELEASED_DOT } from '../shell.js';
 import { recs, byId, mapOf, can, invalidate, today } from '../data.js';
 import { navigate, back } from '../router.js';
 import { app, afterCommit } from '../app.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline,
   loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
@@ -539,6 +539,7 @@ export async function renderEquipmentForm(view, ctx) {
       });
       if (payload.equipment_code === rec.equipment_code) delete payload.equipment_code;
     }
+    if (!isNew && sameAsRecord(payload, rec, ['equipment_id'])) { await clearFormDraft(draftKey); toast(bi('form.no_change')); navigate(`/equipment/${rec.equipment_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline(isNew ? 'equipment.create' : 'equipment.edit', payload, { expected_version: isNew ? 0 : rec.record_version });

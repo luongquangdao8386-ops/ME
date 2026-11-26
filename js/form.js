@@ -250,6 +250,23 @@ export async function writeWithPin(action, payload, opts = {}) {
   return r;
 }
 
+/**
+ * Rà soát d4.40: biểu mẫu sửa bấm Lưu mà không đổi gì → không gửi máy chủ (khỏi chờ 2–4 giây, không tăng phiên bản vô ích làm người khác
+ * đang sửa cùng hồ sơ bị báo xung đột, không thêm nhật ký rỗng). So từng trường sắp gửi với bản đang có: null / '' như nhau, số so theo
+ * giá trị, danh sách rỗng coi như không gửi; skip = khóa luôn có (mã hồ sơ, entity…).
+ */
+export function sameAsRecord(payload, rec, skip = []) {
+  if (!rec) return false;
+  const norm = (v) => (v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v).trim());
+  return Object.keys(payload).every((k) => {
+    if (skip.includes(k)) return true;
+    const v = payload[k];
+    if (Array.isArray(v) && !v.length) return true;
+    if (typeof v === 'number' && rec[k] !== '' && rec[k] !== null && rec[k] !== undefined) return v === Number(rec[k]);
+    return norm(v) === norm(rec[k]);
+  });
+}
+
 /** Chữ có chữ Hán → trường _zh, không thì _vi (nhập một thứ tiếng, A3) */
 export function oneLang(base, text) {
   const t = String(text || '').trim();

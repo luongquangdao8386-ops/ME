@@ -3,7 +3,7 @@ import { api, bi, esc, badge, biName, nameText, uuid, resMsg } from '../core.js'
 import { $, $$, h, ICON, toast } from '../ui.js';
 import { isWide } from '../shell.js';
 import { recs, can } from '../data.js';
-import { textInput, textArea, selectInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, busy, evBtn } from '../form.js';
+import { sameAsRecord, textInput, textArea, selectInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, busy, evBtn } from '../form.js';
 import { afterCommit } from '../app.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
@@ -60,6 +60,7 @@ function formDialog(titleHtml, inner, save) {
       const res = await save(wrap);
       busy(evBtn(ev), false);
       if (!res) return;
+      if (res.noop) { wrap.remove(); toast(bi('form.no_change')); resolve(false); return; }
       if (res.ok) { wrap.remove(); await afterCommit(); toast(bi('form.saved'), 'ok'); resolve(true); return; }
       if (res.code === 'VALIDATION_ERROR') { showErrors(wrap, res.errors); return; }
       wrap.remove();
@@ -92,7 +93,9 @@ async function locationDialog(loc, all) {
     const p = { name_vi: readField(w, 'name_vi'), name_zh: readField(w, 'name_zh'), type: readField(w, 'type'), parent_location_id: readField(w, 'parent_location_id') || '', active: readField(w, 'active') };
     if (!p.name_vi && !p.name_zh) { showErrors(w, [{ field: 'name', key: 'field.one_lang' }]); return null; }
     if (!loc) { const code = readField(w, 'location_code'); if (code) p.location_code = code; }
-    return writeOnline('location.edit', { location_id: loc ? loc.location_id : uuid(), ...diff(p, loc, ['name']) }, { expected_version: loc ? loc.record_version : 0 });
+    const ch = diff(p, loc, ['name']);
+    if (loc && !Object.keys(ch).length) return { ok: true, noop: true };
+    return writeOnline('location.edit', { location_id: loc ? loc.location_id : uuid(), ...ch }, { expected_version: loc ? loc.record_version : 0 });
   });
 }
 
@@ -110,7 +113,9 @@ async function vendorDialog(v) {
       services_vi: readField(w, 'services_vi'), services_zh: readField(w, 'services_zh'), active: readField(w, 'active') };
     if (!p.name) { showErrors(w, [{ field: 'name', key: 'field.required' }]); return null; }
     if (!v) { const code = readField(w, 'vendor_code'); if (code) p.vendor_code = code; }
-    return writeOnline('vendor.edit', { vendor_id: v ? v.vendor_id : uuid(), ...diff(p, v, ['services']) }, { expected_version: v ? v.record_version : 0 });
+    const ch = diff(p, v, ['services']);
+    if (v && !Object.keys(ch).length) return { ok: true, noop: true };
+    return writeOnline('vendor.edit', { vendor_id: v ? v.vendor_id : uuid(), ...ch }, { expected_version: v ? v.record_version : 0 });
   });
 }
 
@@ -125,7 +130,9 @@ async function lookupDialog(l) {
     const p = { name_vi: readField(w, 'name_vi'), name_zh: readField(w, 'name_zh'), active: readField(w, 'active') };
     if (!p.name_vi && !p.name_zh) { showErrors(w, [{ field: 'name', key: 'field.one_lang' }]); return null; }
     if (!l) { p.group_key = readField(w, 'group_key'); p.code = readField(w, 'code'); if (!p.code) { showErrors(w, [{ field: 'code', key: 'field.required' }]); return null; } }
-    return writeOnline('lookup.edit', { value_id: l ? l.value_id : uuid(), ...diff(p, l, ['name']) }, { expected_version: l ? l.record_version : 0 });
+    const ch = diff(p, l, ['name']);
+    if (l && !Object.keys(ch).length) return { ok: true, noop: true };
+    return writeOnline('lookup.edit', { value_id: l ? l.value_id : uuid(), ...ch }, { expected_version: l ? l.record_version : 0 });
   });
 }
 

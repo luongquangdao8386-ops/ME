@@ -6,7 +6,7 @@ import { isWide } from '../shell.js';
 import { recs, byId, mapOf, can } from '../data.js';
 import { navigate, back } from '../router.js';
 import { afterCommit, syncNow } from '../app.js';
-import { selectInput, wireForm, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn, loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
+import { sameAsRecord, selectInput, wireForm, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn, loadFormDraft, saveFormDraft, clearFormDraft } from '../form.js';
 import { processPhoto, uploadDoc } from '../media.js';
 import { handleWriteError } from './equipment.js';
 import { excelLink } from '../excel-link.js';
@@ -220,6 +220,7 @@ export async function renderReportForm(view, ctx) {
     if (editId) {
       const p = { repair_id: editId, ...sym, severity: v.severity, stopped_at: stopIso };
       if (v.equipment_id !== rec.equipment_id) p.equipment_id = v.equipment_id;
+      if (sameAsRecord(p, rec, ['repair_id'])) { await clearFormDraft(draftKey); toast(bi('form.no_change')); navigate(`/repairs/${editId}`, { replace: true }); return; }
       const local = rec._local || ops.some((o) => (o.entity_id === editId || o.parent_id === editId) && o.state !== 'REJECTED' && o.state !== 'CONFLICT');
       let res;
       if (!navigator.onLine || local) {

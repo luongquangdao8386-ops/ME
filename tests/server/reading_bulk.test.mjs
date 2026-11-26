@@ -114,3 +114,45 @@ test('dời ngày bị chặn: trùng ngày với số khác, đảo thứ tự,
   assert.deepEqual(codes(c.write('reading.bulk', { meter_id: m2, reading_ids: [r2[2]], op: 'SHIFT', days: -3, reason: 'thử' }, { reauth_token: c.reauth() })), ['READING_ORDER']);
   assert.ok(readings(env, m2).every((x) => x.status === 'VALID'));
 });
+
+test('đồng hồ đã thay (hai giai đoạn): số chốt/mở do sự kiện không dời, không hủy; dời làm số cũ rơi sang giai đoạn mới và đảo thứ tự → chặn; dời/hủy trong một giai đoạn được; tiêu thụ qua mốc thay vẫn đúng', () => {
+  const env = freshServer({ now: T('2026-11-26T12:00') });
+  const c = ownerClient(env);
+  c.reauth = () => c.call('auth.reauth', { pin: OWNER_PIN }).data.reauth_token;
+  const dn = userClient(env, 'U-DN', 2, '583016', 'DOC_DIEN_NUOC');
+  const meter = uuid();
+  ok(c.write('meter.edit', { meter_id: meter, name_vi: 'Điện xưởng', utility_type: 'ELECTRICITY', multiplier: 1, reading_cycle_type: 'DAY_1' }));
+  const rd = (d, v) => { const id = uuid(); ok(dn.write('reading.create', { reading_id: id, meter_id: meter, measured_at: T(`${d}T08:00`), cumulative_value: v })); return id; };
+  const a1 = rd('2026-11-10', 100), a2 = rd('2026-11-11', 200), a3 = rd('2026-11-12', 300);
+  // Thay đồng hồ 12/11 12:00: số chốt 350, đồng hồ mới bắt đầu 0
+  const ev = uuid();
+  ok(dn.write('meter.event.create', { event_id: ev, meter_id: meter, event_type: 'REPLACE', event_at: T('2026-11-12T12:00'), closing_value: 350, opening_value: 0, new_serial: 'SN-2' }));
+  const evRow = () => env.rows('MeterEvents').find((x) => x.event_id === ev);
+  ok(c.write('meter.event.approve', { event_id: ev, decision: 'APPROVE' }, { expected_version: evRow().record_version, reauth_token: c.reauth() }));
+  const b1 = rd('2026-11-13', 50), b2 = rd('2026-11-14', 120);
+  const bound = env.rows('MeterReadings').filter((r) => r.meter_id === meter && r.event_id);
+  assert.equal(bound.length, 2, 'số chốt + số mở do sự kiện');
+  const w = (p) => c.write('reading.bulk', { meter_id: meter, reason: 'thử', ...p }, { reauth_token: c.reauth() });
+  // Số chốt/mở do sự kiện: không dời, không hủy
+  assert.deepEqual(codes(w({ op: 'SHIFT', days: 1, reading_ids: [bound[0].reading_id] })), ['SEGMENT_BOUND_FIXED']);
+  assert.deepEqual(codes(w({ op: 'VOID', reading_ids: [bound[1].reading_id] })), ['SEGMENT_BOUND_FIXED']);
+  // Dời cả 5 số thường +1 ngày: số 300 (12/11, đồng hồ cũ) sang 13/11 08:00 — sau lúc thay → thuộc đồng hồ mới, đứng trước số 50 → đảo thứ tự
+  const before = JSON.stringify(env.rows('MeterReadings'));
+  const r = w({ op: 'SHIFT', days: 1, reading_ids: [a1, a2, a3, b1, b2] });
+  assert.ok(codes(r).includes('READING_ORDER'), JSON.stringify(r.errors));
+  assert.equal(JSON.stringify(env.rows('MeterReadings')), before, 'không ghi gì');
+  // Dời trong cùng giai đoạn: hai số đồng hồ mới +1 ngày được; tiêu thụ 13→14/11 theo đồng hồ mới
+  ok(w({ op: 'SHIFT', days: 1, reading_ids: [b1, b2] }));
+  const rows = env.rows('MeterReadings').filter((x) => x.meter_id === meter);
+  const segNew = env.rows('MeterSegments').filter((s) => s.meter_id === meter).sort((x, y) => Number(x.seq_no) - Number(y.seq_no))[1];
+  assert.ok([b1, b2].every((id) => rows.find((x) => x.reading_id === id).meter_segment_id === segNew.segment_id));
+  const sum = (d) => ok(c.call('utility.view', { summary: { period_type: 'DAY_1', date: d } })).data.rows.find((x) => x.meter_id === meter);
+  assert.equal(sum('2026-11-14').consumption, 70, '15/11 (120) − 14/11 (50)');
+  // Ngày 12/11: 300 (08:00) → chốt 350 → mở 0 → 50 (14/11 08:00 là số đầu ngày 14, ngày 13 chưa có số) → ngày 12 thiếu số cuối
+  assert.equal(sum('2026-11-12').status, 'MISSING_READING');
+  // Hủy số 11/11 (đồng hồ cũ) → số 12/11 vẫn hợp lệ, số 10/11 vẫn là mốc gốc
+  ok(w({ op: 'VOID', reading_ids: [a2] }));
+  const r2 = env.rows('MeterReadings').filter((x) => x.meter_id === meter);
+  assert.equal(r2.find((x) => x.reading_id === a2).status, 'VOID');
+  assert.ok([a1, a3].every((id) => r2.find((x) => x.reading_id === id).status === 'VALID'));
+});

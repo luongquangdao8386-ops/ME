@@ -8,7 +8,7 @@ import { recs, byId, mapOf, can, today, addDays, daysBetween, adminSelf } from '
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { getMeta, setMeta, enqueue } from '../sync.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, numberInput, dateInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn,
   loadFormDraft, saveFormDraft, clearFormDraft, unconfirmedAmbiguous, parseNumberInput, fieldWrap
 } from '../form.js';
@@ -917,6 +917,7 @@ export async function renderMeterForm(view, ctx) {
         }
       }
     }
+    if (m && sameAsRecord(p, m, ['meter_id'])) { toast(bi('form.no_change')); navigate(`/utilities/meters/${m.meter_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline('meter.edit', p, { expected_version: m ? m.record_version : 0 });
@@ -1074,9 +1075,12 @@ export async function renderTariffForm(view, ctx) {
     if (p.effective_from === null || !p.effective_from) errs.push({ field: 'effective_from', key: p.effective_from === null ? 'field.invalid' : 'field.required' });
     if (p.effective_to === null) errs.push({ field: 'effective_to', key: 'field.invalid' });
     ['unit_price', 'tax_rate'].forEach((k) => { if (Number.isNaN(p[k])) errs.push({ field: k, key: 'field.invalid' }); });
+    // Đơn giá bắt buộc (biểu giá mới): báo ngay trên máy, không đợi máy chủ
+    if (p.unit_price === null && !id) errs.push({ field: 'unit_price', key: 'field.required' });
     if (errs.length) { showErrors(form, errs); return; }
     if (p.tax_rate === null) p.tax_rate = 0;
     if (!p.name_vi && !p.name_zh) { delete p.name_vi; delete p.name_zh; }
+    if (t && sameAsRecord(p, t, ['tariff_id', 'pricing_type'])) { toast(bi('form.no_change')); navigate('/utilities/tariffs', { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const r = await writeOnline('tariff.edit', p, { expected_version: t ? t.record_version : 0 });

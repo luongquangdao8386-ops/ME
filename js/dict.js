@@ -2262,4 +2262,5 @@ export const DICT = {"nav.home":["Trang chủ","首页"],
 "ut.bulk.void_ok":["Hủy chỉ số","作废读数"],
 "ut.bulk.done":["Đã sửa {N} chỉ số","已修改{N}条读数"],
 "ut.bulk.errors":["Chưa sửa được — chưa chỉ số nào bị đổi","未能修改——尚无读数被更改"],
-"ut.bulk.changed":["Có chỉ số vừa được sửa ở máy khác — trang đã tải lại, hãy chọn lại","有读数刚在其他设备上被修改——页面已重新加载，请重新选择"]};
+"ut.bulk.changed":["Có chỉ số vừa được sửa ở máy khác — trang đã tải lại, hãy chọn lại","有读数刚在其他设备上被修改——页面已重新加载，请重新选择"],
+"form.no_change":["Không có thay đổi nào để lưu","没有需要保存的更改"]};

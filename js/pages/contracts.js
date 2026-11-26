@@ -6,7 +6,7 @@ import { recs, byId, mapOf, can, costModules, dueInfo, contractRefDate, today, d
 import { navigate, back } from '../router.js';
 import { afterCommit } from '../app.js';
 import { enqueue, queueItems } from '../sync.js';
-import {
+import { sameAsRecord,
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang, busy, evBtn, fieldWrap, assistedFields, retranslateButton, wireRetranslate
 } from '../form.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
@@ -423,6 +423,7 @@ export async function renderContractForm(view, ctx) {
     let id = params.id;
     if (renew) { id = uuid(); p.contract_id = id; p.previous_contract_id = base.contract_id; } else if (isNew) { id = uuid(); p.contract_id = id; } else p.contract_id = base.contract_id;
     if (!isNew && !renew && !termsEditable) ['start_date', 'end_date', 'renewal_notice_date', 'value'].forEach((f) => delete p[f]);
+    if (!isNew && !renew && sameAsRecord(p, base, ['contract_id'])) { toast(bi('form.no_change')); navigate(`/contracts/${base.contract_id}`, { replace: true }); return; }
     const btn = $('#fm-save', form);
     busy(btn, true);
     const res = await writeOnline(action, p, { expected_version: isNew || renew ? 0 : base.record_version });

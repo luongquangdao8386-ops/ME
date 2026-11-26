@@ -599,8 +599,9 @@ function readingBulk_(ctx) {
           var ms = tms_(row.measured_at), d = dayOf(row.measured_at), d0 = dayOf(olds[id].measured_at);
           if (readingDuplicate_(replaced, row.meter_segment_id, ms, row.reading_id)) { bad(i, 'READING_DUPLICATE'); return; }
           // Rơi vào cùng ngày với một chỉ số khác (trước khi dời hai số khác ngày) → số đầu ngày dùng để tính sẽ đổi ngầm: chặn
+          // Số chốt/mở do sự kiện thay/reset/đổi hệ số vốn nằm cùng ngày với số thường: không tính là trùng ngày
           var clash = live.some(function (y) {
-            if (y.reading_id === id || dayOf(y.measured_at) !== d) return false;
+            if (y.reading_id === id || y.event_id || dayOf(y.measured_at) !== d) return false;
             var y0 = olds[y.reading_id] ? olds[y.reading_id].measured_at : y.measured_at;
             return dayOf(y0) !== d0;
           });
@@ -1159,7 +1160,7 @@ function tariffEdit_(ctx) {
     if (add || p.effective_from !== undefined) { if (!isDateStr_(p.effective_from)) errs.push(fieldError_('effective_from', p.effective_from ? 'INVALID_DATE' : 'REQUIRED')); }
     if (p.effective_to !== undefined && p.effective_to !== '' && !isDateStr_(p.effective_to)) errs.push(fieldError_('effective_to', 'INVALID_DATE'));
     if (p.pricing_type !== undefined && TARIFF_PRICING_.indexOf(p.pricing_type) < 0) errs.push(fieldError_('pricing_type', 'INVALID_VALUE'));
-    if (add || p.unit_price !== undefined) { var up = Number(p.unit_price); if (p.unit_price === '' || p.unit_price === null || p.unit_price === undefined || !(up >= 0 && up < 1e12)) errs.push(fieldError_('unit_price', p.unit_price === undefined || p.unit_price === '' ? 'REQUIRED' : 'INVALID_VALUE')); }
+    if (add || p.unit_price !== undefined) { var up = Number(p.unit_price); if (p.unit_price === '' || p.unit_price === null || p.unit_price === undefined || !(up >= 0 && up < 1e12)) errs.push(fieldError_('unit_price', p.unit_price === undefined || p.unit_price === '' || p.unit_price === null ? 'REQUIRED' : 'INVALID_VALUE')); }
     if (p.tax_rate !== undefined && p.tax_rate !== '' && !(Number(p.tax_rate) >= 0 && Number(p.tax_rate) <= 100)) errs.push(fieldError_('tax_rate', 'INVALID_VALUE'));
     if (p.currency !== undefined && p.currency !== '' && !/^[A-Z]{3}$/.test(String(p.currency).toUpperCase())) errs.push(fieldError_('currency', 'INVALID_VALUE'));
     if (p.location_id && !isUuidV4_(p.location_id)) errs.push(fieldError_('location_id', 'ID_INVALID'));

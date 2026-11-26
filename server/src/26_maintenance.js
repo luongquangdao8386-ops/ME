@@ -322,6 +322,11 @@ function maintenanceChecklistEdit_(ctx) {
     if (ev !== cur.revision && cur.revision) throw apiError_('VERSION_CONFLICT', { entity_type: 'CHECKLIST', server_version: cur.revision });
     throw validationError_(errs);
   }
+  // Rà soát d4.40: bấm Lưu mà không đổi gì (tên, mã biểu, từng bước) → trả phiên bản hiện tại, không sinh phiên bản mới giống hệt
+  if (cur.revision && checklistUnchanged_(cur, p, items, formCode)) {
+    return { entity_type: 'CHECKLIST', entity_id: p.template_id, template_id: p.template_id, revision: cur.revision, record_version: cur.revision, unchanged: true,
+      items: cur.items.map(function (r) { return projectRow_(ctx, r, 'ChecklistTemplates'); }) };
+  }
   // Dịch ngoài khóa ghi (2.3): tên mẫu, nhãn từng bước (dịch máy), yêu cầu an toàn (không dịch tự động)
   var trName = applyTranslations_('ChecklistTemplates', ['template_name'], p, name0);
   var trItems = items.map(function (it) {
@@ -356,6 +361,26 @@ function maintenanceChecklistEdit_(ctx) {
         audit: { entity_type: 'CHECKLIST', entity_id: p.template_id, before_json: now.revision ? { revision: now.revision } : null, after_json: { revision: rev, items: rows.length } }
       };
     }
+  });
+}
+
+/** Mẫu gửi lên giống hệt phiên bản hiện tại (so như nhập Excel: '' = trống, số so theo giá trị) */
+function checklistUnchanged_(cur, p, items, formCode) {
+  var head = cur.items[0] || {};
+  var same = function (a, b) { return importSame_(typeof a === 'string' ? trimStr_(a) : a, typeof b === 'string' ? trimStr_(b) : b); };
+  if (!same(p.template_name_vi, head.template_name_vi) || !same(p.template_name_zh, head.template_name_zh)) return false;
+  if (formCode !== null && !same(formCode, head.form_code)) return false;
+  if (items.length !== cur.items.length) return false;
+  return items.every(function (it, i) {
+    var r = cur.items[i];
+    var type = it.result_type || 'PASS_FAIL';
+    if (type !== (r.result_type || 'PASS_FAIL')) return false;
+    if ((it.required !== false) !== (r.required !== false)) return false;
+    var unit = type === 'NUMBER' ? normUnit_(it.unit) : (trimStr_(it.unit) ? normUnit_(it.unit) : '');
+    if (!same(unit, r.unit)) return false;
+    var num = function (v) { return v === undefined || v === null || v === '' ? '' : Number(v); };
+    if (!same(num(it.min_value), r.min_value) || !same(num(it.max_value), r.max_value)) return false;
+    return ['label_vi', 'label_zh', 'safety_note_vi', 'safety_note_zh'].every(function (f) { return same(it[f], r[f]); });
   });
 }
 

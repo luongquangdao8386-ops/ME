@@ -35,6 +35,13 @@ function contractRefs_(p, errs) {
 }
 
 /** Kế hoạch ghi danh sách thiết bị trong phạm vi: [{contract_equipment_id, equipment_id, service_vi/zh, interval_type, interval_value, next_service_date, price, remove}] */
+/** equipment / services (nếu gửi) phải là danh sách — dữ liệu sai kiểu báo lỗi dữ liệu, không thành lỗi máy chủ (rà soát d4.40) */
+function contractListsOk_(p, errs) {
+  ['equipment', 'services'].forEach(function (f) {
+    if (p[f] !== undefined && p[f] !== null && !Array.isArray(p[f])) errs.push(fieldError_(f, 'INVALID_VALUE'));
+  });
+}
+
 function planContractEquipment_(ctx, contractId, list, writes, errs) {
   if (!Array.isArray(list)) return;
   var existing = findAll_('ContractEquipment', 'contract_id', contractId);
@@ -116,6 +123,7 @@ function contractCreate_(ctx) {
   requireOneLang_(errs, p, null, 'title');
   if (!p.end_date) errs.push(fieldError_('end_date', 'REQUIRED'));
   validateTerms_(p, errs);
+  contractListsOk_(p, errs);
   if (Number(ctx.req.expected_version || 0) !== 0) errs.push(fieldError_('expected_version', 'INVALID_VALUE'));
   if (errs.length) throw validationError_(errs);
   assertNoCostFields_(ctx, 'Contracts', 'contracts', p);
@@ -176,6 +184,7 @@ function contractEdit_(ctx) {
   var merged = {};
   CONTRACT_TERMS_.forEach(function (f) { merged[f] = p[f] !== undefined ? p[f] : cur0[f]; });
   if (isDraft) validateTerms_(merged, errs);
+  contractListsOk_(p, errs);
   if (errs.length) throw validationError_(errs);
   assertNoCostFields_(ctx, 'Contracts', 'contracts', p);
   (p.equipment || []).forEach(function (it) { assertNoCostFields_(ctx, 'ContractEquipment', 'contracts', it || {}); });
