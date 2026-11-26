@@ -39,19 +39,30 @@ lưu bản gọn; chữ > 50 000 ký tự ở 62 trường → lỗi máy chủ 
 Lưu ý: replay cùng operation_id của `maintenance.checklist.edit` (và action kiểm expected_version trước executeWrite_) trả VERSION_CONFLICT thay vì
 DUPLICATE — app không replay mà hỏi `sync.getOperationStatus` (form.js `writeOnline`) nên không ảnh hưởng.
 
+## Lượt 5 — 27/11/2026, bản 1.0.0-d4.43 — 1 lỗi đáng kể (chỉ app) + 1 test chập chờn
+Đã rà: hai người sửa cùng hồ sơ (`conflicts.mjs`: 10 biểu mẫu sửa + Dùng bản máy chủ + nút thao tác); hàng chờ offline (`queue-sim.mjs`: gộp sửa, sửa nối tiếp,
+rớt mạng giữa lúc gửi, mất phản hồi, người khác sửa trước, đổi người dùng — đều đúng, không ghi trùng/mất/gửi hộ); quyền trên giao diện (`clickall.mjs`:
+KT, ĐN, HĐ, C1, C3 bấm 356 nút thao tác — 0 FORBIDDEN do nút hiện sai; FORBIDDEN chỉ khi mở thẳng URL màn Quản trị mà menu đã ẩn — đúng; C4 bỏ qua vì đủ quyền).
+Lỗi: **VERSION_CONFLICT ngoài Thiết bị/Vật tư chỉ báo "Xung đột, cần xử lý", Lưu lại vẫn xung đột → mắc kẹt** → `handleConflict` chung trong
+`handleWriteError` (equipment.js): tải bản mới; biểu mẫu có ô đã đổi (so `defaultValue`/`defaultChecked`/`defaultSelected`, khóa = name hoặc id `f-…`)
+→ `conflictDialog`; Dùng bản máy chủ / Sửa tiếp: bỏ nháp biểu mẫu (`clearOpenFormDraft`), mở lại route, điền lại ô chỉ tôi sửa; ô người kia cũng sửa → giữ bản
+máy chủ + "Bản của tôi: …" + banner; nút thao tác → `conflict.reloaded` + mở lại màn; đang mở hộp thoại → `conflict.reopen`. Thiết bị/Vật tư bỏ nhánh riêng.
+Test chập chờn: `await_opening.test.mjs` (web) đọc nhầm bảng kỳ 5 ngày còn trên màn ngày 26–30 hằng tháng (cũng "Kỳ chưa kết thúc") → chờ dòng kỳ một ngày
+(pa = pb); 10/10 đạt. Test: `tests/ui/conflict_forms.test.mjs`; 266 máy chủ + 153 giao diện.
+
 ## Phần CHƯA rà (lượt sau chọn 2–4 mục, làm xong thì chuyển lên mục của lượt)
 - [x] Excel: xuất → nhập lại nguyên tệp = "Không đổi" cho **mọi** mẫu (17 mẫu) với dữ liệu khó: dấu tiếng Việt tách rời (NFD), chữ Trung, số có
       phân cách nghìn, ngày 29/02, ô trống, mã có số 0 đầu; nhập file CSV windows-1258
 - [x] Báo cáo: mọi mẫu (9) xem / PDF / Excel với **0 dòng**, 1 dòng, 500 dòng; lọc khu vực không có dữ liệu; mẫu đã sửa cột (lượt 4)
 - [x] Quyền: danh sách quyền gửi app = `can_` máy chủ (lượt 3). CÒN: bấm thử từng nút theo vai trò trên giao diện (nút hiện mà bấm bị FORBIDDEN)
-- [ ] Quyền trên giao diện: mỗi vai trò mở các màn, bấm thử từng nút thao tác hiện ra → không được FORBIDDEN (quy tắc theo hồ sơ: của mình, được giao, không tự duyệt)
-- [ ] Hàng chờ offline: chuỗi thao tác ngẫu nhiên (tạo nháp, sửa, xung đột, xóa nháp, đổi người dùng) — trạng thái cuối khớp máy chủ
+- [x] Quyền trên giao diện: mỗi vai trò mở các màn, bấm thử từng nút thao tác hiện ra → không được FORBIDDEN (lượt 5; C4 chưa bấm — đủ quyền)
+- [x] Hàng chờ offline: tạo, sửa nối tiếp, gộp, rớt mạng, mất phản hồi, xung đột, đổi người dùng — trạng thái cuối khớp máy chủ (lượt 5)
 - [x] Mốc thời gian: sinh phiếu bảo trì cuối tháng/năm nhuận/31→30; nhắc hạn 40/30/14/7/3/1/0 và quá hạn mỗi 7 ngày qua nhiều ngày giả lập; trigger chạy hai lần không trùng
 - [x] Đồng bộ lớn: bootstrap phân trang > sync_page_size, đệm bảng `tableCache_` khi bảng > 1,2 MB, Lưu trữ năm giữa hai trang (lượt 4)
 - [ ] Đồng bộ: bản ghi xóa/ẩn (TOMBSTONE), đổi quyền / đổi phạm vi khu vực → bản ghi hiện/ẩn đúng trên máy; chỉ số ra ngoài 45 ngày vẫn nằm trên máy (không xóa — xem có cần dọn)
 - [x] Màn hẹp 320 px (iPhone SE) và 1024 px (máy tính bảng): tràn ngang mọi màn (lượt 4)
 - [ ] Bảo mật phiên: token sửa tay, hết hạn, thu hồi, PIN sai 5 lần, reauth quá 5 phút, đổi máy chủ
-- [ ] Hai người sửa cùng hồ sơ (UI xung đột: Sửa tiếp trên bản máy chủ / Dùng bản máy chủ) cho từng loại hồ sơ
+- [x] Hai người sửa cùng hồ sơ (UI xung đột: Sửa tiếp trên bản máy chủ / Dùng bản máy chủ) cho từng loại hồ sơ (lượt 5)
 - [x] Test chập chờn: 26/11 một lần `npm run check` có 1 test hỏng (không giữ được tên), chạy lại 4 lần đều đạt — chạy check 10 lần, tìm test và nguyên nhân (đồng hồ thật / thứ tự / đệm)
 - [x] Dữ liệu lớn: 1 000 thiết bị, 20 000 chỉ số, 5 000 phiếu — thời gian trang, cỡ phản hồi, giới hạn 50 000 ký tự Operations.result_json (lượt 4)
 - [ ] Hiệu năng máy chủ thật (Apps Script): đọc bảng 50 000 dòng mất bao lâu, sync.changes khi bảng lớn đổi (đọc cả bảng mỗi lần) — chỉ đo được trên THỬ thật

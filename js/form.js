@@ -278,7 +278,9 @@ export function oneLang(base, text) {
 
 /* ---------------- Nháp biểu mẫu trên máy (C2: rời màn thì tự lưu, không hỏi) ---------------- */
 
+let openDraftKey = null;
 export async function loadFormDraft(key) {
+  openDraftKey = key;
   const d = await getMeta('form:' + key);
   return d && d.user_id === (session.user && session.user.user_id) ? d.values : null;
 }
@@ -286,6 +288,8 @@ export async function saveFormDraft(key, values) {
   await setMeta('form:' + key, { user_id: session.user && session.user.user_id, values, at: Date.now() });
 }
 export async function clearFormDraft(key) { await setMeta('form:' + key, null); }
+/** d4.43: xung đột khi lưu — bỏ bản nháp của biểu mẫu đang mở (biểu mẫu mở lại theo bản máy chủ, không đè bằng nháp cũ) */
+export async function clearOpenFormDraft() { if (openDraftKey) await clearFormDraft(openDraftKey); }
 
 /**
  * Nút của sự kiện, dùng được cả sau await: ev.currentTarget về null khi sự kiện phát xong, nên busy(evBtn(ev), false)

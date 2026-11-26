@@ -11,7 +11,6 @@ import { sameAsRecord,
   textInput, selectInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline, writeWithPin, oneLang,
   loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
-import { conflictDialog } from './drafts.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
 import { fmtQty, handleWriteError } from './equipment.js';
 import { requestsTabHtml, usageTabHtml, wireRowLinks } from './workmat.js';
@@ -340,14 +339,7 @@ export async function renderMaterialForm(view, ctx) {
       return;
     }
     if (r.code === 'VALIDATION_ERROR') { showErrors(form, r.errors); return; }
-    if (r.code === 'VERSION_CONFLICT') {
-      const fields = Object.keys(payload).filter((k) => k !== 'material_id').map((k) => ({ key: k, label: L['field.' + k.replace(/_id$/, '')] ? bi('field.' + k.replace(/_id$/, '')) : esc(k) }));
-      const choice = await conflictDialog({ mine: payload, server: r.data && r.data.server, fields });
-      if (choice === 'server') { await clearFormDraft(draftKey); await afterCommit(); navigate(`/materials/${rec.material_id}`, { replace: true }); }
-      if (choice === 'edit') { await clearFormDraft(draftKey); await afterCommit(); renderMaterialForm(view, { ...ctx, mine: payload }); }
-      return;
-    }
-    await handleWriteError(r);
+    await handleWriteError(r); // VERSION_CONFLICT: hộp xung đột chung (equipment.js handleConflict)
   });
 }
 

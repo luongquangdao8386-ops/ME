@@ -9,7 +9,7 @@ import { navigate, back } from '../router.js';
 import { app, afterCommit } from '../app.js';
 import { sameAsRecord,
   textInput, selectInput, dateInput, numberInput, bilingualInputs, wireForm, readField, showErrors, writeOnline,
-  loadFormDraft, saveFormDraft, clearFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
+  loadFormDraft, saveFormDraft, clearFormDraft, clearOpenFormDraft, busy, unconfirmedAmbiguous, fieldWrap, parseNumberInput, retranslateButton, wireRetranslate
 } from '../form.js';
 import { conflictDialog } from './drafts.js';
 import { docsTabHtml, wireDocsTab } from './docs.js';
@@ -436,8 +436,97 @@ async function archiveFlow(eq) {
 export async function handleWriteError(r) {
   if (['AUTH_REQUIRED', 'SESSION_EXPIRED', 'DATASET_RESET', 'MUST_CHANGE_PIN'].includes(r.code)) return;
   if (r.code === 'NETWORK_ERROR' || r.code === 'UNKNOWN_RESULT') { toast(bi('err.unknown_result'), 'err'); return; }
+  if (r.code === 'VERSION_CONFLICT') { await handleConflict(r); return; }
   const extra = (r.errors || []).map((e) => `${e.message_vi || e.code} · ${e.message_zh || ''}`).join('; ');
   toast(`${esc(resMsg(r))}${extra ? ' — ' + esc(extra) : ''}`, 'err');
+}
+
+/* ---------------- Xung đột chung (rà soát d4.43) ----------------
+ * Trước: ngoài Thiết bị / Vật tư, mọi biểu mẫu sửa và nút thao tác gặp VERSION_CONFLICT chỉ báo "Xung đột, cần xử lý"; bấm Lưu lại vẫn
+ * xung đột (phiên bản cũ) → người dùng mắc kẹt. Nay: tải bản mới; biểu mẫu có ô đã sửa → hộp "Bản của tôi / Bản máy chủ":
+ * Dùng bản máy chủ (mở lại biểu mẫu theo bản mới) hoặc Sửa tiếp trên bản máy chủ (mở lại rồi điền lại đúng các ô tôi đã sửa).
+ * Nút thao tác (duyệt, nhận việc…) → tải bản mới, mở lại màn, báo xem lại. Hộp thoại đang mở → báo đóng rồi mở lại. */
+
+/** Khóa của ô: name, không có thì id dạng f-<khóa> */
+const fieldKey = (el) => el.name || (el.id && el.id.startsWith('f-') ? el.id.slice(2) : '');
+
+/** Ô người dùng đã đổi so với lúc dựng biểu mẫu (so với defaultValue / defaultChecked / defaultSelected) */
+function changedFields(form) {
+  const out = {};
+  for (const el of form.elements) {
+    const k = fieldKey(el);
+    if (!k || el.disabled || ['button', 'submit', 'file', 'reset'].includes(el.type)) continue;
+    if (el.type === 'checkbox') { if (el.checked !== el.defaultChecked) out[k] = { v: el.checked, d: el.defaultChecked }; continue; }
+    if (el.type === 'radio') { if (el.checked && !el.defaultChecked) out[k] = { v: el.value, d: null }; continue; }
+    if (el.tagName === 'SELECT') {
+      const def = [...el.options].find((o) => o.defaultSelected) || el.options[0];
+      if (def && el.value !== def.value) out[k] = { v: el.value, d: def.value };
+      continue;
+    }
+    if (el.value !== el.defaultValue) out[k] = { v: el.value, d: el.defaultValue };
+  }
+  return out;
+}
+
+/** Giá trị đang hiện của ô (sau khi biểu mẫu mở lại theo bản máy chủ) */
+const curOf = (el) => (el.type === 'checkbox' ? el.checked : el.value);
+
+function fieldLabel(form, k) {
+  const lb = form.querySelector(`[data-field="${CSS.escape(k)}"] label`) || form.querySelector(`label[for="f-${CSS.escape(k)}"]`);
+  return lb ? lb.innerHTML.replace(/<span class="req">.*?<\/span>/, '') : esc(k);
+}
+
+async function handleConflict(r) {
+  if (document.querySelector('.modal')) { await afterCommit().catch(() => {}); toast(bi('conflict.reopen'), 'err'); return; }
+  const view = document.querySelector('.view-page:last-child');
+  const form = view && view.querySelector('form');
+  const route = location.hash.slice(1) || '/';
+  const changed = form ? changedFields(form) : {};
+  await afterCommit().catch(() => {});
+  if (!form || !Object.keys(changed).length) { toast(bi('conflict.reloaded'), 'err'); navigate(route, { replace: true }); return; }
+  const mine = Object.fromEntries(Object.entries(changed).map(([k, x]) => [k, x.v]));
+  const fields = Object.keys(mine).map((k) => ({ key: k, label: fieldLabel(form, k) }));
+  const choice = await conflictDialog({ mine, server: (r.data && r.data.server) || {}, fields });
+  if (!choice) return;
+  await clearOpenFormDraft();
+  navigate(route, { replace: true });
+  if (choice !== 'edit') return;
+  // Chờ biểu mẫu dựng lại theo bản mới rồi điền lại các ô tôi đã sửa
+  let nf = null;
+  for (let i = 0; i < 50 && !nf; i++) {
+    await new Promise((res) => setTimeout(res, 100));
+    const f = document.querySelector('.view-page:last-child form');
+    if (f && f !== form && f.isConnected) nf = f;
+  }
+  if (!nf) return;
+  // Ô chỉ tôi sửa: điền lại. Ô người kia CŨNG vừa sửa (bản máy chủ khác lúc tôi mở): giữ bản máy chủ, ghi "Bản của tôi: …" dưới ô —
+  // không tự ghi đè thay đổi của người khác (người dùng tự chọn rồi gõ lại nếu muốn)
+  let both = 0;
+  for (const [k, x] of Object.entries(changed)) {
+    const els = [...nf.elements].filter((el) => fieldKey(el) === k);
+    if (!els.length) continue;
+    const el0 = els[0];
+    const serverChanged = el0.type !== 'radio' && x.d !== null && String(curOf(el0)) !== String(x.d) && String(curOf(el0)) !== String(x.v);
+    if (serverChanged) {
+      both++;
+      const wrap = el0.closest('.fld') || el0.parentElement;
+      if (wrap) {
+        let hint = wrap.querySelector('.hint');
+        if (!hint) { hint = document.createElement('div'); hint.className = 'hint'; wrap.insertBefore(hint, wrap.querySelector('.ferr')); }
+        hint.innerHTML = `${bi('form.my_value')}: <strong>${esc(x.v === true ? '✓' : x.v === false ? '✗' : x.v)}</strong>`;
+      }
+      continue;
+    }
+    els.forEach((el) => {
+      if (el.type === 'checkbox') el.checked = x.v === true;
+      else if (el.type === 'radio') el.checked = el.value === x.v;
+      else el.value = x.v;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+  if (both && !nf.querySelector('.banner.warn.conflict-both')) nf.insertAdjacentHTML('afterbegin', `<p class="banner warn conflict-both">${bi('form.server_loaded')}</p>`);
+  toast(bi('conflict.kept'), 'ok');
 }
 
 /* ======================= Biểu mẫu thêm/sửa ======================= */
@@ -552,14 +641,7 @@ export async function renderEquipmentForm(view, ctx) {
       return;
     }
     if (r.code === 'VALIDATION_ERROR') { showErrors(form, r.errors); return; }
-    if (r.code === 'VERSION_CONFLICT') {
-      const fields = Object.keys(payload).filter((k) => k !== 'equipment_id').map((k) => ({ key: k, label: L['field.' + k.replace(/_id$/, '')] ? bi('field.' + k.replace(/_id$/, '')) : esc(k) }));
-      const choice = await conflictDialog({ mine: payload, server: r.data && r.data.server, fields });
-      if (choice === 'server') { await clearFormDraft(draftKey); await afterCommit(); navigate(`/equipment/${rec.equipment_id}`, { replace: true }); }
-      if (choice === 'edit') { await clearFormDraft(draftKey); await afterCommit(); renderEquipmentForm(view, { ...ctx, mine: payload }); }
-      return;
-    }
-    await handleWriteError(r);
+    await handleWriteError(r); // VERSION_CONFLICT: hộp xung đột chung (handleConflict)
   });
 }
 

@@ -2263,4 +2263,7 @@ export const DICT = {"nav.home":["Trang chủ","首页"],
 "ut.bulk.done":["Đã sửa {N} chỉ số","已修改{N}条读数"],
 "ut.bulk.errors":["Chưa sửa được — chưa chỉ số nào bị đổi","未能修改——尚无读数被更改"],
 "ut.bulk.changed":["Có chỉ số vừa được sửa ở máy khác — trang đã tải lại, hãy chọn lại","有读数刚在其他设备上被修改——页面已重新加载，请重新选择"],
-"form.no_change":["Không có thay đổi nào để lưu","没有需要保存的更改"]};
+"form.no_change":["Không có thay đổi nào để lưu","没有需要保存的更改"],
+"conflict.kept":["Đã tải bản máy chủ mới nhất và giữ các ô bạn đã sửa — kiểm tra lại rồi bấm Lưu","已载入服务器最新版本并保留您修改的栏位——请检查后点击保存"],
+"conflict.reloaded":["Hồ sơ vừa được người khác cập nhật — app đã tải bản mới, hãy xem lại rồi thao tác lại","记录刚被他人更新——已载入新版本，请查看后重新操作"],
+"conflict.reopen":["Hồ sơ vừa được người khác cập nhật — đóng hộp này rồi mở lại để sửa trên bản mới","记录刚被他人更新——请关闭此窗口后重新打开，在新版本上修改"]};

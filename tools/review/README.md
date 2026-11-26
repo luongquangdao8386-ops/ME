@@ -21,5 +21,8 @@ Kết quả ghi ra thư mục tạm (`$S` = scratchpad), không ghi vào repo. S
 | Chữ quá dài vào từng trường (> 50 000 ký tự/ô Sheets) | `ME_MUT=$S/l.jsonl ME_MUT_LONG=60000 node --test "tests/server/*.test.mjs"` (~1 phút) | không có tệp l.jsonl = không lỗi máy chủ |
 | Dữ liệu lớn (1 000 thiết bị, 5 000 phiếu × 10 bước, 20 000 chỉ số) | `node tools/review/bigdata.mjs` (~2 phút; `EQ= WO= RES= METERS= DAYS= PAGE=` đổi cỡ) | `sai 0`, `lỗi máy chủ 0`; số trang bootstrap, cỡ trang |
 | Báo cáo 9 mẫu × 0 / vài / 600–2 100 dòng | `node tools/review/reports.mjs` | `lỗi 0`; > 500 dòng PDF báo `PDF_TOO_MANY_ROWS` là đúng |
+| Quyền trên giao diện: bấm mọi nút theo vai trò | `node tools/review/clickall.mjs $S/click.json` (~30–60 phút; chia `WHO=` chạy song song; `ROUTES=/repairs` thu hẹp) | không có `FORBIDDEN` / `INTERNAL_ERROR` / `CONSOLE` |
+| Hai người sửa cùng hồ sơ (10 biểu mẫu + nút thao tác) | `node tools/review/conflicts.mjs` | mọi dòng `ĐẠT`, `lỗi 0` |
+| Hàng chờ offline (gộp, rớt mạng giữa chừng, mất phản hồi, xung đột, đổi người) | `node tools/review/queue-sim.mjs` | `lỗi 0` |
 
 Móc giả lập ở `tests/review-hooks.mjs` (mặc định tắt). Khi thêm biểu mẫu sửa mới: gọi `sameAsRecord` (js/form.js) trước khi gửi.

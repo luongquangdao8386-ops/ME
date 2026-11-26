@@ -8,12 +8,13 @@ const ROOT = new URL('../../', import.meta.url).pathname;
 
 const OUT = process.argv[2];
 const SHOTS = process.argv[3];
-fs.mkdirSync(SHOTS, { recursive: true });
+const MAIN = !!process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop());
+if (MAIN) fs.mkdirSync(SHOTS, { recursive: true });
 const ok = (r) => { if (!r.ok) throw new Error(JSON.stringify(r).slice(0, 400)); return r; };
 const dayVN = (n = 0) => new Date(Date.now() + 7 * 3600000 - n * 86400000).toISOString().slice(0, 10);
 const T = (d, hm) => `${d}T${hm}:00+07:00`;
 
-function seed() {
+export function seed() {
   const env = freshServer();
   const c = ownerClient(env);
   c.reauth = () => c.call('auth.reauth', { pin: OWNER_PIN }).data.reauth_token;
@@ -99,7 +100,7 @@ function seed() {
   return { env, ids };
 }
 
-function routes(ids) {
+export function routes(ids) {
   return ['/', '/work', '/maintenance', '/maintenance?tab=plans', '/maintenance?tab=cal', '/maintenance?tab=year', '/maintenance/plans/new', '/maintenance/plans/group',
     `/maintenance/plans/${ids.plan}`, `/maintenance/plans/${ids.plan}/edit`, '/maintenance/checklists', '/maintenance/checklists/new', `/maintenance/checklists/${ids.checklist}`,
     '/maintenance/wo/new', `/maintenance/wo/${ids.wo}`, '/repairs', '/repairs/new', `/repairs/${ids.repair}`, `/repairs/${ids.repair}/edit`,
@@ -175,21 +176,23 @@ async function crawl(env, ids, who, pin, device) {
   }
 }
 
-const { env, ids } = seed();
-const internal = [];
-const orig = env.post.bind(env);
-env.post = (req) => { const r = orig(req); if (r && (r.code === 'INTERNAL_ERROR' || r.code === 'SYSTEM_NOT_READY')) internal.push({ action: req.action, msg: r.message || r.message_vi, data: JSON.stringify(r).slice(0, 300) }); return r; };
-console.log('ids', JSON.stringify(ids));
-const who = (process.env.WHO || `${OWNER_CODE}:${OWNER_PIN},U-C3:694127,U-KT:583017,U-DN:583016,U-C1:583019,U-HD:583020`).split(',');
-for (const w of who) {
-  const [code, pin] = w.split(':');
-  for (const d of (process.env.DEV || 'iphone,web').split(',')) {
-    const t0 = Date.now();
-    await crawl(env, ids, code, pin, d);
-    console.log(code, d, Math.round((Date.now() - t0) / 1000) + 's', findings.length);
+if (MAIN) {
+  const { env, ids } = seed();
+  const internal = [];
+  const orig = env.post.bind(env);
+  env.post = (req) => { const r = orig(req); if (r && (r.code === 'INTERNAL_ERROR' || r.code === 'SYSTEM_NOT_READY')) internal.push({ action: req.action, msg: r.message || r.message_vi, data: JSON.stringify(r).slice(0, 300) }); return r; };
+  console.log('ids', JSON.stringify(ids));
+  const who = (process.env.WHO || `${OWNER_CODE}:${OWNER_PIN},U-C3:694127,U-KT:583017,U-DN:583016,U-C1:583019,U-HD:583020`).split(',');
+  for (const w of who) {
+    const [code, pin] = w.split(':');
+    for (const d of (process.env.DEV || 'iphone,web').split(',')) {
+      const t0 = Date.now();
+      await crawl(env, ids, code, pin, d);
+      console.log(code, d, Math.round((Date.now() - t0) / 1000) + 's', findings.length);
+    }
   }
+  internal.forEach((x) => findings.push({ tag: 'server', kind: 'INTERNAL', msg: JSON.stringify(x) }));
+  fs.writeFileSync(OUT, JSON.stringify(findings, null, 1));
+  const by = {}; findings.forEach((f) => { by[f.kind] = (by[f.kind] || 0) + 1; });
+  console.log(JSON.stringify(by));
 }
-internal.forEach((x) => findings.push({ tag: 'server', kind: 'INTERNAL', msg: JSON.stringify(x) }));
-fs.writeFileSync(OUT, JSON.stringify(findings, null, 1));
-const by = {}; findings.forEach((f) => { by[f.kind] = (by[f.kind] || 0) + 1; });
-console.log(JSON.stringify(by));
