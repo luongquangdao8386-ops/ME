@@ -117,8 +117,10 @@ function visibleEntities_(ctx) {
 function syncBootstrap_(ctx) {
   var p = ctx.req.payload || {};
   var pageSize = Math.min(2000, setting_('sync_page_size') || 500);
+  // Mã trang "bảng:vị trí:khóa dòng kế tiếp" (d4.42 thêm khóa): Lưu trữ theo năm xóa dòng cũ giữa hai trang làm lệch vị trí → tìm lại dòng
+  // theo khóa; dòng đó đã bị chuyển đi thì đọc lại bảng từ đầu (app bỏ bản ghi trùng)
   var tok = String(p.page_token || '0:0').split(':');
-  var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0;
+  var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0, anchor = tok.slice(2).join(':');
   var st = readState_();
   var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = visibleEntities_(ctx);
@@ -138,9 +140,17 @@ function syncBootstrap_(ctx) {
     if (count && Date.now() - t0 > budget) { next = ei + ':0'; break; }
     var rows = tc.rows(ent.sheet);
     if (ent.recentDays) costCache.__readingRows = rows;
+    var key = sheetSchema_(ent.sheet).key;
+    if (off && anchor && !(rows[off] && rows[off][key] === anchor)) {
+      off = 0;
+      for (var a = 0; a < rows.length; a++) if (rows[a][key] === anchor) { off = a; break; }
+    }
+    anchor = '';
     var list = records[ent.type] = records[ent.type] || [];
+    // Rà soát d4.42: bảng quá lớn để đệm (vd 50 000 kết quả checklist) bị đọc lại cả bảng mỗi trang → trang cho bảng đó tới 2 000 dòng
+    var lim = tc.big(ent.sheet) ? Math.max(pageSize, 2000) : pageSize;
     for (var i = off; i < rows.length; i++) {
-      if (count >= pageSize || Date.now() - t0 > budget) { next = ei + ':' + i; break; }
+      if (count >= lim || Date.now() - t0 > budget) { next = ei + ':' + i + ':' + rows[i][key]; break; }
       if (rows[i].archived_at) continue;
       var o = syncProject_(ctx, ent, rows[i], qm, costCache);
       if (o) { list.push(o); count++; }

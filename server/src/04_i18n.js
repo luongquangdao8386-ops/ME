@@ -38,6 +38,7 @@ var SUB_MSG = {
   ID_EXISTS: ['Mã định danh đã tồn tại', '标识已存在'],
   CODE_DUPLICATE: ['Mã đã được dùng', '编号已被使用'],
   CODE_INVALID: ['Mã chỉ gồm chữ hoa, số và . _ / -', '编号只能包含大写字母、数字及 . _ / -'],
+  TEXT_TOO_LONG: ['Nội dung quá dài (tối đa 20 000 ký tự), hãy rút gọn hoặc đính kèm tệp', '内容过长（最多20000个字符），请精简或改为附件'],
   PIN_WEAK: ['PIN quá dễ đoán, hãy chọn PIN khác', 'PIN过于简单，请换一个'],
   PIN_FORMAT: ['PIN phải gồm đúng 6 chữ số', 'PIN必须为6位数字'],
   RESET_PLAN_EXPIRED: ['Bản xem trước đã hết hạn hoặc đã dùng, hãy xem lại', '预览已过期或已使用，请重新预览'],

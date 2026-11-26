@@ -20,8 +20,9 @@ export function textInput(id, labelKey, value, { maxlength = 200, required = fal
     ${inputmode ? `inputmode="${inputmode}"` : ''} ${upper ? 'autocapitalize="characters" data-upper="1"' : ''} ${placeholder ? `placeholder="${esc(placeholder)}"` : ''} autocomplete="off" spellcheck="false">`, { hint, required });
 }
 
-export function textArea(id, labelKey, value, { rows = 3, hint = '' } = {}) {
-  return fieldWrap(id, labelKey, `<textarea class="inp" id="f-${esc(id)}" name="${esc(id)}" rows="${rows}">${esc(value ?? '')}</textarea>`, { hint });
+/** Rà soát d4.42: tối đa 20 000 ký tự (máy chủ chặn chuỗi dài hơn — một ô Sheets chứa tối đa 50 000 ký tự) */
+export function textArea(id, labelKey, value, { rows = 3, hint = '', maxlength = 20000 } = {}) {
+  return fieldWrap(id, labelKey, `<textarea class="inp" id="f-${esc(id)}" name="${esc(id)}" rows="${rows}" maxlength="${maxlength}">${esc(value ?? '')}</textarea>`, { hint });
 }
 
 /** options: [[value, htmlLabel]] */

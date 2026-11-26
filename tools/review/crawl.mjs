@@ -122,7 +122,10 @@ const findings = [];
 const add = (o) => { findings.push(o); };
 
 async function crawl(env, ids, who, pin, device) {
-  const dev = device === 'web' ? { viewport: { width: 1440, height: 900 }, mobile: false } : { viewport: { width: 390, height: 844 }, mobile: true };
+  // iphone 390, se = iPhone SE 320 px, tab = máy tính bảng chạm 1024 px, tabweb = máy tính nhỏ 1024 px (chuột), web 1440
+  const DEVS = { web: [1440, 900, false], iphone: [390, 844, true], se: [320, 568, true], tab: [1024, 768, true], tabweb: [1024, 768, false] };
+  const [vw, vh, mob] = DEVS[device] || DEVS.iphone;
+  const dev = { viewport: { width: vw, height: vh }, mobile: mob };
   const app = await openApp({ env, ...dev });
   const { page } = app;
   try {
@@ -156,7 +159,7 @@ async function crawl(env, ids, who, pin, device) {
       const keys = (info.text.match(/\b[a-z][a-z0-9_]*\.[a-z][a-zA-Z0-9_]*(?:\.[A-Za-z0-9_]+)*\b/g) || []).filter((k) => !/\.(jpg|png|pdf|xlsx|gs|js|com|google|json|csv|vn)$/.test(k) && !/^(raw|script|docs|www|lh3)\./.test(k));
       const raw = keys.filter((k) => LABEL_KEYS.has(k) || /^(bg|hl|ut|rpt|mt|rp|yr|ap|fc|iso|arc|bal|ci|wo|adm|admin|health|sys|reset|auth|sync|account|draft|eq|mat|ins|co|tab|btn|field|col|err|qr|logo|cal|work|home|nav|module|level|subrole|status|perm_module)\./.test(k));
       if (raw.length) add({ tag, kind: 'RAW_KEY', msg: [...new Set(raw)].join(', ') });
-      if (device === 'iphone' && info.over) add({ tag, kind: 'OVERFLOW', msg: info.overEl.join(' | ') });
+      if (device !== 'web' && info.over) add({ tag, kind: 'OVERFLOW', msg: info.overEl.join(' | ') });
       if (/Lỗi máy chủ|Không tìm thấy|Dữ liệu chưa hợp lệ/.test(info.text)) add({ tag, kind: 'ERRBOX', msg: info.text.replace(/\s+/g, ' ').slice(0, 160) });
       const errs = app.consoleErrors.slice(lastErr);
       lastErr = app.consoleErrors.length;

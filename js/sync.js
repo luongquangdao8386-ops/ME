@@ -17,7 +17,9 @@ export async function getRecords(type) { return (await idb.get('me_data', 'recor
 export async function bootstrap({ onPage, page1 = null } = {}) {
   let pageToken = null, cursor = null, first = null;
   const acc = {};
-  for (let guard = 0; guard < 50; guard++) {
+  // Rà soát d4.42: trước dừng sau 50 trang mà vẫn lưu → dữ liệu lớn (vài năm phiếu bảo trì, > 25 000 bản ghi) thiếu ngầm.
+  // Giờ đọc tới hết (giới hạn 1 000 trang chỉ để chặn vòng lặp hỏng); chưa hết thì không xóa dữ liệu đang có trên máy.
+  for (let guard = 0; guard < 1000; guard++) {
     if (onPage) { try { onPage(guard + 1); } catch (e) { /* bỏ qua */ } }
     const r = guard === 0 && page1 && page1.records ? { ok: true, data: page1 }
       : await api('sync.bootstrap', pageToken ? { page_token: pageToken, sync_cursor: cursor } : {}, { retry: true });
@@ -28,8 +30,13 @@ export async function bootstrap({ onPage, page1 = null } = {}) {
     pageToken = r.data.next_page_token;
     if (!pageToken) break;
   }
+  if (pageToken) return { ok: false, code: 'SYNC_INCOMPLETE', message_vi: 'Chưa tải hết dữ liệu, hãy thử đồng bộ lại', message_zh: '数据未全部下载，请重新同步' };
   await idb.clear('me_data', 'records');
-  for (const [t, list] of Object.entries(acc)) await idb.put('me_data', 'records', t, list);
+  // d4.42: Lưu trữ theo năm chạy giữa hai trang có thể làm máy chủ đọc lại một bảng từ đầu → bỏ bản ghi trùng khóa (giữ bản sau)
+  for (const [t, list] of Object.entries(acc)) {
+    const uniq = KEY[t] && list.length ? [...new Map(list.map((x) => [keyOf(t, x), x])).values()] : list;
+    await idb.put('me_data', 'records', t, uniq);
+  }
   session.settings = first.settings || {};
   session.settings.__today_offset_days = todayOffset(first.server_today);
   await setMeta('bootstrap', { user: first.user, subroles: first.subroles, settings: first.settings, permissions: first.permissions, env: first.env, server_version: first.server_version, released_dot: first.released_dot || 0 });

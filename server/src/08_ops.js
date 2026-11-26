@@ -37,6 +37,22 @@ function writeAudit_(a) {
   }]);
 }
 
+/**
+ * Kết quả lưu vào Operations.result_json — một ô Sheets tối đa 50 000 ký tự. Rà soát d4.42: kết quả kèm danh sách dài (checklist 60+ bước,
+ * lưu kết quả 60+ bước) vượt ô → lỗi máy chủ SAU KHI đã ghi dữ liệu. Kết quả lớn: chỉ giữ trường đơn (mã, phiên bản…), bỏ bản ghi/danh sách
+ * (app lấy lại qua đồng bộ); phản hồi lần đầu vẫn đủ.
+ */
+var OP_RESULT_MAX_ = 45000;
+function opResultStr_(result) {
+  var s = JSON.stringify(result === undefined ? null : result);
+  if (s.length <= OP_RESULT_MAX_) return s;
+  var o = { too_large: true };
+  Object.keys(result).forEach(function (k) { var v = result[k]; if (v === null || typeof v !== 'object') o[k] = v; });
+  if (result.record && JSON.stringify(result.record).length < 30000) o.record = result.record;
+  s = JSON.stringify(o);
+  return s.length <= OP_RESULT_MAX_ ? s : JSON.stringify({ too_large: true });
+}
+
 /** Phản hồi khi operation_id đã có (3.15) */
 function existingOpResponse_(ctx, ex, hash) {
   if (ex.user_id !== ctx.user.user_id || ex.payload_hash !== hash || ex.action !== ctx.req.action) {
@@ -87,9 +103,7 @@ function replayPrepared_(ctx, ex) {
   });
   if (Object.keys(su).length) stateWrite_(st, su, ctx.user.user_id);
   if (intent.audit) writeAudit_(intent.audit);
-  writeCells_('Operations', ex.__row, {
-    state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(intent.result || null)
-  });
+  writeCells_('Operations', ex.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: opResultStr_(intent.result) });
   return { ok: true, code: 'DUPLICATE_OPERATION', state: 'COMMITTED', data: intent.result || null, record_version: intent.result ? intent.result.record_version : null };
 }
 
@@ -131,6 +145,7 @@ function executeWrite_(ctx, opts) {
     var intent = plan.noReplay ? { no_replay: true } : { writes: plan.writes, state: su, audit: audit, result: plan.result };
     var intentStr = JSON.stringify(intent);
     if (intentStr.length > 40000) intentStr = JSON.stringify({ too_large: true });
+    var resultStr = opResultStr_(plan.result);
     var opRow = {
       operation_id: req.operation_id, user_id: ctx.user.user_id, device_id: isUuidV4_(req.device_id) ? req.device_id : '',
       entity_type: opts.entity_type || '', entity_id: opts.entity_id || '',
@@ -142,9 +157,7 @@ function executeWrite_(ctx, opts) {
     applyWrites_(plan.writes, false);
     stateWrite_(st, su, ctx.user.user_id);
     if (audit) writeAudit_(audit);
-    writeCells_('Operations', opRow.__row, {
-      state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(plan.result || null)
-    });
+    writeCells_('Operations', opRow.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: resultStr });
     return { ok: true, code: 'OK', state: 'COMMITTED', data: plan.result || null, record_version: plan.record_version };
   });
 }

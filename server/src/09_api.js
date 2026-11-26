@@ -221,6 +221,24 @@ function nfcDeep_(v, depth) {
   return v;
 }
 
+/**
+ * Rà soát d4.42: một ô Google Sheets chứa tối đa 50 000 ký tự — dán chữ dài hơn vào ô ghi chú làm lỗi máy chủ (có khi đã ghi dở).
+ * Chặn chung mọi chuỗi > TEXT_MAX_ ký tự trong payload (trừ nội dung tệp: khóa *_b64, ảnh biểu đồ charts, chuỗi chỉ gồm ký tự base64).
+ * Trả danh sách trường (vd note_vi, items[3].label_vi, op.payload.symptom_vi).
+ */
+var TEXT_MAX_ = 20000;
+function longTextFields_(v, path, depth, out) {
+  if (out.length >= 10 || depth > 6 || v === null || v === undefined) return out;
+  if (typeof v === 'string') {
+    if (v.length > TEXT_MAX_ && !/^[A-Za-z0-9+\/=_-]+$/.test(v)) out.push(path || 'payload');
+  } else if (Array.isArray(v)) {
+    for (var i = 0; i < v.length; i++) longTextFields_(v[i], path + '[' + i + ']', depth + 1, out);
+  } else if (typeof v === 'object') {
+    Object.keys(v).forEach(function (k) { if (!/_b64$/.test(k) && k !== 'charts') longTextFields_(v[k], path ? path + '.' + k : k, depth + 1, out); });
+  }
+  return out;
+}
+
 function doPost(e) {
   var t0 = Date.now();
   var res;
@@ -233,7 +251,9 @@ function doPost(e) {
       res = envelope_({}, { ok: false, code: 'VALIDATION_ERROR', errors: [fieldError_('body', 'INVALID_VALUE')] });
     } else {
       if (req.payload && typeof req.payload === 'object') req.payload = nfcDeep_(req.payload, 0);
-      res = apiDispatch_(req);
+      var tooLong = req.payload && typeof req.payload === 'object' ? longTextFields_(req.payload, '', 0, []) : [];
+      if (tooLong.length) res = envelope_(req, { ok: false, code: 'VALIDATION_ERROR', errors: tooLong.map(function (f) { return fieldError_(f.replace(/^op\.payload\./, ''), 'TEXT_TOO_LONG'); }) });
+      else res = apiDispatch_(req);
     }
   } catch (err2) {
     res = internalError_({}, err2);

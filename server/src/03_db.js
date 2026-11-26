@@ -111,7 +111,10 @@ function tableCache_(names, st) {
     names.forEach(function (n) { var m = Number(metas[keys[n]] || 0); for (var i = 0; i < m; i++) need.push(keys[n] + ':' + i); });
     if (need.length) chunks = c.getAll(need) || {};
   } catch (e) { metas = {}; chunks = {}; }
+  var bigs = {};
   return {
+    /** Bảng quá lớn để đệm (đọc Sheets mỗi lần): sync.bootstrap gửi trang lớn hơn cho bảng này, đỡ đọc lại cả bảng mỗi trang */
+    big: function (n) { return !!bigs[keys[n] || tblKey_(n, st)]; },
     rows: function (n) {
       var k = keys[n] || tblKey_(n, st);
       var m = Number(metas[k] || 0);
@@ -125,12 +128,18 @@ function tableCache_(names, st) {
         var js = JSON.stringify(rows);
         if (js.length <= TBL_CHUNK_ * TBL_MAX_CHUNKS_) {
           var put = {}, cnt = 0;
-          for (var j = 0; j < js.length; j += TBL_CHUNK_) put[k + ':' + (cnt++)] = js.slice(j, j + TBL_CHUNK_);
+          // Không cắt giữa cặp surrogate (emoji 👍 = 2 đơn vị UTF-16): nửa cặp lưu vào đệm có thể thành '?' khi đọc lại
+          for (var j = 0; j < js.length;) {
+            var e = Math.min(js.length, j + TBL_CHUNK_);
+            if (e < js.length && /[\uD800-\uDBFF]/.test(js.charAt(e - 1))) e--;
+            put[k + ':' + (cnt++)] = js.slice(j, e);
+            j = e;
+          }
           put[k] = String(cnt);
           c.putAll(put, 21600);
           metas[k] = String(cnt);
           Object.keys(put).forEach(function (pk) { if (pk !== k) chunks[pk] = put[pk]; });
-        }
+        } else bigs[k] = true;
       } catch (e2) { /* đầy đệm: bỏ qua */ }
       return rows;
     }

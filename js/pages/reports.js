@@ -402,6 +402,8 @@ async function excelFile(d, code, fileName, logoRev) {
   const logo = await logoOf(logoRev);
   const top = logo ? [[''], [''], [''], ['']] : [];
   const sumWs = aoaSheet(X, [...top, [`${d.title_vi || ''} · ${d.title_zh || ''}`], [], [biText('rpt.summary'), ''], ...sum.map((s) => [s.label, s.val]),
+    // Rà soát d4.42: báo cáo > 2 000 dòng — tệp chỉ gồm 2 000 dòng đầu, ghi rõ ở Tóm tắt và Điều kiện lọc (trước không ghi)
+    ...(d.truncated ? [[], [biText('rpt.truncated', { N: fmtNumber(d.total_rows) }), '']] : []),
     [], ...(formCodeOf(d) ? [[biText('ap.form_code'), formCodeOf(d)]] : []), [biText('rpt.number'), code || ''], [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || '']]);
   sumWs['!cols'] = [{ wch: 48 }, { wch: 28 }];
   X.utils.book_append_sheet(wb, sumWs, biText('rpt.summary').slice(0, 31));
@@ -456,6 +458,7 @@ async function excelFile(d, code, fileName, logoRev) {
     [biText('rpt.filters'), ''], ...lines,
     [biText('rpt.generated_at'), fmtDateTime(d.generated_at)], [biText('rpt.prepared_by'), d.generated_by_name || ''],
     ...(code ? [[biText('rpt.number'), code]] : []), [biText('rpt.rows_n', { N: d.total_rows }), ''],
+    ...(d.truncated ? [[biText('rpt.truncated', { N: fmtNumber(d.total_rows) }), '']] : []),
     ...(d.cost_hidden ? [[biText('cost.hidden'), '']] : []), ...(d.notes || []).map((n) => [biText(n), '']), ['app', BUILD_VERSION]
   ]), biText('rpt.filters').slice(0, 31));
   const name = (fileName && fileName.replace(/\.xlsx$/i, '')) || `${code || d.definition.code}_${stamp(d)}`;

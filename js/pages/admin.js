@@ -377,7 +377,7 @@ async function editSetting(s) {
   let input;
   if (s.type === 'BOOL') input = `<label class="check"><input type="checkbox" id="f-v"${s.value ? ' checked' : ''}><span>${esc(s.key)}</span></label>`;
   else if (s.options) input = `<select class="inp sel" id="f-v">${s.options.map((o) => `<option${o === s.value ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-  else if (s.type === 'JSON') input = `<textarea class="inp" id="f-v" rows="3">${esc(JSON.stringify(s.value))}</textarea>`;
+  else if (s.type === 'JSON') input = `<textarea class="inp" id="f-v" rows="3" maxlength="20000">${esc(JSON.stringify(s.value))}</textarea>`;
   else input = `<input class="inp" id="f-v" value="${esc(String(s.value ?? ''))}" ${s.type === 'INT' || s.type === 'NUMBER' ? 'inputmode="decimal"' : ''} autocomplete="off">`;
   const v = await dialog({
     title: bi('adm.status.edit_setting'),

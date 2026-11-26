@@ -1,5 +1,5 @@
 /**
- * M&E · 机电管理 — Code.gs 1.0.0-d4.41
+ * M&E · 机电管理 — Code.gs 1.0.0-d4.42
  * TỆP TẠO TỰ ĐỘNG từ server/src/*.js bằng "npm run build". Không sửa tay.
  * Dán toàn bộ nội dung vào tệp Code.gs của dự án Apps Script M&E.
  * Không chứa ID, khóa bí mật hay dữ liệu: các giá trị đó nằm trong Thuộc tính tập lệnh.
@@ -13,7 +13,7 @@
  * ===================================================================== */
 
 var APP_ID = 'ME';
-var SERVER_VERSION = '1.0.0-d4.41';
+var SERVER_VERSION = '1.0.0-d4.42';
 var API_CONTRACT_VERSION = '1.0';
 var SCHEMA_VERSION = '1.5.7';  // 1.5.0 = Đợt 1; 1.5.2 = thêm 10 sheet Đợt 2; 1.5.3 = thêm 10 sheet Đợt 3; 1.5.4 = thêm ResetRuns, ResetFiles (Đợt 4);
                                // 1.5.5 = kế hoạch năm: MaintenancePlans.plan_group_id + sheet AnnualPlans ("đợt" 5, d4.18);
@@ -921,7 +921,10 @@ function tableCache_(names, st) {
     names.forEach(function (n) { var m = Number(metas[keys[n]] || 0); for (var i = 0; i < m; i++) need.push(keys[n] + ':' + i); });
     if (need.length) chunks = c.getAll(need) || {};
   } catch (e) { metas = {}; chunks = {}; }
+  var bigs = {};
   return {
+    /** Bảng quá lớn để đệm (đọc Sheets mỗi lần): sync.bootstrap gửi trang lớn hơn cho bảng này, đỡ đọc lại cả bảng mỗi trang */
+    big: function (n) { return !!bigs[keys[n] || tblKey_(n, st)]; },
     rows: function (n) {
       var k = keys[n] || tblKey_(n, st);
       var m = Number(metas[k] || 0);
@@ -935,12 +938,18 @@ function tableCache_(names, st) {
         var js = JSON.stringify(rows);
         if (js.length <= TBL_CHUNK_ * TBL_MAX_CHUNKS_) {
           var put = {}, cnt = 0;
-          for (var j = 0; j < js.length; j += TBL_CHUNK_) put[k + ':' + (cnt++)] = js.slice(j, j + TBL_CHUNK_);
+          // Không cắt giữa cặp surrogate (emoji 👍 = 2 đơn vị UTF-16): nửa cặp lưu vào đệm có thể thành '?' khi đọc lại
+          for (var j = 0; j < js.length;) {
+            var e = Math.min(js.length, j + TBL_CHUNK_);
+            if (e < js.length && /[\uD800-\uDBFF]/.test(js.charAt(e - 1))) e--;
+            put[k + ':' + (cnt++)] = js.slice(j, e);
+            j = e;
+          }
           put[k] = String(cnt);
           c.putAll(put, 21600);
           metas[k] = String(cnt);
           Object.keys(put).forEach(function (pk) { if (pk !== k) chunks[pk] = put[pk]; });
-        }
+        } else bigs[k] = true;
       } catch (e2) { /* đầy đệm: bỏ qua */ }
       return rows;
     }
@@ -1200,6 +1209,7 @@ var SUB_MSG = {
   ID_EXISTS: ['Mã định danh đã tồn tại', '标识已存在'],
   CODE_DUPLICATE: ['Mã đã được dùng', '编号已被使用'],
   CODE_INVALID: ['Mã chỉ gồm chữ hoa, số và . _ / -', '编号只能包含大写字母、数字及 . _ / -'],
+  TEXT_TOO_LONG: ['Nội dung quá dài (tối đa 20 000 ký tự), hãy rút gọn hoặc đính kèm tệp', '内容过长（最多20000个字符），请精简或改为附件'],
   PIN_WEAK: ['PIN quá dễ đoán, hãy chọn PIN khác', 'PIN过于简单，请换一个'],
   PIN_FORMAT: ['PIN phải gồm đúng 6 chữ số', 'PIN必须为6位数字'],
   RESET_PLAN_EXPIRED: ['Bản xem trước đã hết hạn hoặc đã dùng, hãy xem lại', '预览已过期或已使用，请重新预览'],
@@ -2498,6 +2508,22 @@ function writeAudit_(a) {
   }]);
 }
 
+/**
+ * Kết quả lưu vào Operations.result_json — một ô Sheets tối đa 50 000 ký tự. Rà soát d4.42: kết quả kèm danh sách dài (checklist 60+ bước,
+ * lưu kết quả 60+ bước) vượt ô → lỗi máy chủ SAU KHI đã ghi dữ liệu. Kết quả lớn: chỉ giữ trường đơn (mã, phiên bản…), bỏ bản ghi/danh sách
+ * (app lấy lại qua đồng bộ); phản hồi lần đầu vẫn đủ.
+ */
+var OP_RESULT_MAX_ = 45000;
+function opResultStr_(result) {
+  var s = JSON.stringify(result === undefined ? null : result);
+  if (s.length <= OP_RESULT_MAX_) return s;
+  var o = { too_large: true };
+  Object.keys(result).forEach(function (k) { var v = result[k]; if (v === null || typeof v !== 'object') o[k] = v; });
+  if (result.record && JSON.stringify(result.record).length < 30000) o.record = result.record;
+  s = JSON.stringify(o);
+  return s.length <= OP_RESULT_MAX_ ? s : JSON.stringify({ too_large: true });
+}
+
 /** Phản hồi khi operation_id đã có (3.15) */
 function existingOpResponse_(ctx, ex, hash) {
   if (ex.user_id !== ctx.user.user_id || ex.payload_hash !== hash || ex.action !== ctx.req.action) {
@@ -2548,9 +2574,7 @@ function replayPrepared_(ctx, ex) {
   });
   if (Object.keys(su).length) stateWrite_(st, su, ctx.user.user_id);
   if (intent.audit) writeAudit_(intent.audit);
-  writeCells_('Operations', ex.__row, {
-    state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(intent.result || null)
-  });
+  writeCells_('Operations', ex.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: opResultStr_(intent.result) });
   return { ok: true, code: 'DUPLICATE_OPERATION', state: 'COMMITTED', data: intent.result || null, record_version: intent.result ? intent.result.record_version : null };
 }
 
@@ -2592,6 +2616,7 @@ function executeWrite_(ctx, opts) {
     var intent = plan.noReplay ? { no_replay: true } : { writes: plan.writes, state: su, audit: audit, result: plan.result };
     var intentStr = JSON.stringify(intent);
     if (intentStr.length > 40000) intentStr = JSON.stringify({ too_large: true });
+    var resultStr = opResultStr_(plan.result);
     var opRow = {
       operation_id: req.operation_id, user_id: ctx.user.user_id, device_id: isUuidV4_(req.device_id) ? req.device_id : '',
       entity_type: opts.entity_type || '', entity_id: opts.entity_id || '',
@@ -2603,9 +2628,7 @@ function executeWrite_(ctx, opts) {
     applyWrites_(plan.writes, false);
     stateWrite_(st, su, ctx.user.user_id);
     if (audit) writeAudit_(audit);
-    writeCells_('Operations', opRow.__row, {
-      state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(plan.result || null)
-    });
+    writeCells_('Operations', opRow.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: resultStr });
     return { ok: true, code: 'OK', state: 'COMMITTED', data: plan.result || null, record_version: plan.record_version };
   });
 }
@@ -3074,6 +3097,24 @@ function nfcDeep_(v, depth) {
   return v;
 }
 
+/**
+ * Rà soát d4.42: một ô Google Sheets chứa tối đa 50 000 ký tự — dán chữ dài hơn vào ô ghi chú làm lỗi máy chủ (có khi đã ghi dở).
+ * Chặn chung mọi chuỗi > TEXT_MAX_ ký tự trong payload (trừ nội dung tệp: khóa *_b64, ảnh biểu đồ charts, chuỗi chỉ gồm ký tự base64).
+ * Trả danh sách trường (vd note_vi, items[3].label_vi, op.payload.symptom_vi).
+ */
+var TEXT_MAX_ = 20000;
+function longTextFields_(v, path, depth, out) {
+  if (out.length >= 10 || depth > 6 || v === null || v === undefined) return out;
+  if (typeof v === 'string') {
+    if (v.length > TEXT_MAX_ && !/^[A-Za-z0-9+\/=_-]+$/.test(v)) out.push(path || 'payload');
+  } else if (Array.isArray(v)) {
+    for (var i = 0; i < v.length; i++) longTextFields_(v[i], path + '[' + i + ']', depth + 1, out);
+  } else if (typeof v === 'object') {
+    Object.keys(v).forEach(function (k) { if (!/_b64$/.test(k) && k !== 'charts') longTextFields_(v[k], path ? path + '.' + k : k, depth + 1, out); });
+  }
+  return out;
+}
+
 function doPost(e) {
   var t0 = Date.now();
   var res;
@@ -3086,7 +3127,9 @@ function doPost(e) {
       res = envelope_({}, { ok: false, code: 'VALIDATION_ERROR', errors: [fieldError_('body', 'INVALID_VALUE')] });
     } else {
       if (req.payload && typeof req.payload === 'object') req.payload = nfcDeep_(req.payload, 0);
-      res = apiDispatch_(req);
+      var tooLong = req.payload && typeof req.payload === 'object' ? longTextFields_(req.payload, '', 0, []) : [];
+      if (tooLong.length) res = envelope_(req, { ok: false, code: 'VALIDATION_ERROR', errors: tooLong.map(function (f) { return fieldError_(f.replace(/^op\.payload\./, ''), 'TEXT_TOO_LONG'); }) });
+      else res = apiDispatch_(req);
     }
   } catch (err2) {
     res = internalError_({}, err2);
@@ -4511,8 +4554,10 @@ function visibleEntities_(ctx) {
 function syncBootstrap_(ctx) {
   var p = ctx.req.payload || {};
   var pageSize = Math.min(2000, setting_('sync_page_size') || 500);
+  // Mã trang "bảng:vị trí:khóa dòng kế tiếp" (d4.42 thêm khóa): Lưu trữ theo năm xóa dòng cũ giữa hai trang làm lệch vị trí → tìm lại dòng
+  // theo khóa; dòng đó đã bị chuyển đi thì đọc lại bảng từ đầu (app bỏ bản ghi trùng)
   var tok = String(p.page_token || '0:0').split(':');
-  var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0;
+  var ei = Number(tok[0]) || 0, off = Number(tok[1]) || 0, anchor = tok.slice(2).join(':');
   var st = readState_();
   var cursor = p.page_token && p.sync_cursor ? Number(p.sync_cursor) : Number(stateGet_(st, 'sync_revision', 0));
   var ents = visibleEntities_(ctx);
@@ -4532,9 +4577,17 @@ function syncBootstrap_(ctx) {
     if (count && Date.now() - t0 > budget) { next = ei + ':0'; break; }
     var rows = tc.rows(ent.sheet);
     if (ent.recentDays) costCache.__readingRows = rows;
+    var key = sheetSchema_(ent.sheet).key;
+    if (off && anchor && !(rows[off] && rows[off][key] === anchor)) {
+      off = 0;
+      for (var a = 0; a < rows.length; a++) if (rows[a][key] === anchor) { off = a; break; }
+    }
+    anchor = '';
     var list = records[ent.type] = records[ent.type] || [];
+    // Rà soát d4.42: bảng quá lớn để đệm (vd 50 000 kết quả checklist) bị đọc lại cả bảng mỗi trang → trang cho bảng đó tới 2 000 dòng
+    var lim = tc.big(ent.sheet) ? Math.max(pageSize, 2000) : pageSize;
     for (var i = off; i < rows.length; i++) {
-      if (count >= pageSize || Date.now() - t0 > budget) { next = ei + ':' + i; break; }
+      if (count >= lim || Date.now() - t0 > budget) { next = ei + ':' + i + ':' + rows[i][key]; break; }
       if (rows[i].archived_at) continue;
       var o = syncProject_(ctx, ent, rows[i], qm, costCache);
       if (o) { list.push(o); count++; }
@@ -7719,7 +7772,7 @@ function recoverOperations_() {
     var intent = op.intent_json;
     if (intent && intent.writes) {
       applyWrites_(intent.writes, true);
-      writeCells_('Operations', op.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(intent.result || null) });
+      writeCells_('Operations', op.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: opResultStr_(intent.result) });
     } else {
       writeCells_('Operations', op.__row, { state: 'FAILED', result_code: 'RECOVERY_REQUIRED' });
     }
@@ -8609,6 +8662,8 @@ function importPreview_(ctx) {
   if (p.meta && p.meta.template_key && p.meta.template_key !== p.template_key) errs.push(fieldError_('template', 'TEMPLATE_MISMATCH'));
   var sheetNames = t.sheets.map(function (s) { return s.name; });
   rows.forEach(function (r) { if (!r || sheetNames.indexOf(r.sheet) < 0 || !(Number(r.row_number) >= 3)) errs.push(fieldError_('rows', 'INVALID_VALUE')); });
+  // Rà soát d4.42: cả dòng Excel lưu vào một ô (≤ 50 000 ký tự) — dòng quá dài báo theo số dòng, không lỗi máy chủ
+  if (!errs.length) rows.forEach(function (r) { if (JSON.stringify({ s: r.sheet, raw: r.values || {}, f: r.formulas || [] }).length > 45000) errs.push(fieldError_('rows', 'TEXT_TOO_LONG', Number(r.row_number))); });
   if (errs.length) throw validationError_(errs);
   var stored = withWriteLock_(function () {
     var b = batchById_(p.import_batch_id);

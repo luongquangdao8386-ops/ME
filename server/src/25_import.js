@@ -306,6 +306,8 @@ function importPreview_(ctx) {
   if (p.meta && p.meta.template_key && p.meta.template_key !== p.template_key) errs.push(fieldError_('template', 'TEMPLATE_MISMATCH'));
   var sheetNames = t.sheets.map(function (s) { return s.name; });
   rows.forEach(function (r) { if (!r || sheetNames.indexOf(r.sheet) < 0 || !(Number(r.row_number) >= 3)) errs.push(fieldError_('rows', 'INVALID_VALUE')); });
+  // Rà soát d4.42: cả dòng Excel lưu vào một ô (≤ 50 000 ký tự) — dòng quá dài báo theo số dòng, không lỗi máy chủ
+  if (!errs.length) rows.forEach(function (r) { if (JSON.stringify({ s: r.sheet, raw: r.values || {}, f: r.formulas || [] }).length > 45000) errs.push(fieldError_('rows', 'TEXT_TOO_LONG', Number(r.row_number))); });
   if (errs.length) throw validationError_(errs);
   var stored = withWriteLock_(function () {
     var b = batchById_(p.import_batch_id);

@@ -4,6 +4,7 @@
 //  ME_MUT=<tệp.jsonl>         trước mỗi request thật, gửi thử các bản làm hỏng từng trường (xóa, null, sai kiểu, chuỗi dài…), chụp/khôi phục
 //                             toàn bộ dữ liệu giả lập quanh mỗi lượt; ghi lại mọi INTERNAL_ERROR (ngoại lệ chưa bắt) kèm stack
 //  ME_MUT_COUNT=<tệp>         (tùy chọn) đếm số lượt làm hỏng
+//  ME_MUT_LONG=<số ký tự>     (tùy chọn, cùng ME_MUT) chỉ thử một giá trị: chuỗi dài đúng số ký tự đó (vd 60000 > giới hạn 50 000 ký tự/ô Sheets)
 // Cách chạy: tools/review/README.md
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -77,14 +78,15 @@ export function reviewHooks(env, st) {
     lockState.busy = false; lockState.held = 0;
     try { g.dbReset_(); } catch (e) { /* */ }
   };
-  const pick = () => WEIRD[Math.floor(Math.random() * WEIRD.length)];
+  const LONGN = Number(process.env.ME_MUT_LONG || 0);
+  const pick = () => (LONGN ? 'Ă'.repeat(LONGN) : WEIRD[Math.floor(Math.random() * WEIRD.length)]);
   const mutate = (req) => {
     const p = req.payload;
     if (!p || typeof p !== 'object' || Array.isArray(p) || SKIP_MUT.test(req.action || '')) return;
     const keys = Object.keys(p);
     if (!keys.length) return;
     const tries = [];
-    keys.forEach((k) => { tries.push([k, pick()]); tries.push([k, pick()]); });
+    keys.forEach((k) => { tries.push([k, pick()]); if (!LONGN) tries.push([k, pick()]); });
     keys.filter((k) => Array.isArray(p[k]) && p[k].length && typeof p[k][0] === 'object' && p[k][0]).forEach((k) => {
       Object.keys(p[k][0]).forEach((sub) => { const arr = p[k].map((x) => ({ ...x })); arr[0][sub] = pick(); tries.push([k, arr]); });
     });

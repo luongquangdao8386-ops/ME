@@ -215,7 +215,7 @@ function recoverOperations_() {
     var intent = op.intent_json;
     if (intent && intent.writes) {
       applyWrites_(intent.writes, true);
-      writeCells_('Operations', op.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: JSON.stringify(intent.result || null) });
+      writeCells_('Operations', op.__row, { state: 'COMMITTED', result_code: 'OK', committed_at: isoVN_(now_()), result_json: opResultStr_(intent.result) });
     } else {
       writeCells_('Operations', op.__row, { state: 'FAILED', result_code: 'RECOVERY_REQUIRED' });
     }
