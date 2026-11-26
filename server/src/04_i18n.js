@@ -93,6 +93,11 @@ var SUB_MSG = {
   READING_DECREASED: ['Chỉ số nhỏ hơn lần đọc trước (hoặc lớn hơn lần sau) trong cùng giai đoạn', '读数小于同一阶段的上次读数（或大于下次读数）'],
   EDIT_WINDOW_PASSED: ['Đã quá thời gian tự sửa chỉ số; nhờ trưởng bộ phận sửa', '已超过本人修改期限；请联系部门主管修改'],
   SEGMENT_BOUND_FIXED: ['Số mở/chốt giai đoạn chỉ sửa giá trị, không hủy hay đổi lúc đọc', '阶段起止读数只能修改数值，不能作废或修改时间'],
+  // d4.39: dời ngày / hủy nhiều chỉ số (reading.bulk)
+  READING_VOID: ['Chỉ số đã hủy — bỏ chọn, hoặc bấm Kiểm tra lại trước', '读数已作废——请取消选择，或先点击“重新核查”'],
+  READING_FUTURE: ['Sau khi dời, lúc đọc nằm ở tương lai', '调整后读数时间在未来'],
+  READING_SAME_DAY: ['Sau khi dời, trùng ngày với một chỉ số khác của đồng hồ — chọn cả chỉ số đó hoặc dời ít ngày hơn', '调整后与该表另一读数同一天——请一并选择该读数或减少调整天数'],
+  READING_ORDER: ['Sau khi dời, thứ tự số đọc bị đảo (số sau nhỏ hơn số trước)', '调整后读数顺序颠倒（后一读数小于前一读数）'],
   MULTIPLIER_NEEDS_EVENT: ['Đã có chỉ số: đổi hệ số bằng sự kiện Đổi hệ số', '已有读数：请通过“变更倍率”事件修改倍率'],
   METER_LOOP: ['Đồng hồ tổng tạo vòng (A thuộc B, B thuộc A)', '总表关系形成循环'],
   EVENT_PENDING: ['Đồng hồ đang có sự kiện chờ duyệt', '该表计有待审批事件'],

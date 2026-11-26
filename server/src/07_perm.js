@@ -76,6 +76,8 @@ var ACTION_TABLE_ = [
   'reading.create|utilities|C|N N Y N N N Y Y|offline|3|W',
   'reading.editOwn|utilities|E|N N OWN N N N Y Y|net|3|W',
   'reading.editOthers|utilities|E|N N N N N N Y Y|net|3|W',
+  // Bổ sung d4.39: dời ngày / hủy nhiều chỉ số một lượt (Trưởng bộ phận, Quản trị; PIN)
+  'reading.bulk|utilities|E|N N N N N N Y Y|pin|3|W',
   'meter.event.create|utilities|C|N Y Y N N N Y Y|net|3|W',
   'meter.event.approve|utilities|A|N N N N N N NS NS|pin|3|W',
   'tariff.view|utilities|$|N N IFON N N N Y Y|cache|3|R',

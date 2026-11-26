@@ -509,6 +509,142 @@ function readingEdit_(ctx, own) {
 function readingEditOwn_(ctx) { return readingEdit_(ctx, true); }
 function readingEditOthers_(ctx) { return readingEdit_(ctx, false); }
 
+var READING_BULK_MAX_ = 200;
+
+/**
+ * reading.bulk (d4.39, C3/C4 + PIN; người dùng yêu cầu 26/11/2026 — chép sổ giấy theo "ngày chốt" làm lệch một ngày, sửa từng số rất lâu):
+ * {meter_id, reading_ids: [...] (1–200), op: SHIFT | VOID, days (SHIFT: −7…7, khác 0), time? 'HH:MM' (SHIFT: đặt giờ đọc, trống = giữ giờ),
+ *  reason, versions?: {reading_id: record_version}} — một lượt ghi, một dòng nhật ký.
+ * SHIFT: dời lúc đọc thêm `days` ngày; chặn: chỉ số đã hủy, số mở/chốt do sự kiện (mốc gốc đầu tiên dời được nếu vẫn là số sớm nhất của
+ *  giai đoạn), thời điểm tương lai, trùng lúc đọc, rơi vào cùng ngày với chỉ số khác (trước đó khác ngày), đảo thứ tự (số hợp lệ thành
+ *  "cần kiểm tra"). VOID: hủy các chỉ số thường (như Hủy chỉ số từng cái). Lỗi theo dòng: field reading_ids, row = vị trí trong reading_ids.
+ */
+function readingBulk_(ctx) {
+  var p = ctx.req.payload || {};
+  var errs = [];
+  var ids = Array.isArray(p.reading_ids) ? p.reading_ids.map(String) : [];
+  var uniq = {};
+  ids.forEach(function (id) { uniq[id] = true; });
+  if (!ids.length || ids.length > READING_BULK_MAX_ || Object.keys(uniq).length !== ids.length || ids.some(function (id) { return !isUuidV4_(id); })) {
+    errs.push(fieldError_('reading_ids', ids.length ? 'INVALID_VALUE' : 'REQUIRED'));
+  }
+  if (p.op !== 'SHIFT' && p.op !== 'VOID') errs.push(fieldError_('op', p.op ? 'INVALID_VALUE' : 'REQUIRED'));
+  var days = Number(p.days);
+  if (p.op === 'SHIFT' && !(days >= -7 && days <= 7 && days !== 0 && Math.floor(days) === days)) errs.push(fieldError_('days', 'INVALID_VALUE'));
+  var hm = p.op === 'SHIFT' && p.time !== undefined && p.time !== null && p.time !== '' ? String(p.time) : '';
+  if (hm && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hm)) errs.push(fieldError_('time', 'INVALID_VALUE'));
+  var reason = trimStr_(p.reason);
+  if (!reason) errs.push(fieldError_('reason', 'REQUIRED'));
+  if (reason.length > 300) errs.push(fieldError_('reason', 'INVALID_VALUE'));
+  if (errs.length) throw validationError_(errs);
+  return executeWrite_(ctx, {
+    entity_type: 'METER', entity_id: p.meter_id,
+    build: function () {
+      var m = meterOrThrow_(p.meter_id);
+      var segs = meterSegments_(m.meter_id);
+      var firstSeg = segs[0] || null;
+      var all = findAll_('MeterReadings', 'meter_id', m.meter_id).filter(function (r) { return !r.archived_at; });
+      var byId = {};
+      all.forEach(function (r) { byId[r.reading_id] = r; });
+      var vers = p.versions && typeof p.versions === 'object' ? p.versions : {};
+      var rowErrs = [];
+      var bad = function (i, code) { rowErrs.push(fieldError_('reading_ids', code, i)); };
+      var dayOf = function (iso) { return isoVN_(parseTime_(iso)).slice(0, 10); };
+      var nowMs = now_().getTime();
+      var moved = {}, olds = {};
+      var segUpd = null;
+      ids.forEach(function (id, i) {
+        var r = byId[id];
+        if (!r) { bad(i, 'NOT_FOUND'); return; }
+        if (vers[id] !== undefined && Number(vers[id]) !== Number(r.record_version || 0)) {
+          throw apiError_('VERSION_CONFLICT', { entity_type: 'METER_READING', server: projectRow_(ctx, r, 'MeterReadings'), server_version: r.record_version });
+        }
+        if (r.status === 'VOID') { bad(i, 'READING_VOID'); return; }
+        var kind = r.reading_kind || 'REGULAR';
+        // Mốc gốc (lần đọc đầu của đồng hồ, không do sự kiện) được dời; số mở/chốt do sự kiện thì không
+        var baseline = kind === 'SEGMENT_OPENING' && !r.event_id && firstSeg && r.meter_segment_id === firstSeg.segment_id;
+        if (kind !== 'REGULAR' && !(p.op === 'SHIFT' && baseline)) { bad(i, 'SEGMENT_BOUND_FIXED'); return; }
+        var row = clone_(r); delete row.__row;
+        olds[id] = { measured_at: r.measured_at, status: r.status, segment: r.meter_segment_id };
+        if (p.op === 'VOID') {
+          row.status = 'VOID'; row.void_reason = reason.slice(0, 300);
+        } else {
+          var t = tms_(r.measured_at) + days * 86400000;
+          var at = isoVN_(new Date(t));
+          if (hm) at = normTime_(at.slice(0, 10) + 'T' + hm + ':00+07:00');
+          var ms = tms_(at);
+          if (ms > nowMs + 5 * 60000) { bad(i, 'READING_FUTURE'); return; }
+          var seg = segmentAt_(segs, ms);
+          if (!seg && baseline && ms < tms_(firstSeg.start_at)) {
+            // Mốc gốc dời sớm hơn lúc bắt đầu giai đoạn đầu: giai đoạn bắt đầu theo mốc gốc (như khi ghi lần đọc đầu)
+            seg = firstSeg;
+            segUpd = clone_(firstSeg); delete segUpd.__row;
+            segUpd.start_at = at;
+          }
+          if (!seg) { bad(i, 'READING_BEFORE_START'); return; }
+          if (baseline && seg.segment_id !== firstSeg.segment_id) { bad(i, 'SEGMENT_BOUND_FIXED'); return; }
+          row.measured_at = at;
+          row.meter_segment_id = seg.segment_id;
+          row.multiplier_at_reading = seg.multiplier;
+        }
+        row.edit_reason = reason.slice(0, 300);
+        moved[id] = row;
+      });
+      if (rowErrs.length) throw validationError_(rowErrs);
+      var replaced = all.map(function (x) { return moved[x.reading_id] || x; });
+      var live = replaced.filter(function (x) { return x.status !== 'VOID'; });
+      if (p.op === 'SHIFT') {
+        ids.forEach(function (id, i) {
+          var row = moved[id];
+          var ms = tms_(row.measured_at), d = dayOf(row.measured_at), d0 = dayOf(olds[id].measured_at);
+          if (readingDuplicate_(replaced, row.meter_segment_id, ms, row.reading_id)) { bad(i, 'READING_DUPLICATE'); return; }
+          // Rơi vào cùng ngày với một chỉ số khác (trước khi dời hai số khác ngày) → số đầu ngày dùng để tính sẽ đổi ngầm: chặn
+          var clash = live.some(function (y) {
+            if (y.reading_id === id || dayOf(y.measured_at) !== d) return false;
+            var y0 = olds[y.reading_id] ? olds[y.reading_id].measured_at : y.measured_at;
+            return dayOf(y0) !== d0;
+          });
+          if (clash) { bad(i, 'READING_SAME_DAY'); return; }
+          if (row.reading_kind === 'SEGMENT_OPENING' && live.some(function (y) { return y.reading_id !== id && y.meter_segment_id === row.meter_segment_id && tms_(y.measured_at) < ms; })) {
+            bad(i, 'SEGMENT_BOUND_FIXED');
+          }
+        });
+        if (rowErrs.length) throw validationError_(rowErrs);
+      }
+      var writes = [];
+      var bySeg = {};
+      ids.forEach(function (id) { bySeg[olds[id].segment] = true; bySeg[moved[id].meter_segment_id] = true; });
+      Object.keys(bySeg).forEach(function (sid) { bySeg[sid] = replaced.filter(function (x) { return x.meter_segment_id === sid; }); });
+      var skip = {};
+      ids.forEach(function (id) { skip[id] = moved[id]; });
+      recheckSegments_(ctx, bySeg, writes, skip);
+      if (p.op === 'SHIFT') {
+        // Đảo thứ tự: số đang hợp lệ (dời hoặc không) thành "cần kiểm tra" → chặn, không ghi gì
+        ids.forEach(function (id, i) { if (olds[id].status === 'VALID' && moved[id].status === 'NEEDS_REVIEW') bad(i, 'READING_ORDER'); });
+        writes.forEach(function (w) {
+          if (w.row.status !== 'NEEDS_REVIEW') return;
+          var at = byId[w.row.reading_id];
+          if (at && at.status === 'VALID') rowErrs.push(fieldError_('reading_ids', 'READING_ORDER', null));
+        });
+        if (rowErrs.length) throw validationError_(rowErrs);
+      }
+      ids.forEach(function (id) { cUpdate_(ctx, moved[id]); writes.unshift({ sheet: 'MeterReadings', mode: 'update', row: moved[id] }); });
+      if (segUpd) { cUpdate_(ctx, segUpd); writes.push({ sheet: 'MeterSegments', mode: 'update', row: segUpd }); }
+      var items = ids.map(function (id) { var r = moved[id]; return { reading_id: id, measured_at: r.measured_at, status: r.status, record_version: r.record_version }; });
+      return {
+        writes: writes,
+        result: { entity_type: 'METER', entity_id: m.meter_id, op: p.op, count: ids.length, items: items },
+        record_version: null,
+        audit: {
+          entity_type: 'METER', entity_id: m.meter_id, reason: reason,
+          before_json: { op: p.op, items: ids.map(function (id) { return { reading_id: id, measured_at: olds[id].measured_at, status: olds[id].status }; }) },
+          after_json: { op: p.op, days: p.op === 'SHIFT' ? days : undefined, time: hm || undefined, items: items.map(function (x) { return { reading_id: x.reading_id, measured_at: x.measured_at, status: x.status }; }) }
+        }
+      };
+    }
+  });
+}
+
 /* ---------------- Sự kiện đồng hồ (thay, reset, đổi hệ số) ---------------- */
 
 /**

@@ -141,6 +141,7 @@ var HANDLERS_ = {
   'reading.create': function (ctx) { return readingCreate_(ctx); },
   'reading.editOwn': function (ctx) { return readingEditOwn_(ctx); },
   'reading.editOthers': function (ctx) { return readingEditOthers_(ctx); },
+  'reading.bulk': function (ctx) { return readingBulk_(ctx); },
   'meter.event.create': function (ctx) { return meterEventCreate_(ctx); },
   'meter.event.approve': function (ctx) { return meterEventApprove_(ctx); },
   'tariff.view': function (ctx) { return tariffView_(ctx); },

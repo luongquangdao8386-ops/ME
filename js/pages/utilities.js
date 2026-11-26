@@ -32,6 +32,8 @@ const ML = { q: '', type: '', loc: '' };
 const ML0 = { ...ML };
 /** Tab đang xem của từng đồng hồ (đổi tab vẽ lại tại chỗ, không nhảy lên đầu trang); hồ sơ đầy đủ tải gần nhất (30 giây) */
 const meterTab = new Map();
+/** d4.39: chế độ chọn nhiều chỉ số trên trang đồng hồ (dời ngày / hủy một lượt) */
+const bulkSel = { meter: '', on: false, ids: new Set() };
 let fullCache = { id: '', at: 0, data: null };
 const icoOf = (t) => ICON[t === 'WATER' ? 'drop' : 'bolt'];
 const toLocalInput = (iso) => (iso ? String(iso).slice(0, 16) : '');
@@ -436,7 +438,9 @@ export async function renderMeter(view, ctx) {
   });
   if (!m) { view.innerHTML = `<div class="card">${bi(navigator.onLine ? 'qr.unavailable' : 'sync.need_network')}</div>`; return; }
   const p = { read: await can('reading.create'), edit: await can('meter.edit'), event: await can('meter.event.create'), approve: await can('meter.event.approve'),
-    own: await can('reading.editOwn'), others: await can('reading.editOthers') };
+    own: await can('reading.editOwn'), others: await can('reading.editOthers'), bulk: await can('reading.bulk') };
+  if (bulkSel.meter !== m.meter_id) { bulkSel.meter = m.meter_id; bulkSel.on = false; bulkSel.ids.clear(); }
+  const selOn = p.bulk && bulkSel.on && navigator.onLine;
   const segs = full ? full.segments.slice().sort((x, y) => Number(x.seq_no) - Number(y.seq_no)) : (ld.segsBy.get(m.meter_id) || []);
   const events = (full ? full.events : ld.events.filter((e) => e.meter_id === m.meter_id)).slice().sort((x, y) => String(y.event_at).localeCompare(String(x.event_at)));
   const localReads = (ld.byMeter.get(m.meter_id) || []).filter((r) => r._local);
@@ -498,7 +502,7 @@ export async function renderMeter(view, ctx) {
       ${kv('ut.next_boundary', esc(fmtDate(nextBoundary(m, today()))))}
     </div></details>
     <div class="tabs-bar" role="tablist">${[['readings', 'ut.readings'], ['segments', 'ut.segments'], ['events', 'ut.events']].map(([k, l]) => `<button type="button" role="tab" class="tab${k === tab ? ' on' : ''}" data-tab="${k}" aria-selected="${k === tab}">${bi(l)}</button>`).join('')}</div>
-    <section class="card tab-body">${tab === 'readings' ? readingsHtml(reads, photosOf, canEditRead, m, editHours, !!full)
+    <section class="card tab-body">${tab === 'readings' ? readingsHtml(reads, photosOf, canEditRead, m, editHours, !!full, selOn ? bulkSel.ids : null, p.bulk && navigator.onLine)
       : tab === 'segments' ? segmentsHtml(segs, m) : eventsHtml(events)}</section>`;
   const again = () => renderMeter(view, { ...ctx, fresh: true });
   wireMeterTol(view, m, again);
@@ -524,15 +528,105 @@ export async function renderMeter(view, ctx) {
     if (!rd) return;
     if (await readingEditDialog(rd, b.dataset.rdVoid ? 'VOID' : (b.dataset.rdOk ? 'VALID' : 'EDIT'), p, uidMe)) again();
   }));
+  // d4.39: Sửa nhiều chỉ số — bật chế độ chọn; thanh dưới: Dời ngày… / Hủy các số đã chọn / Thôi
+  const rb = $('#rd-bulk', view);
+  if (rb) rb.addEventListener('click', () => { bulkSel.on = true; bulkSel.ids.clear(); renderMeter(view, ctx); });
+  if (selOn && tab === 'readings') wireBulk(view, m, reads, again, () => { bulkSel.on = false; bulkSel.ids.clear(); renderMeter(view, ctx); });
 }
 
-function readingsHtml(reads, photosOf, canEditRead, m, editHours, full) {
+/** Thanh chọn nhiều chỉ số: đếm số đã chọn, Chọn hết, Dời ngày, Hủy, Thôi (không vẽ lại cả trang khi tick) */
+function wireBulk(view, m, reads, again, close) {
+  const n = $('#rd-n', view), sh = $('#rd-shift', view), vd = $('#rd-void', view);
+  if (!n || !sh || !vd) return;
+  const upd = () => { n.textContent = String(bulkSel.ids.size); sh.disabled = vd.disabled = !bulkSel.ids.size; };
+  const mark = (cb) => { const li = cb.closest('li'); if (li) li.classList.toggle('picked', cb.checked); };
+  $$('[data-rd-pick]', view).forEach((cb) => cb.addEventListener('change', () => {
+    if (cb.checked) bulkSel.ids.add(cb.dataset.rdPick); else bulkSel.ids.delete(cb.dataset.rdPick);
+    mark(cb); upd();
+  }));
+  const all = $('#rd-all', view);
+  if (all) all.addEventListener('click', () => {
+    const boxes = $$('[data-rd-pick]', view).filter((b) => !b.disabled);
+    const on = boxes.some((b) => !b.checked);
+    boxes.forEach((b) => { b.checked = on; if (on) bulkSel.ids.add(b.dataset.rdPick); else bulkSel.ids.delete(b.dataset.rdPick); mark(b); });
+    upd();
+  });
+  $('#rd-done', view).addEventListener('click', close);
+  const run = (op) => async () => {
+    const res = await bulkDialog(op, m, reads);
+    if (res) { bulkSel.on = false; bulkSel.ids.clear(); again(); }
+  };
+  sh.addEventListener('click', run('SHIFT'));
+  vd.addEventListener('click', run('VOID'));
+  upd();
+}
+
+/**
+ * Hộp Dời ngày / Hủy nhiều chỉ số (reading.bulk, PIN): bảng xem trước "lúc đọc hiện tại → sau khi dời" đổi theo số ngày/giờ đọc;
+ * máy chủ kiểm tất cả rồi ghi một lượt (lỗi ở dòng nào thì không ghi gì, hiện danh sách lỗi theo từng chỉ số). Trả true khi đã ghi.
+ */
+async function bulkDialog(op, m, reads) {
+  const picked = reads.filter((r) => bulkSel.ids.has(r.reading_id) && !r._local).sort((a, b) => String(a.measured_at).localeCompare(String(b.measured_at)));
+  if (!picked.length) return false;
+  const shifted = (r, days, hm) => `${addDays(String(r.measured_at).slice(0, 10), days)}T${hm || String(r.measured_at).slice(11, 16)}:00+07:00`;
+  const table = (days, hm) => `<div class="table-wrap"><table class="tbl rd-prev"><thead><tr><th class="num">${bi('ut.bulk.value')}</th><th>${bi('ut.bulk.old')}</th>${op === 'SHIFT' ? `<th>${bi('ut.bulk.new')}</th>` : ''}</tr></thead>
+    <tbody>${picked.map((r) => `<tr><td class="num">${fmtNumber(r.cumulative_value)}</td><td>${esc(fmtDateTime(r.measured_at))}</td>${op === 'SHIFT' ? `<td><strong>${esc(fmtDateTime(shifted(r, days, hm)))}</strong></td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+  const head = op === 'SHIFT'
+    ? `<p class="small">${bi('ut.bulk.shift_help', { N: picked.length })}</p>
+      <div class="form-grid"><div class="fld"><label for="bk-days">${bi('ut.bulk.days')}</label><select id="bk-days" class="inp sel">${[1, 2, 3, -1, -2, -3].map((d) => `<option value="${d}"${d === 1 ? ' selected' : ''}>${esc(biText(d > 0 ? 'ut.bulk.later' : 'ut.bulk.earlier', { N: Math.abs(d) }))}</option>`).join('')}</select></div>
+        <div class="fld"><label for="bk-time">${bi('ut.bulk.time')}</label><input id="bk-time" class="inp" type="time" value=""><div class="muted small">${bi('ut.bulk.time_hint')}</div></div></div>
+      <div id="bk-prev">${table(1, '')}</div>`
+    : `<p class="small">${bi('ut.bulk.void_help', { N: picked.length })}</p>${table(0, '')}`;
+  const pr = dialog({
+    title: bi(op === 'SHIFT' ? 'ut.bulk.shift' : 'ut.bulk.void'),
+    body: `${head}<label for="bk-r">${bi('ut.reason_edit')} <span class="req">*</span></label><textarea id="bk-r" class="inp" rows="2" maxlength="300"></textarea>`,
+    actions: [{ label: bi('ut.bulk.back'), value: null }, {
+      label: bi(op === 'SHIFT' ? 'ut.bulk.shift_ok' : 'ut.bulk.void_ok'), kind: op === 'SHIFT' ? 'primary' : 'danger',
+      read: (w) => ({ days: $('#bk-days', w) ? Number($('#bk-days', w).value) : 0, time: $('#bk-time', w) ? $('#bk-time', w).value : '', reason: $('#bk-r', w).value.trim() })
+    }]
+  });
+  const w = $$('.modal').pop();
+  if (op === 'SHIFT' && w && $('#bk-days', w)) {
+    const re = () => { $('#bk-prev', w).innerHTML = table(Number($('#bk-days', w).value), $('#bk-time', w).value); };
+    $('#bk-days', w).addEventListener('change', re);
+    $('#bk-time', w).addEventListener('input', re);
+    $('#bk-time', w).addEventListener('change', re);
+  }
+  const v = await pr;
+  if (!v) return false;
+  if (!v.reason) { toast(bi('field.reason_required'), 'err'); return false; }
+  const payload = { meter_id: m.meter_id, reading_ids: picked.map((r) => r.reading_id), op, reason: v.reason,
+    versions: Object.fromEntries(picked.filter((r) => r.record_version).map((r) => [r.reading_id, r.record_version])) };
+  if (op === 'SHIFT') { payload.days = v.days; if (v.time) payload.time = v.time; }
+  const r = await writeWithPin('reading.bulk', payload);
+  if (r.ok) { await afterCommit(); toast(bi('ut.bulk.done', { N: r.data && r.data.count || picked.length }), 'ok'); return true; }
+  if (r.code === 'REAUTH_REQUIRED') return false;
+  if (r.code === 'VERSION_CONFLICT') { toast(bi('ut.bulk.changed'), 'err'); return true; }
+  const rowErrs = (r.errors || []).filter((e) => e.field === 'reading_ids');
+  if (r.code === 'VALIDATION_ERROR' && rowErrs.length) {
+    const line = (e) => {
+      const rd = e.row !== null && e.row !== undefined ? picked[e.row] : null;
+      return `<li>${rd ? `<strong>${fmtNumber(rd.cumulative_value)}</strong> · ${esc(fmtDateTime(rd.measured_at))}: ` : ''}${esc(e.message_vi || e.code)}${e.message_zh ? ` · <span lang="zh">${esc(e.message_zh)}</span>` : ''}</li>`;
+    };
+    await dialog({ title: bi('ut.bulk.errors'), body: `<ul class="plain rd-errs">${rowErrs.map(line).join('')}</ul>`, actions: [{ label: bi('btn.close'), kind: 'primary', value: true }] });
+    return false;
+  }
+  await handleWriteError(r);
+  return false;
+}
+
+function readingsHtml(reads, photosOf, canEditRead, m, editHours, full, sel = null, canBulk = false) {
   if (!reads.length) return `<p class="muted">${bi('utility_status.NO_READING')}</p>`;
-  return `<ul class="list ut-reads">${reads.map((r) => {
+  // d4.39: Sửa nhiều chỉ số (C3/C4, có mạng): nút bật chế độ chọn; khi chọn: ô tick mỗi dòng (bỏ số đã hủy, số chưa gửi), ẩn nút từng dòng
+  const pickable = (r) => !r._local && r.status !== 'VOID';
+  const start = canBulk && !sel && reads.some(pickable) ? `<div class="row rd-bulk-start"><button type="button" class="btn small" id="rd-bulk">${ICON.edit}<span>${bi('ut.bulk.start')}</span></button></div>` : '';
+  const selHead = sel ? `<p class="muted small">${bi('ut.bulk.help')}</p><div class="row"><button type="button" class="btn small" id="rd-all">${bi('ut.bulk.all')}</button></div>` : '';
+  return `${start}${selHead}<ul class="list ut-reads${sel ? ' picking' : ''}">${reads.map((r) => {
     const ph = r._local ? [] : photosOf(r.reading_id);
-    const ed = canEditRead(r);
-    return `<li class="${r.status === 'VOID' ? 'void' : ''}">
-      <div class="ut-read-top"><strong class="num">${fmtNumber(r.cumulative_value)}</strong><span class="muted small">${esc(fmtDateTime(r.measured_at))}</span>
+    const ed = !sel && canEditRead(r);
+    const on = sel && sel.has(r.reading_id);
+    return `<li class="${r.status === 'VOID' ? 'void' : ''}${on ? ' picked' : ''}">
+      <div class="ut-read-top">${sel ? `<label class="rd-pick"><input type="checkbox" data-rd-pick="${esc(r.reading_id)}" ${on ? 'checked' : ''} ${pickable(r) ? '' : 'disabled'} aria-label="${esc(biText('ut.bulk.pick'))}"></label>` : ''}<strong class="num">${fmtNumber(r.cumulative_value)}</strong><span class="muted small">${esc(fmtDateTime(r.measured_at))}</span>
         ${r._local ? `<span class="badge t-amber">${bi('sync.local_saved')}</span>` : badge('reading_status.' + r.status)}
         ${r.reading_kind && r.reading_kind !== 'REGULAR' ? `<span class="badge t-navy">${bi('reading_kind.' + r.reading_kind)}</span>` : ''}</div>
       <div class="muted small">${[r.reading_user_name ? esc(r.reading_user_name) : '', r.note_vi || r.note_zh ? biName(r, 'note') : '', r.void_reason ? `${bi('ut.reason_edit')}: ${esc(r.void_reason)}` : (r.edit_reason ? `${bi('ut.reason_edit')}: ${esc(r.edit_reason)}` : '')].filter(Boolean).join(' · ')}</div>
@@ -542,6 +636,10 @@ function readingsHtml(reads, photosOf, canEditRead, m, editHours, full) {
         ${r.status === 'NEEDS_REVIEW' || r.status === 'VOID' ? `<button type="button" class="btn tiny" data-rd-ok="${esc(r.reading_id)}">${bi('ut.recheck')}</button>` : ''}</div>` : ''}
     </li>`;
   }).join('')}</ul>
+  ${sel ? `<div class="rd-bulkbar" id="rd-bar"><span class="rd-count">${bi('ut.bulk.selected')}: <strong id="rd-n">${sel.size}</strong></span>
+    <button type="button" class="btn small primary" id="rd-shift">${bi('ut.bulk.shift_btn')}</button>
+    <button type="button" class="btn small danger" id="rd-void">${bi('ut.bulk.void_btn')}</button>
+    <button type="button" class="btn small" id="rd-done">${bi('ut.bulk.exit')}</button></div>` : ''}
   <p class="muted small">${bi('ut.edit_window', { N: editHours })}${full ? '' : ' · ' + bi('ut.local_history')}</p>`;
 }
 

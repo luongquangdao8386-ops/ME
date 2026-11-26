@@ -1442,3 +1442,19 @@ html.bg-home .home-hero { background-image: var(--bg-home); background-color: #D
 .bg-prev .brand-name { font-size: 20px; }
 .bg-prev .brand-sub { font-size: 13px; }
 .modal .bg-prev { max-width: 100%; }
+
+/* d4.39: Sửa nhiều chỉ số trên trang đồng hồ — ô tick mỗi dòng, dòng đã chọn tô nền, thanh thao tác dính đáy (trên thanh 5 nút iPhone) */
+.ut-reads label.rd-pick { display: inline-flex; align-items: center; margin: 0 4px 0 0; padding: 0; }
+.ut-reads label.rd-pick input { width: 22px; height: 22px; margin: 0; accent-color: var(--navy); }
+.ut-reads.picking li.picked { background: #EEF4FB; border-radius: 8px; box-shadow: 0 0 0 6px #EEF4FB; }
+.rd-bulkbar { position: sticky; bottom: calc(var(--safe-bottom) + 84px); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 12px 0 4px; padding: 10px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 16px rgba(23,50,79,0.16); }
+.rd-bulkbar .rd-count { flex: 1 0 100%; font-size: 0.9375rem; }
+.rd-prev { font-size: 0.875rem; }
+.rd-prev th, .rd-prev td { padding: 6px 6px; }
+.rd-prev td.num, .rd-prev th.num { white-space: nowrap; }
+.rd-errs li { margin: 6px 0; }
+@media (min-width: 900px) {
+  .rd-bulkbar { bottom: 12px; }
+  .rd-bulkbar .rd-count { flex: 1 0 auto; }
+}
